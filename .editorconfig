@@ -1,0 +1,24 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.py]
+indent_size = 4
+
+[*.ps1]
+# O PowerShell 5.1 lê script sem BOM como ANSI: sem isso, acento no comentário
+# e na mensagem de log sai quebrado.
+charset = utf-8-bom
+end_of_line = crlf
+
+[*.vbs]
+# Ao contrário do PowerShell, o Windows Script Host recusa BOM ("Caractere
+# inválido" na linha 1). Por isso o .vbs é ASCII puro, sem acento.
+charset = latin1
+end_of_line = crlf

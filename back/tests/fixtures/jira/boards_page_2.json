@@ -1,0 +1,3 @@
+{"maxResults": 2, "startAt": 2, "total": 3, "isLast": true, "values": [
+  {"id": 51, "self": "https://weon.atlassian.net/rest/agile/1.0/board/51", "name": "UPDATE INFRA", "type": "scrum"}
+]}

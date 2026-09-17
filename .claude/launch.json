@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api",
+      "runtimeExecutable": "back/.venv/Scripts/python.exe",
+      "runtimeArgs": ["back/main.py"],
+      "port": 8765
+    },
+    {
+      "name": "front",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "front", "run", "dev"],
+      "port": 5273
+    }
+  ]
+}

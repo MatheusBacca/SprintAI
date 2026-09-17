@@ -1,0 +1,6 @@
+{"pagelen": 2, "size": 3, "page": 1,
+ "next": "https://api.bitbucket.org/2.0/repositories/weonrepo?pagelen=2&sort=-updated_on&page=2",
+ "values": [
+  {"type": "repository", "slug": "monitoria", "name": "monitoria", "full_name": "weonrepo/monitoria", "is_private": true, "updated_on": "2026-09-12T18:20:11.123456+00:00", "mainbranch": {"type": "branch", "name": "main"}},
+  {"type": "repository", "slug": "organia-configs", "name": "organia-configs", "full_name": "weonrepo/organia-configs", "is_private": true, "updated_on": "2026-09-11T09:00:00.000000+00:00", "mainbranch": {"type": "branch", "name": "main"}}
+ ]}

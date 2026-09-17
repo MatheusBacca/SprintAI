@@ -1,0 +1,13 @@
+{
+  "issues": [
+    {"expand": "", "id": "10001", "self": "https://weon.atlassian.net/rest/api/3/issue/10001", "key": "WAI-7001",
+     "fields": {"summary": "Implementar camada de integração", "status": {"name": "Em Desenvolvimento", "statusCategory": {"key": "indeterminate"}},
+                "issuetype": {"name": "Tarefa", "subtask": false}, "parent": {"key": "WAI-6900", "fields": {"summary": "Épico de integração", "issuetype": {"name": "Epic"}}},
+                "customfield_10026": 8, "customfield_10020": [{"id": 3995, "name": "Sprint 73 - Growth", "state": "active", "boardId": 144}]}},
+    {"expand": "", "id": "10002", "self": "https://weon.atlassian.net/rest/api/3/issue/10002", "key": "WAI-7002",
+     "fields": {"summary": "Ajustar processamento de áudio", "status": {"name": "DISPONIVEL PARA REVIEW", "statusCategory": {"key": "indeterminate"}},
+                "issuetype": {"name": "Tarefa", "subtask": false}, "customfield_10026": 5, "customfield_10020": null}}
+  ],
+  "nextPageToken": "Ch0jU3RyaW5nJlYwRkpUQT09JUludCZNakF4",
+  "isLast": false
+}

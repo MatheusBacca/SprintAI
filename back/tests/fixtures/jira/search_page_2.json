@@ -1,0 +1,8 @@
+{
+  "issues": [
+    {"expand": "", "id": "10003", "self": "https://weon.atlassian.net/rest/api/3/issue/10003", "key": "WAI-7003",
+     "fields": {"summary": "Criar testes unitários", "status": {"name": "Disponivel para análise", "statusCategory": {"key": "new"}},
+                "issuetype": {"name": "Tarefa", "subtask": false}, "customfield_10026": 3, "customfield_10020": []}}
+  ],
+  "isLast": true
+}

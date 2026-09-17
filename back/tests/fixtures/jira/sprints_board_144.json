@@ -1,0 +1,6 @@
+{"maxResults": 50, "startAt": 0, "isLast": true, "values": [
+  {"id": 3994, "self": "https://weon.atlassian.net/rest/agile/1.0/sprint/3994", "state": "active", "name": "Sprint 73 - Core", "startDate": "2026-09-09T11:00:00.000Z", "endDate": "2026-09-11T21:00:00.000Z", "createdDate": "2026-09-01T12:00:00.000Z", "originBoardId": 144, "goal": ""},
+  {"id": 3995, "self": "https://weon.atlassian.net/rest/agile/1.0/sprint/3995", "state": "active", "name": "Sprint 73 - Growth", "startDate": "2026-09-09T11:00:00.000Z", "endDate": "2026-09-11T21:00:00.000Z", "createdDate": "2026-09-01T12:00:00.000Z", "originBoardId": 144, "goal": "Integração de novos modelos"},
+  {"id": 2404, "self": "https://weon.atlassian.net/rest/agile/1.0/sprint/2404", "state": "future", "name": "🛠️BUG-SUPORT", "originBoardId": 144},
+  {"id": 3997, "self": "https://weon.atlassian.net/rest/agile/1.0/sprint/3997", "state": "future", "name": "Sprint 74 - Growth", "startDate": "2026-09-14T11:00:00.000Z", "endDate": "2026-09-19T21:00:00.000Z", "originBoardId": 144}
+]}

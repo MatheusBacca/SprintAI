@@ -1,0 +1,275 @@
+/*
+ * Tokens do SprintAI.
+ * Base: C:\projects\organia-configs\DESIGN.md (violeta, escala 8px).
+ * Diferença intencional: sidebar escura, como no print de referência.
+ *
+ * Tema: `:root` é o claro. O escuro entra por `[data-theme='dark']` no <html>,
+ * escrito pelo bootstrap em `index.html` antes do Vue montar (evita o flash
+ * branco) e mantido pelo store `ui`. Componente NENHUM deve escrever cor crua:
+ * se falta um tom, o token nasce aqui, nos dois temas.
+ */
+:root {
+  color-scheme: light;
+
+  /* Marca */
+  --color-primary: #8a4fff;
+  --color-primary-hover: #7538e8;
+  --color-primary-active: #6528d9;
+  --color-primary-soft: rgba(138, 79, 255, 0.1);
+  --color-primary-focus-ring: rgba(138, 79, 255, 0.15);
+  --color-primary-shadow: rgba(138, 79, 255, 0.28);
+  --color-primary-deep: #5b3fd6;
+
+  /* Superfícies */
+  --color-page: #f8f9fa;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1f3f5;
+  --color-surface-hover: #eceef1;
+
+  /* Texto */
+  --color-text: #1a1d21;
+  --color-text-secondary: #5c6370;
+  --color-text-muted: #868e96;
+  --color-on-primary: #ffffff;
+
+  /* Bordas */
+  --color-border: #e8eaed;
+  --color-border-strong: #dee2e6;
+
+  /* Semânticas */
+  --color-error: #e53935;
+  --color-error-surface: #ffebee;
+  --color-error-border: rgba(229, 57, 53, 0.35);
+  --color-success: #2e7d32;
+  --color-warning: #f57c00;
+  --color-info: #2563eb;
+
+  /*
+   * Pares fundo suave + texto legível. Usados pelas pastilhas de estado
+   * (contexto, PR, sprint vencida, lembrete vencido) — em vez do hex solto que
+   * ficava espalhado pelos componentes e não tinha como virar no tema escuro.
+   */
+  --color-success-surface: #e4f6e9;
+  --color-success-surface-soft: rgba(46, 125, 50, 0.08);
+  --color-success-border: rgba(46, 125, 50, 0.35);
+  --color-success-text: #2e7d32;
+  --color-warning-surface: #fff4e0;
+  --color-warning-surface-soft: rgba(245, 124, 0, 0.08);
+  --color-warning-border: rgba(245, 124, 0, 0.35);
+  --color-warning-text: #b45309;
+  --color-info-surface: #e5efff;
+  --color-info-surface-soft: rgba(37, 99, 235, 0.07);
+  --color-info-border: rgba(37, 99, 235, 0.3);
+  --color-info-text: #2563eb;
+  --color-accent-surface: #efe8ff;
+  --color-accent-text: #6528d9;
+  --color-neutral-surface: #f1f3f5;
+  --color-neutral-text: #5c6370;
+
+  /* Sobreposições e realces */
+  --color-overlay: rgba(15, 18, 28, 0.45);
+  --color-mark: rgba(138, 79, 255, 0.22);
+  --color-chip: rgba(138, 79, 255, 0.18);
+  /* Vínculos de lembrete: tarefa usa o roxo primário; repositório, este azul. */
+  --color-repo: #2f7cf6;
+  --color-repo-soft: rgba(47, 124, 246, 0.12);
+  --color-repo-mark: rgba(47, 124, 246, 0.24);
+  --color-canvas-dots: #dfe2e8;
+  --color-canvas-wave: #b9bec9;
+  --color-resolved-surface: #fbfdfb;
+  --color-track-group: #ddd6fe;
+  --color-track-hatch: rgba(255, 255, 255, 0.55);
+  --color-on-track-muted: rgba(0, 0, 0, 0.35);
+
+  /* Sidebar escura (print) */
+  --color-sidebar: #1b1838;
+  --color-sidebar-hover: rgba(255, 255, 255, 0.06);
+  --color-sidebar-active: #5b3fd6;
+  --color-sidebar-text: #c9c6e0;
+  --color-sidebar-text-strong: #ffffff;
+  --color-sidebar-border: rgba(255, 255, 255, 0.08);
+
+  /* Status de PR no Bitbucket (legenda do print) */
+  --pr-none: #9aa1ab;
+  --pr-branch: #64748b;
+  --pr-draft: #94a3b8;
+  --pr-open: #2f7cf6;
+  --pr-changes: #f59e0b;
+  --pr-approved: #10b981;
+  --pr-merged: #8a4fff;
+  --pr-declined: #e53935;
+
+  /*
+   * Post-its. O papel colorido é do tema claro; no escuro ele vira um tingido
+   * escuro da mesma família, senão o quadro de lembretes queima a tela.
+   * O texto herda --color-text; --note-inset são as caixinhas internas (chip
+   * de data, campo de edição) e --note-scrim os hovers sobre o papel.
+   */
+  --note-inset: rgba(255, 255, 255, 0.7);
+  --note-inset-strong: #ffffff;
+  --note-scrim: rgba(0, 0, 0, 0.06);
+  --note-scrim-border: rgba(0, 0, 0, 0.1);
+  --note-yellow-bg: #fff7d1;
+  --note-yellow-border: #f2d56b;
+  --note-yellow-accent: #9a7b00;
+  --note-pink-bg: #ffe6ee;
+  --note-pink-border: #f4a9c2;
+  --note-pink-accent: #a8325e;
+  --note-green-bg: #e4f6e9;
+  --note-green-border: #9dd7ad;
+  --note-green-accent: #2e7d32;
+  --note-blue-bg: #e5efff;
+  --note-blue-border: #9fc2f3;
+  --note-blue-accent: #2563eb;
+  --note-purple-bg: #efe8ff;
+  --note-purple-border: #c3a9f6;
+  --note-purple-accent: #6528d9;
+  --note-gray-bg: #f1f3f5;
+  --note-gray-border: #ced4da;
+  --note-gray-accent: #5c6370;
+
+  /* Tipografia */
+  --font-sans: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+
+  /* Forma e espaço */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --sidebar-width: 232px;
+  --sidebar-width-collapsed: 64px;
+  --topbar-height: 64px;
+
+  /* Elevação e movimento */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.12);
+  --duration-fast: 0.15s;
+  --duration-panel: 0.2s;
+  --z-drawer: 900;
+  --z-modal: 1000;
+}
+
+/*
+ * Tema escuro. Só cor muda — espaçamento, raio e tipografia continuam os do
+ * claro. O fundo é um roxo-tinta puxado da sidebar (#1b1838), para o painel
+ * escuro parecer a mesma peça e não duas telas coladas.
+ */
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-primary: #a074ff;
+  --color-primary-hover: #b490ff;
+  --color-primary-active: #8a4fff;
+  --color-primary-soft: rgba(160, 116, 255, 0.14);
+  --color-primary-focus-ring: rgba(160, 116, 255, 0.28);
+  --color-primary-shadow: rgba(160, 116, 255, 0.35);
+  --color-primary-deep: #7a5ce0;
+
+  --color-page: #14132a;
+  --color-surface: #1c1b33;
+  --color-surface-muted: #24233f;
+  --color-surface-hover: #2c2b4a;
+
+  --color-text: #ecebf7;
+  --color-text-secondary: #a8a4c4;
+  --color-text-muted: #837fa1;
+  --color-on-primary: #17132b;
+
+  --color-border: #2c2b45;
+  --color-border-strong: #3c3a5c;
+
+  --color-error: #ff7b74;
+  --color-error-surface: rgba(255, 123, 116, 0.16);
+  --color-error-border: rgba(255, 123, 116, 0.42);
+  --color-success: #5cd396;
+  --color-warning: #ffb45c;
+  --color-info: #79a9ff;
+
+  --color-success-surface: rgba(92, 211, 150, 0.16);
+  --color-success-surface-soft: rgba(92, 211, 150, 0.1);
+  --color-success-border: rgba(92, 211, 150, 0.4);
+  --color-success-text: #5cd396;
+  --color-warning-surface: rgba(255, 180, 92, 0.16);
+  --color-warning-surface-soft: rgba(255, 180, 92, 0.1);
+  --color-warning-border: rgba(255, 180, 92, 0.4);
+  --color-warning-text: #ffb45c;
+  --color-info-surface: rgba(121, 169, 255, 0.16);
+  --color-info-surface-soft: rgba(121, 169, 255, 0.1);
+  --color-info-border: rgba(121, 169, 255, 0.38);
+  --color-info-text: #79a9ff;
+  --color-accent-surface: rgba(160, 116, 255, 0.18);
+  --color-accent-text: #b795ff;
+  --color-neutral-surface: #2a2942;
+  --color-neutral-text: #a8a4c4;
+
+  --color-overlay: rgba(6, 5, 16, 0.66);
+  --color-mark: rgba(160, 116, 255, 0.34);
+  --color-chip: rgba(160, 116, 255, 0.26);
+  --color-repo: #62a0ff;
+  --color-repo-soft: rgba(98, 160, 255, 0.16);
+  --color-repo-mark: rgba(98, 160, 255, 0.32);
+  --color-canvas-dots: #2f2d4c;
+  --color-canvas-wave: #565277;
+  --color-resolved-surface: rgba(92, 211, 150, 0.06);
+  --color-track-group: #3b2f66;
+  --color-track-hatch: rgba(255, 255, 255, 0.3);
+  --color-on-track-muted: rgba(255, 255, 255, 0.45);
+
+  /* A sidebar desce um degrau abaixo da página para continuar se destacando. */
+  --color-sidebar: #100f22;
+  --color-sidebar-hover: rgba(255, 255, 255, 0.07);
+  --color-sidebar-active: #5b3fd6;
+  --color-sidebar-text: #a8a4c4;
+  --color-sidebar-text-strong: #ecebf7;
+  --color-sidebar-border: rgba(255, 255, 255, 0.1);
+
+  --pr-none: #6f7488;
+  --pr-branch: #7f8aa3;
+  --pr-draft: #9aa3b8;
+  --pr-open: #62a0ff;
+  --pr-changes: #ffb45c;
+  --pr-approved: #5cd396;
+  --pr-merged: #a074ff;
+  --pr-declined: #ff7b74;
+
+  --note-inset: rgba(255, 255, 255, 0.08);
+  --note-inset-strong: rgba(255, 255, 255, 0.12);
+  --note-scrim: rgba(0, 0, 0, 0.25);
+  --note-scrim-border: rgba(255, 255, 255, 0.12);
+  --note-yellow-bg: #3b3218;
+  --note-yellow-border: #7a6524;
+  --note-yellow-accent: #e8c561;
+  --note-pink-bg: #3d2029;
+  --note-pink-border: #7e3f53;
+  --note-pink-accent: #f291b0;
+  --note-green-bg: #1c3527;
+  --note-green-border: #37684a;
+  --note-green-accent: #7fd7a3;
+  --note-blue-bg: #1e2c47;
+  --note-blue-border: #3c5580;
+  --note-blue-accent: #8fb6f5;
+  --note-purple-bg: #2b2348;
+  --note-purple-border: #54428a;
+  --note-purple-accent: #b795ff;
+  --note-gray-bg: #272639;
+  --note-gray-border: #454361;
+  --note-gray-accent: #a8a4c4;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 2px 10px rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.62);
+}

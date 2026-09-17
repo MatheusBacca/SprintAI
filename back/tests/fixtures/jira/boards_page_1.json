@@ -1,0 +1,6 @@
+{"maxResults": 2, "startAt": 0, "total": 3, "isLast": false, "values": [
+  {"id": 144, "self": "https://weon.atlassian.net/rest/agile/1.0/board/144", "name": "Engenharia", "type": "scrum",
+   "location": {"projectId": 10100, "displayName": "WeON Atendimentos Incriveis (WAI)", "projectName": "WeON Atendimentos Incriveis", "projectKey": "WAI", "projectTypeKey": "software"}},
+  {"id": 610, "self": "https://weon.atlassian.net/rest/agile/1.0/board/610", "name": "Platform", "type": "kanban",
+   "location": {"projectId": 10100, "displayName": "WeON Atendimentos Incriveis (WAI)", "projectName": "WeON Atendimentos Incriveis", "projectKey": "WAI", "projectTypeKey": "software"}}
+]}
