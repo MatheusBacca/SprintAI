@@ -16,7 +16,7 @@ import {
   NODE_HEIGHT,
   NODE_WIDTH,
   implementationWaves,
-  layoutGroup,
+  layoutSprint,
   layoutTree,
 } from '@/utils/treeLayout'
 
@@ -72,19 +72,18 @@ function sampleTree() {
 }
 
 describe('layout da árvore', () => {
-  it('raiz centralizada e todas as filhas lado a lado numa linha só', () => {
+  it('raiz centralizada sobre as suas filhas, todas lado a lado numa linha só', () => {
     const tree = sampleTree()
     const byKey = Object.fromEntries(tree.nodes.map((n) => [n.key, n]))
 
-    const { positions, width, height } = layoutGroup(tree.groups[0], byKey)
+    const { positions } = layoutSprint(tree.groups, byKey)
 
-    expect(width).toBe(5 * NODE_WIDTH + 4 * 20)
-    expect(positions['WAI-1']).toEqual({ x: (width - NODE_WIDTH) / 2, y: 0 })
     const children = ['WAI-2', 'WAI-3', 'WAI-4', 'WAI-5', 'WAI-6']
     const rowY = positions['WAI-2'].y
     expect(children.map((k) => positions[k].y)).toEqual(children.map(() => rowY))
-    expect(children.map((k) => positions[k].x)).toEqual([0, 1, 2, 3, 4].map((i) => i * (NODE_WIDTH + 20)))
-    expect(height).toBe(rowY + NODE_HEIGHT)
+    expect(children.map((k) => positions[k].x)).toEqual([0, 1, 2, 3, 4].map((i) => i * (NODE_WIDTH + COLUMN_GAP)))
+    // Centralizada sobre a primeira e a última filha, não sobre a sprint inteira.
+    expect(positions['WAI-1']).toEqual({ x: (positions['WAI-2'].x + positions['WAI-6'].x) / 2, y: 0 })
   })
 
   it('épico com 14 filhas não quebra linha (caso real do QualificAI)', () => {
@@ -94,44 +93,43 @@ describe('layout da árvore', () => {
       ...kids.map((k) => [k, node(k, { parent_key: 'WAI-99' })]),
     ])
 
-    const { positions, width } = layoutGroup({ key: 'WAI-99', root_key: 'WAI-99', issue_keys: ['WAI-99', ...kids] }, byKey)
+    const { positions, width } = layoutSprint([{ key: 'WAI-99', root_key: 'WAI-99', issue_keys: ['WAI-99', ...kids] }], byKey)
 
     expect(new Set(kids.map((k) => positions[k].y)).size).toBe(1)
-    expect(positions[kids.at(-1)].x).toBe(13 * (NODE_WIDTH + 20))
-    expect(width).toBe(14 * NODE_WIDTH + 13 * 20)
+    expect(positions[kids.at(-1)].x).toBe(13 * (NODE_WIDTH + COLUMN_GAP))
+    expect(width).toBe(14 * NODE_WIDTH + 13 * COLUMN_GAP)
   })
 
-  it('grupo só com a raiz tem a altura de um card', () => {
+  it('sprint só com a raiz tem a altura de um card', () => {
     const byKey = { 'WAI-1': node('WAI-1', { is_parent_type: true, in_sprint: false }) }
 
-    const { positions, width, height } = layoutGroup({ key: 'WAI-1', root_key: 'WAI-1', issue_keys: ['WAI-1'] }, byKey)
+    const { positions, width, height } = layoutSprint([{ key: 'WAI-1', root_key: 'WAI-1', issue_keys: ['WAI-1'] }], byKey)
 
     expect(positions['WAI-1']).toEqual({ x: 0, y: 0 })
     expect([width, height]).toEqual([NODE_WIDTH, NODE_HEIGHT])
   })
 
-  it('subtarefa fica empilhada abaixo da tarefa mãe no grupo "Sem pai"', () => {
+  it('subtarefa fica empilhada abaixo da tarefa mãe', () => {
     const tree = sampleTree()
     const byKey = Object.fromEntries(tree.nodes.map((n) => [n.key, n]))
 
-    const { positions } = layoutGroup(tree.groups[1], byKey)
+    const { positions } = layoutSprint(tree.groups, byKey)
 
     expect(positions['WAI-8'].x).toBe(positions['WAI-7'].x)
     expect(positions['WAI-8'].y).toBeGreaterThan(positions['WAI-7'].y + NODE_HEIGHT)
   })
 
-  it('gera molduras de grupo, nós e arestas por tipo', () => {
+  it('a sprint inteira cabe numa moldura só, com a contagem do que está nela', () => {
     const { nodes, edges } = layoutTree(sampleTree(), { selectedKey: 'WAI-3' })
 
     const frames = nodes.filter((n) => n.type === 'group-frame')
-    expect(frames.map((f) => f.data.title)).toEqual([null, 'Sem pai'])
-    expect(frames[0].data.count).toBe(5)
+    // Uma moldura, sem título: o rótulo é só "N tarefa(s) na sprint".
+    expect(frames).toHaveLength(1)
+    expect(frames[0].data.title).toBeNull()
+    expect(frames[0].data.count).toBe(7)
+    expect(frames[0].position).toEqual({ x: 0, y: 0 })
 
-    const issue = nodes.find((n) => n.id === 'WAI-1')
-    expect(issue.position).toEqual({
-      x: frames[0].position.x + GROUP_PADDING + (5 * NODE_WIDTH + 80 - NODE_WIDTH) / 2,
-      y: frames[0].position.y + GROUP_PADDING + GROUP_HEADER,
-    })
+    expect(nodes.find((n) => n.id === 'WAI-1').position.y).toBe(GROUP_PADDING + GROUP_HEADER)
     expect(nodes.find((n) => n.id === 'WAI-3').data.selected).toBe(true)
 
     const blocks = edges.find((e) => e.id === 'blocks:WAI-2->WAI-8')
@@ -139,38 +137,35 @@ describe('layout da árvore', () => {
     expect(edges.find((e) => e.id === 'parent:WAI-1->WAI-2')).toMatchObject({ type: 'smoothstep', sourceHandle: 'bottom' })
   })
 
-  it('grupos que não cabem na linha descem para a próxima', () => {
+  it('tarefa sem pai divide a linha com as filhas do épico, não uma moldura à parte', () => {
     const tree = sampleTree()
-    // 1º grupo: 5 filhas (1308px) · 2º: 3 filhas (804px) cabe ao lado · 3º ("Sem pai") estoura MAX_ROW_WIDTH
+    const byKey = Object.fromEntries(tree.nodes.map((n) => [n.key, n]))
+
+    const { positions } = layoutSprint(tree.groups, byKey)
+
+    expect(positions['WAI-7'].y).toBe(positions['WAI-2'].y)
+    expect(positions['WAI-7'].x).toBe(positions['WAI-6'].x + NODE_WIDTH + COLUMN_GAP)
+    // E a raiz do épico continua centralizada só sobre as filhas dela.
+    expect(positions['WAI-1'].x).toBeLessThan(positions['WAI-7'].x)
+  })
+
+  it('dois épicos ficam lado a lado na fileira de cima, sem se sobrepor', () => {
+    const tree = sampleTree()
     const kids = ['WAI-91', 'WAI-92', 'WAI-93']
     tree.nodes.push(
       node('WAI-90', { is_parent_type: true, in_sprint: false, children: kids }),
       ...kids.map((k) => node(k, { parent_key: 'WAI-90' })),
     )
     tree.groups.splice(1, 0, { key: 'WAI-90', root_key: 'WAI-90', issue_keys: ['WAI-90', ...kids] })
+    const byKey = Object.fromEntries(tree.nodes.map((n) => [n.key, n]))
 
-    const frames = layoutTree(tree).nodes.filter((n) => n.type === 'group-frame')
+    const { positions } = layoutSprint(tree.groups, byKey)
 
-    expect(frames[1].position.y).toBe(0)
-    expect(frames[1].position.x).toBeGreaterThan(0)
-    expect(frames[2].position.x).toBe(0)
-    expect(frames[2].position.y).toBeGreaterThan(0)
-  })
-
-  it('grupo mais largo que a linha ocupa a linha sozinho', () => {
-    const tree = sampleTree()
-    const kids = Array.from({ length: 12 }, (_, i) => `WAI-${200 + i}`)
-    tree.nodes.push(
-      node('WAI-199', { is_parent_type: true, in_sprint: false, children: kids }),
-      ...kids.map((k) => node(k, { parent_key: 'WAI-199' })),
-    )
-    tree.groups.splice(1, 0, { key: 'WAI-199', root_key: 'WAI-199', issue_keys: ['WAI-199', ...kids] })
-
-    const frames = layoutTree(tree).nodes.filter((n) => n.type === 'group-frame')
-
-    expect(frames.map((f) => f.position.x)).toEqual([0, 0, 0])
-    expect(frames[1].position.y).toBeGreaterThan(frames[0].position.y)
-    expect(frames[2].position.y).toBeGreaterThan(frames[1].position.y)
+    expect(positions['WAI-1'].y).toBe(0)
+    expect(positions['WAI-90'].y).toBe(0)
+    expect(positions['WAI-90'].x - positions['WAI-1'].x).toBeGreaterThanOrEqual(NODE_WIDTH)
+    // Cada um sobre as suas: a 2ª raiz nasce depois da última filha da 1ª.
+    expect(positions['WAI-90'].x).toBeGreaterThan(positions['WAI-6'].x)
   })
 })
 
@@ -229,13 +224,33 @@ describe('ondas de implementação', () => {
     ])
   })
 
-  it('bloqueador de outro grupo não empurra o card para outra onda', () => {
+  it('bloqueador fora do desenho não empurra o card para outra onda', () => {
     const byKey = {
       'WAI-1': node('WAI-1', { blocked: true, blocked_by: ['WAI-999'] }),
       'WAI-2': node('WAI-2'),
     }
 
     expect(implementationWaves(['WAI-1', 'WAI-2'], byKey)).toEqual([['WAI-1', 'WAI-2']])
+  })
+
+  it('bloqueador de outro épico empurra sim, agora que a sprint é um desenho só', () => {
+    // Antes cada épico tinha a sua moldura e o bloqueio entre eles era ignorado, senão
+    // o card iria para uma onda que não existia naquele desenho. Com moldura única a
+    // onda existe — e é o que mostra que a WAI-92 só começa depois da WAI-2.
+    const tree = sampleTree()
+    tree.nodes.push(
+      node('WAI-90', { is_parent_type: true, in_sprint: false, children: ['WAI-91', 'WAI-92'] }),
+      node('WAI-91', { parent_key: 'WAI-90' }),
+      node('WAI-92', { parent_key: 'WAI-90', blocked: true, blocked_by: ['WAI-2'] }),
+    )
+    tree.groups.splice(1, 0, { key: 'WAI-90', root_key: 'WAI-90', issue_keys: ['WAI-90', 'WAI-91', 'WAI-92'] })
+    const byKey = Object.fromEntries(tree.nodes.map((n) => [n.key, n]))
+
+    const { positions, waves } = layoutSprint(tree.groups, byKey)
+
+    expect(waves.map((f) => f.index)).toEqual([1, 2])
+    expect(positions['WAI-92'].x).toBe(positions['WAI-2'].x)
+    expect(positions['WAI-92'].y).toBeGreaterThan(positions['WAI-2'].y + NODE_HEIGHT)
   })
 
   it('ciclo de bloqueio não trava o cálculo', () => {
@@ -252,7 +267,7 @@ describe('ondas de implementação', () => {
   it('a bloqueada cai na coluna do bloqueador, uma linha abaixo', () => {
     const { tree, byKey } = epicoComBloqueios()
 
-    const { positions } = layoutGroup(tree.groups[0], byKey)
+    const { positions } = layoutSprint(tree.groups, byKey)
 
     expect(positions['WAI-8429'].x).toBe(positions['WAI-8428'].x)
     expect(positions['WAI-8429'].y).toBeGreaterThan(positions['WAI-8428'].y + NODE_HEIGHT)
@@ -263,7 +278,7 @@ describe('ondas de implementação', () => {
   it('duas tarefas liberadas pela mesma ficam lado a lado na onda seguinte', () => {
     const { tree, byKey } = epicoComBloqueios()
 
-    const { positions, width } = layoutGroup(tree.groups[0], byKey)
+    const { positions, width } = layoutSprint(tree.groups, byKey)
 
     expect(positions['WAI-8433'].x).toBe(positions['WAI-8432'].x)
     expect(positions['WAI-8434'].x).toBe(positions['WAI-8432'].x + NODE_WIDTH + COLUMN_GAP)
@@ -275,7 +290,7 @@ describe('ondas de implementação', () => {
   it('cada onda ganha uma faixa pontilhada numerada', () => {
     const { tree, byKey } = epicoComBloqueios()
 
-    const { waves, positions } = layoutGroup(tree.groups[0], byKey)
+    const { waves, positions } = layoutSprint(tree.groups, byKey)
 
     expect(waves.map((f) => f.index)).toEqual([1, 2, 3])
     expect(waves[0].y).toBeLessThan(positions['WAI-8428'].y)
@@ -287,7 +302,7 @@ describe('ondas de implementação', () => {
     const tree = sampleTree()
     const byKey = Object.fromEntries(tree.nodes.map((n) => [n.key, n]))
 
-    expect(layoutGroup(tree.groups[0], byKey).waves).toEqual([])
+    expect(layoutSprint(tree.groups, byKey).waves).toEqual([])
     expect(layoutTree(tree).nodes.some((n) => n.type === 'wave-divider')).toBe(false)
   })
 

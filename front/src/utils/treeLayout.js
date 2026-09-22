@@ -1,16 +1,18 @@
 /**
  * Layout determinístico da árvore da sprint (sem motor de grafo):
  *
- *   [ Épico / Enhancements ]                     ← raiz do grupo, centralizada
+ *   [ Épico A ]        [ Épico B ]       ← fileira das raízes, cada uma sobre as suas
  *   ── Onda de implementação 1 ─────────────
- *   [filha] [filha] [filha]                      ← filhas que ninguém bloqueia
+ *   [filha A] [filha A] [filha B] [sem pai]   ← quem ninguém bloqueia, de todos os épicos
  *   ── Onda de implementação 2 ─────────────
- *           [filha]                              ← cada bloqueada abaixo do bloqueador
- *   [sub  ]                                      ← descendentes empilhados abaixo da filha
+ *             [filha A]                   ← cada bloqueada abaixo do bloqueador
+ *   [sub    ]                             ← descendentes empilhados abaixo da filha
  *
- * Grupo "Sem pai": sem raiz; as tarefas vão direto para a primeira onda.
- * Grupos ficam lado a lado enquanto couberem em MAX_ROW_WIDTH; um grupo mais largo que
- * isso ocupa a linha sozinho (o canvas tem pan/zoom).
+ * É **uma moldura só para a sprint inteira**. Antes cada épico tinha a sua caixa e as
+ * tarefas sem pai ficavam numa caixa à parte: a sprint virava um punhado de desenhos
+ * que não se comparavam entre si, e a tarefa sem pai parecia de outro lugar. Agora
+ * todas dividem as mesmas ondas, e o que diz de quem a tarefa é continua sendo a seta
+ * que desce do épico.
  */
 
 export const NODE_WIDTH = 236
@@ -20,8 +22,6 @@ export const ROW_GAP = 56
 export const STACK_GAP = 14
 export const GROUP_PADDING = 24
 export const GROUP_HEADER = 30
-export const GROUP_GAP = 48
-export const MAX_ROW_WIDTH = 2400
 /** Faixa reservada acima de cada onda para a linha pontilhada e o rótulo. */
 export const WAVE_HEADER = 34
 /** Respiro entre o fim de uma onda e o pontilhado da seguinte. */
@@ -69,8 +69,9 @@ function groupCells(group, nodesByKey, inGroup) {
  * entra uma onda depois do seu bloqueador mais tardio. É o que dá a leitura de "isto
  * só começa quando aquilo terminar" sem precisar seguir seta por seta.
  *
- * Só bloqueio *entre tarefas da mesma linha do grupo* conta. Um bloqueador de outro
- * épico empurraria o card para uma onda que não existe no desenho deste grupo.
+ * Só bloqueio *entre tarefas que estão no desenho* conta: um bloqueador fora da sprint
+ * não tem onda de onde empurrar o card. Como a sprint hoje é um desenho só, bloqueio
+ * entre épicos diferentes vale — e é justamente o que a onda existe para mostrar.
  */
 export function implementationWaves(cells, nodesByKey) {
   const naLinha = new Set(cells)
@@ -139,18 +140,57 @@ function assignColumns(ondas, nodesByKey) {
   return coluna
 }
 
-/** Posições relativas ao canto do grupo + tamanho do grupo + as ondas desenhadas. */
-export function layoutGroup(group, nodesByKey) {
-  const inGroup = new Set(group.issue_keys)
-  const positions = {}
+const colunaX = (indice) => indice * (NODE_WIDTH + COLUMN_GAP)
+const larguraAte = (colunas) => (colunas ? colunas * NODE_WIDTH + (colunas - 1) * COLUMN_GAP : 0)
 
-  const cells = groupCells(group, nodesByKey, inGroup)
+/**
+ * Fileira das raízes: cada épico centralizado sobre as suas próprias tarefas, e quem
+ * não tem nenhuma no desenho entra numa coluna livre à direita. Depois um passe da
+ * esquerda para a direita empurra quem encavalou — dois épicos de uma tarefa cada,
+ * em colunas vizinhas, cairiam no mesmo lugar.
+ */
+function layoutRoots(grupos, positions, colunasUsadas) {
+  const fileira = []
+  let livre = colunasUsadas
+
+  for (const { group, cells } of grupos) {
+    if (!group.root_key) continue
+    const xs = cells.map((k) => positions[k]?.x).filter((x) => x !== undefined)
+    if (xs.length) fileira.push({ key: group.root_key, x: (Math.min(...xs) + Math.max(...xs)) / 2 })
+    else {
+      fileira.push({ key: group.root_key, x: colunaX(livre) })
+      livre += 1
+    }
+  }
+
+  let limite = -Infinity
+  let direita = 0
+  for (const raiz of [...fileira].sort((a, b) => a.x - b.x)) {
+    const x = Math.max(raiz.x, limite)
+    positions[raiz.key] = { x, y: 0 }
+    limite = x + NODE_WIDTH + COLUMN_GAP
+    direita = x + NODE_WIDTH
+  }
+  return { width: direita, hasRoots: fileira.length > 0 }
+}
+
+/** Posições de toda a sprint + tamanho do desenho + as ondas desenhadas. */
+export function layoutSprint(groups, nodesByKey) {
+  const grupos = groups.map((group) => {
+    const inGroup = new Set(group.issue_keys)
+    return { group, inGroup, cells: groupCells(group, nodesByKey, inGroup) }
+  })
+  const conhecidos = new Set(groups.flatMap((g) => g.issue_keys))
+  const temRaiz = grupos.some((g) => g.group.root_key)
+
+  const cells = grupos.flatMap((g) => g.cells)
   const ondas = implementationWaves(cells, nodesByKey)
   const coluna = assignColumns(ondas, nodesByKey)
-  // Sem bloqueio nenhum não há o que separar: o grupo fica com a linha única de sempre.
+  // Sem bloqueio nenhum não há o que separar: a sprint fica com a linha única de sempre.
   const comOndas = ondas.length > 1
 
-  let top = group.root_key ? NODE_HEIGHT + ROW_GAP : 0
+  const positions = {}
+  let top = temRaiz ? NODE_HEIGHT + ROW_GAP : 0
   const faixas = []
 
   ondas.forEach((onda, indice) => {
@@ -159,9 +199,9 @@ export function layoutGroup(group, nodesByKey) {
     let alturaLinha = NODE_HEIGHT
 
     for (const key of onda) {
-      const x = coluna[key] * (NODE_WIDTH + COLUMN_GAP)
+      const x = colunaX(coluna[key])
       positions[key] = { x, y: linhaY }
-      const pilha = descendants(nodesByKey, key).filter((k) => inGroup.has(k) && !positions[k])
+      const pilha = descendants(nodesByKey, key).filter((k) => conhecidos.has(k) && !positions[k])
       pilha.forEach((filho, i) => {
         positions[filho] = { x, y: linhaY + (i + 1) * (NODE_HEIGHT + STACK_GAP) }
       })
@@ -172,12 +212,11 @@ export function layoutGroup(group, nodesByKey) {
     top = linhaY + alturaLinha + (indice < ondas.length - 1 ? WAVE_GAP : 0)
   })
 
-  const colunas = Math.max(1, ...cells.map((k) => coluna[k] + 1))
-  const width = colunas * NODE_WIDTH + (colunas - 1) * COLUMN_GAP
-  if (group.root_key) positions[group.root_key] = { x: (width - NODE_WIDTH) / 2, y: 0 }
+  const colunasUsadas = cells.length ? Math.max(...cells.map((k) => coluna[k] + 1)) : 0
+  const raizes = layoutRoots(grupos, positions, colunasUsadas)
 
-  const onlyRoot = Object.keys(positions).length === (group.root_key ? 1 : 0)
-  const height = onlyRoot ? NODE_HEIGHT : top
+  const width = Math.max(larguraAte(colunasUsadas), raizes.width)
+  const height = cells.length ? top : raizes.hasRoots ? NODE_HEIGHT : 0
   return { positions, width, height, waves: comOndas ? faixas : [] }
 }
 
@@ -186,89 +225,67 @@ export function layoutGroup(group, nodesByKey) {
  */
 export function layoutTree(tree, { selectedKey = null } = {}) {
   const nodesByKey = Object.fromEntries(tree.nodes.map((n) => [n.key, n]))
+  const layout = layoutSprint(tree.groups, nodesByKey)
   const flowNodes = []
   // Onda de cada card, para as arestas saberem se o alvo está logo abaixo da origem.
   const ondaPorKey = {}
-  let cursorX = 0
-  let cursorY = 0
-  let rowHeight = 0
 
-  for (const group of tree.groups) {
-    const layout = layoutGroup(group, nodesByKey)
-    const frameWidth = layout.width + 2 * GROUP_PADDING
-    const frameHeight = layout.height + 2 * GROUP_PADDING + GROUP_HEADER
+  flowNodes.push({
+    id: 'group:sprint',
+    type: 'group-frame',
+    position: { x: 0, y: 0 },
+    data: {
+      title: null,
+      count: tree.nodes.filter((n) => n.in_sprint).length,
+      width: layout.width + 2 * GROUP_PADDING,
+      height: layout.height + 2 * GROUP_PADDING + GROUP_HEADER,
+    },
+    draggable: false,
+    selectable: false,
+    focusable: false,
+    zIndex: -1,
+  })
 
-    if (cursorX > 0 && cursorX + frameWidth > MAX_ROW_WIDTH) {
-      cursorX = 0
-      cursorY += rowHeight + GROUP_GAP
-      rowHeight = 0
-    }
-
-    const inSprint = group.issue_keys.filter((k) => nodesByKey[k]?.in_sprint).length
+  for (const faixa of layout.waves) {
+    for (const key of faixa.keys) ondaPorKey[key] = faixa.index
     flowNodes.push({
-      id: `group:${group.key}`,
-      type: 'group-frame',
-      position: { x: cursorX, y: cursorY },
-      data: {
-        title: group.root_key ? null : 'Sem pai',
-        count: inSprint,
-        width: frameWidth,
-        height: frameHeight,
-      },
+      id: `wave:${faixa.index}`,
+      type: 'wave-divider',
+      position: { x: GROUP_PADDING, y: GROUP_PADDING + GROUP_HEADER + faixa.y },
+      data: { label: `Onda de implementação ${faixa.index}`, width: layout.width },
       draggable: false,
       selectable: false,
       focusable: false,
       zIndex: -1,
     })
+  }
 
-    for (const faixa of layout.waves) {
-      for (const key of faixa.keys) ondaPorKey[key] = { group: group.key, index: faixa.index }
-      flowNodes.push({
-        id: `wave:${group.key}:${faixa.index}`,
-        type: 'wave-divider',
-        position: {
-          x: cursorX + GROUP_PADDING,
-          y: cursorY + GROUP_PADDING + GROUP_HEADER + faixa.y,
-        },
-        data: { label: `Onda de implementação ${faixa.index}`, width: layout.width },
-        draggable: false,
-        selectable: false,
-        focusable: false,
-        zIndex: -1,
-      })
-    }
-
+  for (const group of tree.groups) {
     for (const key of group.issue_keys) {
       const pos = layout.positions[key]
       flowNodes.push({
         id: key,
         type: 'issue',
-        position: {
-          x: cursorX + GROUP_PADDING + pos.x,
-          y: cursorY + GROUP_PADDING + GROUP_HEADER + pos.y,
-        },
+        position: { x: GROUP_PADDING + pos.x, y: GROUP_PADDING + GROUP_HEADER + pos.y },
         data: { issue: nodesByKey[key], selected: key === selectedKey },
         draggable: false,
       })
     }
-
-    cursorX += frameWidth + GROUP_GAP
-    rowHeight = Math.max(rowHeight, frameHeight)
   }
 
-  /** O alvo está numa onda abaixo da origem, no mesmo grupo. */
+  /** O alvo está numa onda abaixo da origem. */
   const empilhado = (source, target) => {
     const de = ondaPorKey[source]
     const para = ondaPorKey[target]
-    return Boolean(de && para && de.group === para.group && para.index > de.index)
+    return Boolean(de && para && para > de)
   }
 
   const flowEdges = tree.edges
     .filter((e) => nodesByKey[e.source] && nodesByKey[e.target])
     // A seta do épico até uma tarefa de onda 2+ atravessaria as ondas de cima por trás
-    // dos cards. O vínculo com o épico continua legível pela moldura do grupo e pela
-    // corrente de bloqueio que leva até ela.
-    .filter((e) => !(e.kind === 'parent' && (ondaPorKey[e.target]?.index ?? 1) > 1))
+    // dos cards. O vínculo com o épico continua legível pela corrente de bloqueio que
+    // leva da onda 1 até ela.
+    .filter((e) => !(e.kind === 'parent' && (ondaPorKey[e.target] ?? 1) > 1))
     .map((e) => {
       const vertical = e.kind !== 'blocks' || empilhado(e.source, e.target)
       return {

@@ -11,6 +11,8 @@ const EMPTY_DRAFT = () => ({
   repos: [],
   pinned: false,
   remind_at: null,
+  // Só leitura: não vai no payload, serve para o editor saber se já foi concluído.
+  reminded_at: null,
   issue_keys: [],
 })
 
@@ -69,6 +71,7 @@ export const useNotesStore = defineStore('notes', {
             repos: [...(note.repos ?? [])],
             pinned: note.pinned,
             remind_at: note.remind_at,
+            reminded_at: note.reminded_at,
             issue_keys: note.issues.map((i) => i.key),
           }
         : { ...EMPTY_DRAFT(), ...defaults }

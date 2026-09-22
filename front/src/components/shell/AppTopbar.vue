@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { Search, StickyNote } from 'lucide-vue-next'
+import NotificationBell from './NotificationBell.vue'
+import NotificationPins from './NotificationPins.vue'
 import SyncIndicator from './SyncIndicator.vue'
 import { useHealthStore } from '@/stores/health'
 import { useNotesStore } from '@/stores/notes'
@@ -51,6 +53,8 @@ onBeforeUnmount(() => clearInterval(timer))
       <span class="topbar__crumb topbar__crumb--current">{{ route.meta.title }}</span>
     </nav>
 
+    <NotificationPins />
+
     <button type="button" class="topbar__search" aria-label="Busca global" @click="search.openSearch()">
       <Search :size="16" />
       <span class="topbar__search-text">Buscar tarefas, contextos ou lembretes…</span>
@@ -61,6 +65,8 @@ onBeforeUnmount(() => clearInterval(timer))
       <StickyNote :size="16" />
       <kbd v-if="shortcuts.bindings.open_reminders">{{ shortcuts.bindings.open_reminders }}</kbd>
     </button>
+
+    <NotificationBell />
 
     <SyncIndicator v-if="health.level === 'ok'" />
 

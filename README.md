@@ -215,14 +215,19 @@ com todo o histórico de PRs de uma vez. Rodar o sync de novo não duplica nada.
 ## Árvore da sprint (`/sprints`)
 
 - Seletor de sprint (ativas, futuras, fechadas) com contadores: tarefas, pais, bloqueios, concluídas e SP.
-- Pai de uma tarefa: campo `parent` (Épico → Tarefa → Subtarefa) ou, sem ele, link Relates / Divisão do ticket / implements para um Épico ou Enhancements (`back/services/hierarchy.py`). Tarefas sem pai ficam no grupo "Sem pai".
+- Pai de uma tarefa: campo `parent` (Épico → Tarefa → Subtarefa) ou, sem ele, link Relates / Divisão do ticket / implements para um Épico ou Enhancements (`back/services/hierarchy.py`).
+- **Uma moldura só para a sprint** ("N tarefa(s) na sprint"): os épicos ficam numa fileira em
+  cima, cada um centralizado sobre as suas tarefas, e **as tarefas sem pai entram na mesma
+  linha das outras** em vez de numa caixa à parte. Quem diz de quem a tarefa é continua sendo
+  a seta que desce do épico.
 - Cards com tipo, título, chave, SP, status do Jira e badge de PR; borda vermelha quando há bloqueador não concluído; seta "bloqueia" entre tarefas.
-- **Ondas de implementação**: quando há bloqueio entre as filhas de um mesmo pai, a linha
+- **Ondas de implementação**: quando há bloqueio entre as tarefas do desenho, a linha
   única vira faixas separadas por um pontilhado — "Onda de implementação 1" são as tarefas
   que ninguém bloqueia, e cada tarefa desce para a onda seguinte à do seu bloqueador mais
   tardio, na coluna dele. Dá para ler o que dá para começar hoje sem seguir seta por seta.
-  Duas tarefas liberadas pela mesma ficam lado a lado na onda seguinte. Grupo sem bloqueio
-  nenhum continua em linha única, sem faixa.
+  Duas tarefas liberadas pela mesma ficam lado a lado na onda seguinte. Como a sprint é um
+  desenho só, bloqueio entre épicos diferentes também conta. Sprint sem bloqueio nenhum
+  continua em linha única, sem faixa.
 - **Marcador no canto superior direito do card**, para varrer o canvas sem ler o rodapé de
   cada um: check verde em **Aprovada**, check roxo em **Mergeada** e o ícone laranja em
   **Ajustes requisitados**. Os outros status continuam só na cor da borda e no badge.
@@ -253,7 +258,11 @@ com todo o histórico de PRs de uma vez. Rodar o sync de novo não duplica nada.
 - Post-its com título, texto, cor, tags, fixar, arquivar e **horário de lembrete** (atalhos "em 1 hora", "amanhã 9h", "segunda 9h").
 - Vinculáveis a tarefas (`WAI-1234`): aparecem na aba **Lembretes** do painel da tarefa, que também cria já vinculado.
 - Busca própria no Postgres: português **sem acento** ("integracao" acha "Integração"), **trecho parcial** ("exponen"), tag e chave de tarefa; título pesa mais que o texto; fixados primeiro.
-- Na hora marcada: aviso no app (Abrir / Adiar 10 min / 1 h / Concluir) e notificação do Windows, se você permitir no primeiro lembrete com horário.
+- Na hora marcada: o lembrete vira **notificação no sino do topo** (veja abaixo) e uma notificação do Windows, se você permitir no primeiro lembrete com horário.
+- **Concluir dá para fazer de três lugares**: o card no mural, o painel do sino e a própria
+  modal do lembrete. Na modal o botão salva o que está na tela antes de concluir — o PATCH
+  reenvia o horário e no back isso rearma a notificação, então a ordem inversa desfaria o
+  concluir. Mexeu no horário, o lembrete volta a ficar em aberto (é a mesma regra do back).
 
 | Rota | O que faz |
 |---|---|
@@ -262,6 +271,21 @@ com todo o histórico de PRs de uma vez. Rodar o sync de novo não duplica nada.
 | `GET /api/notes/tags` | tags com contagem |
 | `GET /api/notes/reminders/due` | lembretes vencidos ainda não vistos |
 | `POST /api/notes/{id}/reminder/ack` · `/snooze` | concluir · adiar |
+
+### Notificações (o sino no topo)
+
+Lembrete vencido não abre mais cartão flutuante em cima da tela — ele fica no **sino**,
+à direita do botão de lembretes:
+
+- **Selo abaixo do sino** com quantas notificações ainda não foram vistas. Abrir o painel
+  zera a contagem; um lembrete que vence depois (ou que volta de um "adiar") soma de novo.
+- **O painel** lista as notificações ativas com horário, tarefas ligadas e as ações
+  *Abrir · Adiar 10 min · 1 h · Concluir* — as mesmas de antes. Fecha com `Esc` ou clique fora.
+- **Fixar (📌)** sobe só o **título** da notificação para o topo de todas as telas; clicar nesse
+  título abre a **modal do lembrete**, e o `X` do chip desafixa. Concluir solta o pin sozinho.
+  O "Abrir" do painel e o clique na notificação do Windows levam ao mesmo lugar.
+- O que está fixado e o que já foi visto é preferência **desta máquina** (`localStorage`), não
+  campo do lembrete: o `pinned` da nota continua sendo o fixar do mural.
 
 ### Modal de lembretes por atalho
 

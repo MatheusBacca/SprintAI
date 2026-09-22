@@ -72,11 +72,15 @@ use `;` dentro de comentário SQL**. Toda tabela nova entra em `MIRROR_TABLES`
 legenda) desce por `provide`/`inject` (`components/sprint/canvasMarks.js`): remontar o array
 de nós a cada tecla faz o Vue Flow recriar e remedir cada card. A câmera vem da instância do
 evento `pane-ready`, não de `useVueFlow(id)` — é o que deixa o foco testável, já que o Vue
-Flow não inicializa em jsdom. As **ondas de implementação** (`implementationWaves`) saem do
-`blocked_by` de cada card, contando só bloqueador que esteja na mesma linha do grupo — um de
-outro épico empurraria o card para uma onda que não existe naquele desenho. Quem cai na onda
-2+ perde a seta do épico: ela cruzaria as ondas de cima por trás dos cards, e o vínculo já
-se lê pela moldura do grupo e pela corrente de bloqueio.
+Flow não inicializa em jsdom. `layoutSprint` desenha a sprint **numa moldura só**: os épicos
+numa fileira em cima, cada um centralizado sobre as suas tarefas, e todo o resto — inclusive
+as tarefas sem pai — dividindo as mesmas ondas abaixo. Uma moldura por épico mais uma "Sem
+pai" espalhava a sprint em desenhos que não se comparavam. As **ondas de implementação**
+(`implementationWaves`) saem do `blocked_by` de cada card, contando só bloqueador que esteja
+no desenho — fora da sprint não há onda de onde empurrar; entre épicos diferentes conta, e é
+o que a onda existe para mostrar. Quem cai na onda 2+ perde a seta do épico: ela cruzaria as
+ondas de cima por trás dos cards, e o vínculo se lê pela corrente de bloqueio que leva da
+onda 1 até ela.
 
 **Front** — tela ou painel que mostra dado do espelho observa `refresh.revision`
 (`stores/refresh.js`) e recarrega; quem alimenta esse contador é só o `AppShell`. Não crie

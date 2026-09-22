@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import { BellOff, Check, Pin, X } from 'lucide-vue-next'
+import { BellOff, Check, CircleCheck, Pin, X } from 'lucide-vue-next'
 import ChipsInput from './ChipsInput.vue'
 import LinksField from './LinksField.vue'
 import MentionTextarea from './MentionTextarea.vue'
@@ -58,12 +58,21 @@ function pruneMentions() {
 
 const marks = computed(() => ({ tag: draft.value.tags, repo: draft.value.repos, issue: draft.value.issue_keys }))
 
+/** Espelha a regra do back: horário novo (ou removido) rearma a notificação. */
+function setRemindAt(iso) {
+  draft.value.remind_at = iso
+  draft.value.reminded_at = null
+}
+
 const remindLocal = computed({
   get: () => toLocalInput(draft.value.remind_at),
-  set: (value) => (draft.value.remind_at = fromLocalInput(value)),
+  set: (value) => setRemindAt(fromLocalInput(value)),
 })
 
 const presets = computed(() => reminderPresets())
+
+/** Lembrete já salvo, com horário e ainda em aberto: dá para fechar daqui. */
+const podeConcluir = computed(() => Boolean(draft.value.id && draft.value.remind_at && !draft.value.reminded_at))
 
 watch(
   () => store.editor.open,
@@ -81,7 +90,18 @@ async function save() {
   if (draft.value.remind_at && typeof Notification !== 'undefined' && Notification.permission === 'default') {
     Notification.requestPermission().catch(() => {})
   }
-  await store.saveEditor()
+  return store.saveEditor()
+}
+
+/**
+ * Mesmo "Concluir" da notificação e do card, agora sem precisar esperar o lembrete
+ * apitar. Salva antes de concluir porque o PATCH reenvia `remind_at`, e no back isso
+ * rearma a notificação (zera `reminded_at`) — na ordem inversa o salvar desfaria o
+ * concluir. Se o salvar falhar, o erro já aparece no formulário e não concluímos nada.
+ */
+async function concluir() {
+  const saved = await save()
+  if (saved) await store.acknowledge(saved.id).catch(() => {})
 }
 
 function onKeydown(event) {
@@ -159,10 +179,11 @@ function onKeydown(event) {
           <label class="field__label" for="note-remind">Lembrar em</label>
           <div class="editor__remind">
             <input id="note-remind" v-model="remindLocal" type="datetime-local" class="field__input editor__datetime">
-            <button v-for="p in presets" :key="p.id" type="button" class="editor__preset" @click="draft.remind_at = p.at.toISOString()">{{ p.label }}</button>
-            <button v-if="draft.remind_at" type="button" class="editor__preset" title="Sem lembrete" @click="draft.remind_at = null">
+            <button v-for="p in presets" :key="p.id" type="button" class="editor__preset" @click="setRemindAt(p.at.toISOString())">{{ p.label }}</button>
+            <button v-if="draft.remind_at" type="button" class="editor__preset" title="Sem lembrete" @click="setRemindAt(null)">
               <BellOff :size="13" />
             </button>
+            <span v-if="draft.reminded_at" class="editor__done"><CircleCheck :size="13" /> Concluído</span>
           </div>
         </div>
 
@@ -184,6 +205,16 @@ function onKeydown(event) {
           </div>
           <p v-if="store.editor.error" class="editor__error" role="alert">{{ store.editor.error }}</p>
           <button type="button" class="btn btn--secondary" @click="store.closeEditor()">Cancelar</button>
+          <button
+            v-if="podeConcluir"
+            type="button"
+            class="btn btn--secondary editor__complete"
+            :disabled="store.editor.saving"
+            title="Salva o que está na tela e marca o lembrete como concluído"
+            @click="concluir"
+          >
+            <CircleCheck :size="13" /> Concluir
+          </button>
           <button type="submit" class="btn btn--primary" :disabled="store.editor.saving" title="Ctrl+Enter">
             {{ store.editor.saving ? 'Salvando…' : 'Salvar' }}
           </button>
@@ -274,6 +305,23 @@ function onKeydown(event) {
 
 .editor__preset:hover {
   background: var(--note-inset-strong);
+}
+
+.editor__done,
+.editor__complete {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.editor__done {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-success-text);
+}
+
+.editor__complete {
+  color: var(--color-success-text);
 }
 
 .editor__footer {

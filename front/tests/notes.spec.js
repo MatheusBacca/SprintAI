@@ -8,7 +8,6 @@ import LinksField from '@/components/notes/LinksField.vue'
 import MentionTextarea from '@/components/notes/MentionTextarea.vue'
 import NoteCard from '@/components/notes/NoteCard.vue'
 import NoteEditor from '@/components/notes/NoteEditor.vue'
-import ReminderCenter from '@/components/notes/ReminderCenter.vue'
 import NotesView from '@/views/NotesView.vue'
 import { routes } from '@/router/routes'
 import { useNotesStore } from '@/stores/notes'
@@ -201,38 +200,53 @@ describe('NoteEditor', () => {
     expect(store.editor.draft.issue_keys).toEqual([])
     wrapper.unmount()
   })
-})
 
-describe('ReminderCenter', () => {
-  it('mostra lembretes vencidos e resolve com concluir e adiar', async () => {
-    let due = [note(1, { title: 'Revisar PR', remind_at: NOW.toISOString(), reminder_due: true }), note(2, { title: 'Daily', reminder_due: true, remind_at: NOW.toISOString() })]
-    routeFetch(({ method, url }) => {
-      if (url === '/api/notes/reminders/due') return json(200, due)
-      if (method === 'POST' && url.endsWith('/reminder/ack')) {
-        due = due.filter((n) => n.id !== 1)
-        return json(200, note(1))
-      }
-      if (method === 'POST' && url.endsWith('/reminder/snooze')) {
-        due = due.filter((n) => n.id !== 2)
-        return json(200, note(2))
-      }
-      return json(200, {})
-    })
-    const wrapper = mount(ReminderCenter, { attachTo: document.body, props: { pollMs: 60_000 } })
+  const concluirButton = () =>
+    [...document.body.querySelectorAll('.editor__footer button')].find((b) => b.textContent.includes('Concluir'))
+
+  it('Concluir na modal salva o que está na tela antes de fechar o lembrete', async () => {
+    routeFetch(({ method }) => (method === 'PATCH' ? json(200, note(3)) : json(200, note(3))))
+    const store = useNotesStore()
+    const wrapper = mount(NoteEditor, { attachTo: document.body })
+    store.openEditor(note(3, { remind_at: NOW.toISOString(), reminder_due: true }))
     await flushPromises()
 
-    let cards = document.body.querySelectorAll('.reminder')
-    expect([...cards].map((c) => c.querySelector('.reminder__title').textContent)).toEqual(['Revisar PR', 'Daily'])
-
-    ;[...cards[0].querySelectorAll('button')].find((b) => b.textContent === 'Concluir').click()
-    await flushPromises()
-    cards = document.body.querySelectorAll('.reminder')
-    ;[...cards[0].querySelectorAll('button')].find((b) => b.textContent === 'Adiar 10 min').click()
+    concluirButton().click()
     await flushPromises()
 
-    expect(calls.find((c) => c.url === '/api/notes/1/reminder/ack')).toBeTruthy()
-    expect(calls.find((c) => c.url === '/api/notes/2/reminder/snooze').body).toEqual({ minutes: 10 })
-    expect(document.body.querySelectorAll('.reminder')).toHaveLength(0)
+    // Nessa ordem: o PATCH reenvia `remind_at` e no back isso rearma a notificação,
+    // então concluir primeiro seria desfeito pelo salvar.
+    expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual(['PATCH /api/notes/3', 'POST /api/notes/3/reminder/ack'])
+    expect(store.editor.open).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('lembrete já concluído não oferece Concluir; horário novo rearma e oferece de novo', async () => {
+    routeFetch(() => json(200, []))
+    const store = useNotesStore()
+    const wrapper = mount(NoteEditor, { attachTo: document.body })
+    store.openEditor(note(4, { remind_at: NOW.toISOString(), reminded_at: NOW.toISOString() }))
+    await flushPromises()
+
+    expect(concluirButton()).toBeUndefined()
+    expect(document.body.querySelector('.editor__done').textContent).toContain('Concluído')
+
+    document.body.querySelectorAll('.editor__preset')[0].click() // Em 1 hora
+    await flushPromises()
+
+    expect(store.editor.draft.reminded_at).toBeNull()
+    expect(concluirButton()).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it('lembrete sem horário não tem o que concluir', async () => {
+    routeFetch(() => json(200, []))
+    const store = useNotesStore()
+    const wrapper = mount(NoteEditor, { attachTo: document.body })
+    store.openEditor(note(5))
+    await flushPromises()
+
+    expect(concluirButton()).toBeUndefined()
     wrapper.unmount()
   })
 })
