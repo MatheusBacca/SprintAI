@@ -65,6 +65,7 @@ def to_detail(summary: IssuePrSummary) -> IssuePrSummaryOut:
                         build_failed=pr.build_failed,
                         comment_count=pr.comment_count,
                         match=pr.match,
+                        fix_pushed=pr.fix_pushed,
                     )
                     for pr in repo.pull_requests
                 ],

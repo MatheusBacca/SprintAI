@@ -349,7 +349,7 @@ describe('IssueDrawer', () => {
           pull_requests: [{
             repo_slug: 'monitoria', id: 412, title: 'WAI-124 integração', state: 'OPEN', status: 'ajustes_requisitados', status_label: 'Ajustes requisitados',
             draft: false, source_branch: 'feature/WAI-124', destination_branch: 'main', url: 'https://bitbucket.org/weonrepo/monitoria/pull-requests/412',
-            updated_on: NOW, approvals: 1, changes_requested: 1, build_status: 'FAILED', build_failed: true, comment_count: 3, match: 'title',
+            updated_on: NOW, approvals: 1, changes_requested: 1, build_status: 'FAILED', build_failed: true, comment_count: 3, match: 'title', fix_pushed: false,
             reviewers: [{ name: 'Ana', role: 'REVIEWER', approved: true, state: 'approved' }, { name: 'Bruno', role: 'REVIEWER', approved: false, state: 'changes_requested' }],
           }],
           branches: [{ name: 'WAI-124-antiga', target_date: NOW, stale: true }],

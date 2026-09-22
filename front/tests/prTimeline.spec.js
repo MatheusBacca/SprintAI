@@ -10,10 +10,12 @@ function at(hours) {
   return new Date(Date.parse(T0) + hours * 3600_000).toISOString()
 }
 
+// Ajuste pedido e correção já enviada: o Bitbucket mantém o pedido do revisor em pé, e
+// é o histórico que devolve o PR a "PR aberta".
 const SUMMARY = {
   issue_key: 'WAI-8360',
-  status: 'ajustes_requisitados',
-  status_label: 'Ajustes requisitados',
+  status: 'pr_aberta',
+  status_label: 'PR aberta',
   pr_count: 1,
   open_pr_count: 1,
   build_failed: false,
@@ -21,8 +23,8 @@ const SUMMARY = {
   repos: [
     {
       repo_slug: 'weaction-api',
-      status: 'ajustes_requisitados',
-      status_label: 'Ajustes requisitados',
+      status: 'pr_aberta',
+      status_label: 'PR aberta',
       branches: [],
       pull_requests: [
         {
@@ -30,8 +32,8 @@ const SUMMARY = {
           id: 1836,
           title: 'WAI-8360 histórico de qualificação',
           state: 'OPEN',
-          status: 'ajustes_requisitados',
-          status_label: 'Ajustes requisitados',
+          status: 'pr_aberta',
+          status_label: 'PR aberta',
           draft: false,
           source_branch: 'WAI-8360-historico',
           destination_branch: 'develop',
@@ -44,6 +46,7 @@ const SUMMARY = {
           build_failed: false,
           comment_count: 1,
           match: 'branch',
+          fix_pushed: true,
         },
       ],
     },
@@ -234,6 +237,69 @@ describe('histórico da PR', () => {
 
     expect(calls).toEqual([TIMELINE_URL])
     expect(wrapper.findAll('.tl__item')).toHaveLength(4)
+  })
+})
+
+describe('correção enviada', () => {
+  it('o PR com correção no ar volta a "PR aberta" e diz por que o pedido ainda aparece', async () => {
+    const wrapper = await mountTab()
+
+    const text = wrapper.find('.pr').text()
+    expect(text).toContain('1 pedido(s) de ajuste')
+    expect(text).toContain('correção enviada')
+    expect(wrapper.find('.pr .pr-badge').text()).toContain('PR aberta')
+  })
+
+  it('sem correção, nada de marca', async () => {
+    const pr = { ...SUMMARY.repos[0].pull_requests[0], fix_pushed: false }
+    const summary = { ...SUMMARY, repos: [{ ...SUMMARY.repos[0], pull_requests: [pr] }] }
+    const wrapper = await mountTab(summary)
+
+    expect(wrapper.find('.pr').text()).not.toContain('correção enviada')
+  })
+})
+
+describe('minimizar a review', () => {
+  it('a review abre e fecha pelo cabeçalho, que conta o que tem dentro', async () => {
+    const wrapper = await mountTab()
+    const toggle = () => wrapper.find('.tl__toggle')
+
+    expect(toggle().attributes('aria-expanded')).toBe('true')
+    expect(toggle().text()).toContain('4 atualizações')
+
+    await toggle().trigger('click')
+    expect(toggle().attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('.tl__list').exists()).toBe(false)
+
+    await toggle().trigger('click')
+    expect(wrapper.findAll('.tl__item')).toHaveLength(4)
+  })
+
+  it('minimizar um PR não mexe no outro', async () => {
+    const outro = { ...SUMMARY.repos[0].pull_requests[0], id: 1840 }
+    const summary = {
+      ...SUMMARY,
+      repos: [{ ...SUMMARY.repos[0], pull_requests: [SUMMARY.repos[0].pull_requests[0], outro] }],
+    }
+    const wrapper = await mountTab(summary)
+
+    await wrapper.findAll('.tl__toggle')[0].trigger('click')
+
+    expect(wrapper.findAll('.tl__toggle').map((t) => t.attributes('aria-expanded'))).toEqual([
+      'false',
+      'true',
+    ])
+    expect(wrapper.findAll('.tl__list')).toHaveLength(1)
+  })
+
+  it('o aviso de ajuste pendente continua à vista com a review minimizada', async () => {
+    stubFetch(() => json(200, { ...TIMELINE, pending_review: true }))
+    const wrapper = await mountTab()
+
+    await wrapper.find('.tl__toggle').trigger('click')
+
+    expect(wrapper.find('.tl__list').exists()).toBe(false)
+    expect(wrapper.find('.tl__pending').text()).toContain('ainda sem commit')
   })
 })
 

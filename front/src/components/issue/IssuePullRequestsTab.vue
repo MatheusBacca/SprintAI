@@ -2,6 +2,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import {
   Check,
+  ChevronDown,
+  ChevronRight,
   Copy,
   ExternalLink,
   GitBranch,
@@ -79,6 +81,26 @@ function copyLabel(entry) {
   if (copyState.value?.id !== entry.comment_id) return 'Copiar o comentário'
   return copyState.value.ok ? 'Copiado' : 'Não deu para copiar'
 }
+
+// Review minimizada, por PR. Tarefa com vários PRs vira uma rolagem só; minimizar o
+// que já foi lido deixa os outros à vista. O padrão continua aberto — é o histórico
+// que se quer ver ao entrar na aba.
+const collapsed = ref({})
+
+function isOpen(pr) {
+  return !collapsed.value[prKey(pr.repo_slug, pr.id)]
+}
+
+function toggle(pr) {
+  const key = prKey(pr.repo_slug, pr.id)
+  collapsed.value = { ...collapsed.value, [key]: isOpen(pr) }
+}
+
+function reviewCount(pr) {
+  const entries = timelineOf(pr).data?.entries
+  if (!entries) return null
+  return entries.length === 1 ? '1 atualização' : `${entries.length} atualizações`
+}
 </script>
 
 <template>
@@ -111,6 +133,10 @@ function copyLabel(entry) {
           <div class="pr__meta">
             <span v-if="pr.approvals" class="pr__ok"><Check :size="12" /> {{ pr.approvals }} aprovação(ões)</span>
             <span v-if="pr.changes_requested" class="pr__changes"><X :size="12" /> {{ pr.changes_requested }} pedido(s) de ajuste</span>
+            <!-- O Bitbucket mantém o pedido do revisor até ele mexer de novo; isto conta o outro lado. -->
+            <span v-if="pr.fix_pushed" class="pr__ok" title="Entrou commit depois do último pedido de ajuste">
+              <Check :size="12" /> correção enviada
+            </span>
             <span v-if="pr.comment_count"><MessageSquare :size="12" /> {{ pr.comment_count }}</span>
             <span v-if="pr.build_status" :class="{ pr__fail: pr.build_failed }">
               <TriangleAlert v-if="pr.build_failed" :size="12" /> {{ BUILD_LABEL[pr.build_status] ?? pr.build_status }}
@@ -130,72 +156,89 @@ function copyLabel(entry) {
           </ul>
 
           <div class="tl">
-            <p v-if="timelineOf(pr).loading" class="tl__note">
-              <RefreshCw :size="13" class="spin" /> Carregando o histórico…
-            </p>
-            <p v-else-if="timelineOf(pr).error" class="tl__note tl__note--error" role="alert">
-              {{ timelineOf(pr).error }}
-              <button type="button" class="btn btn--secondary" @click="store.loadPrTimeline(pr.repo_slug, pr.id, { force: true })">
-                Tentar de novo
-              </button>
-            </p>
-            <template v-else-if="timelineOf(pr).data">
-              <p v-if="timelineOf(pr).data.pending_review" class="tl__pending">
-                <TriangleAlert :size="13" /> Ajuste pedido e ainda sem commit depois dele.
-              </p>
-              <p v-else-if="timelineOf(pr).data.request_before_history" class="tl__note">
-                O pedido de ajuste é anterior ao histórico local — a marcação de correção
-                vale a partir do próximo.
-              </p>
+            <button
+              type="button"
+              class="tl__toggle"
+              :aria-expanded="isOpen(pr) ? 'true' : 'false'"
+              :title="isOpen(pr) ? 'Minimizar a review' : 'Abrir a review'"
+              @click="toggle(pr)"
+            >
+              <ChevronDown v-if="isOpen(pr)" :size="14" />
+              <ChevronRight v-else :size="14" />
+              Review
+              <span v-if="reviewCount(pr)" class="tl__count">{{ reviewCount(pr) }}</span>
+            </button>
 
-              <ol v-if="timelineOf(pr).data.entries.length" class="tl__list">
-                <li
-                  v-for="(entry, i) in timelineOf(pr).data.entries"
-                  :key="i"
-                  class="tl__item"
-                  :data-kind="entry.kind"
-                  :data-fix="entry.after_changes_requested || undefined"
-                >
-                  <span class="tl__icon">
-                    <MessageSquare v-if="entry.kind === 'comment'" :size="13" />
-                    <ActivityKindIcon v-else :kind="entry.kind" :size="13" />
-                  </span>
+            <!-- Fica fora do que se minimiza: é o aviso que faz abrir a review de novo. -->
+            <p v-if="timelineOf(pr).data?.pending_review" class="tl__pending">
+              <TriangleAlert :size="13" /> Ajuste pedido e ainda sem commit depois dele.
+            </p>
 
-                  <!-- Comentário vira cartão; evento é uma linha só, como no Bitbucket. -->
-                  <div v-if="entry.kind === 'comment'" class="tl__comment">
-                    <p class="tl__head">
+            <template v-if="isOpen(pr)">
+              <p v-if="timelineOf(pr).loading" class="tl__note">
+                <RefreshCw :size="13" class="spin" /> Carregando o histórico…
+              </p>
+              <p v-else-if="timelineOf(pr).error" class="tl__note tl__note--error" role="alert">
+                {{ timelineOf(pr).error }}
+                <button type="button" class="btn btn--secondary" @click="store.loadPrTimeline(pr.repo_slug, pr.id, { force: true })">
+                  Tentar de novo
+                </button>
+              </p>
+              <template v-else-if="timelineOf(pr).data">
+                <p v-if="timelineOf(pr).data.request_before_history" class="tl__note">
+                  O pedido de ajuste é anterior ao histórico local — a marcação de correção
+                  vale a partir do próximo.
+                </p>
+
+                <ol v-if="timelineOf(pr).data.entries.length" class="tl__list">
+                  <li
+                    v-for="(entry, i) in timelineOf(pr).data.entries"
+                    :key="i"
+                    class="tl__item"
+                    :data-kind="entry.kind"
+                    :data-fix="entry.after_changes_requested || undefined"
+                  >
+                    <span class="tl__icon">
+                      <MessageSquare v-if="entry.kind === 'comment'" :size="13" />
+                      <ActivityKindIcon v-else :kind="entry.kind" :size="13" />
+                    </span>
+  
+                    <!-- Comentário vira cartão; evento é uma linha só, como no Bitbucket. -->
+                    <div v-if="entry.kind === 'comment'" class="tl__comment">
+                      <p class="tl__head">
+                        <strong>{{ entry.actor_name ?? 'Alguém' }}</strong>
+                        <span v-if="inlineRef(entry)" class="tl__file">{{ inlineRef(entry) }}</span>
+                        <time class="tl__when" :datetime="entry.at">{{ formatRelative(entry.at) }}</time>
+                        <button
+                          v-if="!entry.is_deleted"
+                          type="button"
+                          class="tl__copy"
+                          :class="{ 'tl__copy--ok': copyState?.id === entry.comment_id && copyState.ok }"
+                          :title="copyLabel(entry)"
+                          :aria-label="copyLabel(entry)"
+                          @click="copyComment(entry, $event)"
+                        >
+                          <Check v-if="copyState?.id === entry.comment_id && copyState.ok" :size="13" />
+                          <Copy v-else :size="13" />
+                        </button>
+                      </p>
+                      <p v-if="entry.is_deleted" class="tl__gone">comentário apagado no Bitbucket</p>
+                      <!-- VNodes, nunca v-html: o corpo vem do Bitbucket, é dado de terceiro. -->
+                      <MarkdownRenderer v-else :source="entry.body ?? ''" />
+                    </div>
+  
+                    <p v-else class="tl__head tl__head--event">
                       <strong>{{ entry.actor_name ?? 'Alguém' }}</strong>
-                      <span v-if="inlineRef(entry)" class="tl__file">{{ inlineRef(entry) }}</span>
+                      <span class="tl__what">{{ eventText(entry) }}</span>
+                      <span v-if="entry.commit" class="tl__commit">{{ entry.commit.slice(0, 7) }}</span>
                       <time class="tl__when" :datetime="entry.at">{{ formatRelative(entry.at) }}</time>
-                      <button
-                        v-if="!entry.is_deleted"
-                        type="button"
-                        class="tl__copy"
-                        :class="{ 'tl__copy--ok': copyState?.id === entry.comment_id && copyState.ok }"
-                        :title="copyLabel(entry)"
-                        :aria-label="copyLabel(entry)"
-                        @click="copyComment(entry, $event)"
-                      >
-                        <Check v-if="copyState?.id === entry.comment_id && copyState.ok" :size="13" />
-                        <Copy v-else :size="13" />
-                      </button>
                     </p>
-                    <p v-if="entry.is_deleted" class="tl__gone">comentário apagado no Bitbucket</p>
-                    <!-- VNodes, nunca v-html: o corpo vem do Bitbucket, é dado de terceiro. -->
-                    <MarkdownRenderer v-else :source="entry.body ?? ''" />
-                  </div>
-
-                  <p v-else class="tl__head tl__head--event">
-                    <strong>{{ entry.actor_name ?? 'Alguém' }}</strong>
-                    <span class="tl__what">{{ eventText(entry) }}</span>
-                    <span v-if="entry.commit" class="tl__commit">{{ entry.commit.slice(0, 7) }}</span>
-                    <time class="tl__when" :datetime="entry.at">{{ formatRelative(entry.at) }}</time>
-                  </p>
-                </li>
-              </ol>
-              <p v-else class="tl__note">
-                Nada no histórico ainda. Ele é preenchido durante a sincronização.
-              </p>
+                  </li>
+                </ol>
+                <p v-else class="tl__note">
+                  Nada no histórico ainda. Ele é preenchido durante a sincronização.
+                </p>
+              </template>
             </template>
           </div>
         </li>
@@ -364,6 +407,29 @@ a.pr__title:hover {
   margin-top: var(--space-3);
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
+}
+
+.tl__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin-bottom: var(--space-2);
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.tl__toggle:hover {
+  color: var(--color-text);
+}
+
+.tl__count {
+  font-weight: 400;
+  color: var(--color-text-muted);
 }
 
 .tl__note {

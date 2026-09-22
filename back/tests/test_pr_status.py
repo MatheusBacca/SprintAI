@@ -29,6 +29,8 @@ def pr(
     keys=("WAI-7001",),
     updated=T0,
     build=None,
+    requested_at=None,
+    commit_at=None,
 ):
     return {
         "repo_slug": repo,
@@ -44,6 +46,8 @@ def pr(
         "comment_count": 0,
         "issue_keys": list(keys),
         "updated_on": updated,
+        "last_changes_requested_at": requested_at,
+        "last_commit_at": commit_at,
     }
 
 
@@ -72,6 +76,44 @@ def branch(repo="monitoria", name="WAI-7001-x", keys=("WAI-7001",), date=T0):
 )
 def test_status_por_pr(state, draft, participants, expected):
     assert derive_pr_status(state=state, draft=draft, participants=participants) is expected
+
+
+def test_correcao_enviada_devolve_o_pr_para_pr_aberta():
+    # O revisor continua com "changes_requested" no Bitbucket: quem diz que a correção
+    # subiu é o histórico.
+    assert (
+        derive_pr_status(state="OPEN", draft=False, participants=[CHANGES], fix_pushed=True)
+        is PrStatus.PR_ABERTA
+    )
+    # Mesmo com outra aprovação: quem pediu o ajuste ainda não olhou a correção.
+    assert (
+        derive_pr_status(
+            state="OPEN", draft=False, participants=[APPROVED, CHANGES], fix_pushed=True
+        )
+        is PrStatus.PR_ABERTA
+    )
+
+
+@pytest.mark.parametrize(
+    ("requested_at", "commit_at", "expected"),
+    [
+        (T0, T0 + timedelta(hours=2), True),  # correção depois do pedido
+        (T0, T0, True),  # mesmo ciclo de sync: os dois herdam o updated_on do PR
+        (T0, T0 - timedelta(hours=2), False),  # commit anterior ao pedido
+        (T0, None, False),
+        (None, T0, False),  # pedido anterior ao histórico do espelho
+        (None, None, False),
+    ],
+)
+def test_correcao_sai_da_comparacao_das_datas(requested_at, commit_at, expected):
+    summary = summarize_issue(
+        "WAI-7001",
+        [pr(participants=[CHANGES], requested_at=requested_at, commit_at=commit_at)],
+        [],
+    )
+
+    assert summary.repos[0].pull_requests[0].fix_pushed is expected
+    assert summary.status is (PrStatus.PR_ABERTA if expected else PrStatus.AJUSTES_REQUISITADOS)
 
 
 # --- Por tarefa --------------------------------------------------------------------------------

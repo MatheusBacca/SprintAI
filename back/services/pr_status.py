@@ -3,7 +3,8 @@
 Por PR:
     MERGED → mergeada · DECLINED → recusada · SUPERSEDED → substituida
     OPEN + draft → rascunho
-    OPEN + algum "changes requested" → ajustes_requisitados
+    OPEN + algum "changes requested" e ainda sem correção → ajustes_requisitados
+    OPEN + algum "changes requested" com correção já enviada → pr_aberta
     OPEN + ≥1 aprovação → aprovada
     OPEN → pr_aberta
 
@@ -93,6 +94,8 @@ class PullRequestLink:
     comment_count: int | None
     # "branch": a chave está no nome da branch; "title": só citada no título.
     match: str
+    # Ajuste pedido e correção já subida — o PR voltou para a fila do revisor.
+    fix_pushed: bool = False
 
     @property
     def build_failed(self) -> bool:
@@ -133,7 +136,31 @@ class IssuePrSummary:
 # --- Por PR ---------------------------------------------------------------------------------
 
 
-def derive_pr_status(*, state: str, draft: bool, participants: list[dict[str, Any]]) -> PrStatus:
+def fix_after_request(last_request: datetime | None, last_commit: datetime | None) -> bool:
+    """Correção enviada: entrou commit depois do último pedido de ajuste.
+
+    O Bitbucket não limpa o `changes_requested` do revisor quando a correção sobe — só
+    ele limpa, aprovando ou pedindo outro ajuste. Quem diz que a correção veio é o
+    histórico do espelho (`activity_event`), a mesma fonte da linha do tempo do PR.
+
+    Sem o evento do pedido não dá para dizer que o commit responde a ele: é o PR que já
+    estava em ajustes quando o espelho nasceu (o sync grava a transição, não o estado) e
+    o status continua em "ajustes requisitados". Empate conta como correção, mesma regra
+    de `pr_timeline.pending_review` — dentro de um ciclo de sync os dois eventos herdam o
+    `updated_on` do PR e não há como ordená-los.
+    """
+    if last_request is None or last_commit is None:
+        return False
+    return last_commit >= last_request
+
+
+def derive_pr_status(
+    *,
+    state: str,
+    draft: bool,
+    participants: list[dict[str, Any]],
+    fix_pushed: bool = False,
+) -> PrStatus:
     if state == "MERGED":
         return PrStatus.MERGEADA
     if state == "DECLINED":
@@ -143,7 +170,10 @@ def derive_pr_status(*, state: str, draft: bool, participants: list[dict[str, An
     if draft:
         return PrStatus.RASCUNHO
     if any(p.get("state") == "changes_requested" for p in participants):
-        return PrStatus.AJUSTES_REQUISITADOS
+        # Com a correção no ar a bola está com o revisor, não comigo — o card volta a
+        # "PR aberta" e não a "aprovada": a aprovação que existe é de outro revisor, e
+        # quem pediu o ajuste ainda não olhou a correção.
+        return PrStatus.PR_ABERTA if fix_pushed else PrStatus.AJUSTES_REQUISITADOS
     if any(p.get("approved") for p in participants):
         return PrStatus.APROVADA
     return PrStatus.PR_ABERTA
@@ -151,6 +181,9 @@ def derive_pr_status(*, state: str, draft: bool, participants: list[dict[str, An
 
 def pull_request_link(issue_key: str, row: dict[str, Any]) -> PullRequestLink:
     participants = row.get("participants") or []
+    fix_pushed = fix_after_request(
+        row.get("last_changes_requested_at"), row.get("last_commit_at")
+    )
     branch_keys = extract_issue_keys(
         row.get("source_branch"), project_keys=[issue_key.split("-", 1)[0]]
     )
@@ -160,7 +193,10 @@ def pull_request_link(issue_key: str, row: dict[str, Any]) -> PullRequestLink:
         title=row.get("title") or "",
         state=row["state"],
         status=derive_pr_status(
-            state=row["state"], draft=bool(row.get("draft")), participants=participants
+            state=row["state"],
+            draft=bool(row.get("draft")),
+            participants=participants,
+            fix_pushed=fix_pushed,
         ),
         draft=bool(row.get("draft")),
         source_branch=row.get("source_branch"),
@@ -182,6 +218,7 @@ def pull_request_link(issue_key: str, row: dict[str, Any]) -> PullRequestLink:
         build_status=row.get("build_status"),
         comment_count=row.get("comment_count"),
         match="branch" if issue_key in branch_keys else "title",
+        fix_pushed=fix_pushed,
     )
 
 

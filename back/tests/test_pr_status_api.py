@@ -1,8 +1,8 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from repositories import bitbucket_repo
+from repositories import activity_repo, bitbucket_repo
 
 T0 = datetime(2026, 9, 12, 10, 0, tzinfo=UTC)
 
@@ -96,6 +96,61 @@ async def test_detalhe_da_tarefa_multi_repo(db_app, client, seeded):
     ]
     assert pr["match"] == "branch"
     assert pr["url"].endswith("/pull-requests/10")
+
+
+def event(kind, at, *, dedupe):
+    return {
+        "dedupe_key": f"bb:pr:supervisor-web:10:{dedupe}",
+        "source": "bitbucket",
+        "kind": kind,
+        "issue_key": "WAI-8278",
+        "repo_slug": "supervisor-web",
+        "pr_id": 10,
+        "actor_name": "Alguém",
+        "actor_is_me": False,
+        "occurred_at": at,
+        "title": "PR 10",
+        "detail": {},
+    }
+
+
+async def test_correcao_depois_do_pedido_devolve_o_card_para_pr_aberta(
+    db_app, client, seeded, db_pool
+):
+    await activity_repo.insert_events(
+        db_pool,
+        [
+            event("pr_changes_requested", T0 + timedelta(hours=1), dedupe="changes_requested:r"),
+            event("pr_commit", T0 + timedelta(hours=2), dedupe="commit:def"),
+        ],
+    )
+
+    body = (await client.get("/api/issues/WAI-8278/pull-requests")).json()
+
+    # O revisor continua com "changes_requested" no espelho — é o histórico que muda o status.
+    pr = body["repos"][0]["pull_requests"][0]
+    assert pr["changes_requested"] == 1
+    assert pr["fix_pushed"] is True
+    assert pr["status"] == "pr_aberta"
+    assert body["repos"][0]["status"] == "pr_aberta"
+    assert body["status"] == "pr_aberta"
+
+
+async def test_commit_anterior_ao_pedido_mantem_ajustes_requisitados(
+    db_app, client, seeded, db_pool
+):
+    await activity_repo.insert_events(
+        db_pool,
+        [
+            event("pr_commit", T0 + timedelta(hours=1), dedupe="commit:abc"),
+            event("pr_changes_requested", T0 + timedelta(hours=2), dedupe="changes_requested:r"),
+        ],
+    )
+
+    body = (await client.get("/api/issues/WAI-8278/pull-requests")).json()
+
+    assert body["repos"][0]["pull_requests"][0]["fix_pushed"] is False
+    assert body["status"] == "ajustes_requisitados"
 
 
 async def test_tarefa_sem_nada_devolve_sem_pr(db_app, client, seeded):

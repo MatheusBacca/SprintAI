@@ -360,16 +360,21 @@ Segunda a domingo no fuso do navegador, com navegação entre semanas (`?dia=AAA
 
 Regras em `back/services/pr_status.py` (funções puras, 100% de cobertura):
 
-- **Por PR:** Mergeada · Recusada · Substituída · Rascunho (draft) · Ajustes requisitados (algum *changes requested*) · Aprovada (≥1 aprovação) · PR aberta.
+- **Por PR:** Mergeada · Recusada · Substituída · Rascunho (draft) · Ajustes requisitados (algum *changes requested* ainda sem correção) · Aprovada (≥1 aprovação) · PR aberta.
+- **Correção enviada devolve o PR a "PR aberta":** o Bitbucket mantém o *changes requested* do
+  revisor até ele mexer de novo, então quem diz que a correção subiu é o histórico do espelho —
+  commit registrado depois do último pedido de ajuste (`activity_event`). A aba PRs mostra
+  *"correção enviada"* ao lado do pedido, para o status não parecer errado. Pedido anterior ao
+  histórico local não tem evento, e aí o status continua em Ajustes requisitados.
 - **Por repositório:** PR aberto prevalece sobre mergeado; recusado só conta se for tudo que há. Branch com a chave e sem PR no repo = Branch sem PR.
 - **No card (agregado):** o que pede atenção vence — Sem PR < Branch sem PR < Ajustes requisitados < Rascunho < PR aberta < Aprovada < Mergeada. Repositório só com PR recusado e branch antiga (anterior à última atividade de PR) não puxam o card para baixo.
 - **Vínculo:** chave no nome da branch (`feature/WAI-7120`) ou citada no título (PR que entrega várias tarefas); o detalhe informa qual.
 
 ### Histórico da PR
 
-Dentro da aba **PRs** do painel da tarefa, cada PR mostra a própria linha do tempo — sempre
-aberta, no formato do Bitbucket (trilho vertical com um marcador por acontecimento) e **da
-última atualização para a mais antiga**, como o feed da Home e a aba Histórico. Ela junta
+Dentro da aba **PRs** do painel da tarefa, cada PR mostra a própria linha do tempo — aberta ao
+entrar na aba, no formato do Bitbucket (trilho vertical com um marcador por acontecimento) e
+**da última atualização para a mais antiga**, como o feed da Home e a aba Histórico. Ela junta
 duas fontes:
 
 - **comentários da review** (espelhados em `bb_pr_comment`), com o arquivo e a linha quando
@@ -380,6 +385,10 @@ duas fontes:
 O commit que entra **depois do último pedido de ajuste** é marcado como *"subiu a correção"*;
 enquanto ele não vem, o topo da linha avisa que o ajuste está pendente. Um novo pedido de
 ajuste reabre a pendência.
+
+O cabeçalho **Review** (com a contagem de atualizações) **minimiza a review** daquele PR —
+tarefa com vários PRs vira uma rolagem só, e minimizar o que já foi lido deixa os outros à
+vista. O aviso de ajuste pendente fica de fora do que se esconde: é ele que faz abrir de novo.
 
 O comentário é **markdown renderizado** — título, ênfase, código, lista, citação e link. O
 parser é próprio (`utils/markdown.js` → `MarkdownRenderer.js`) e devolve **VNodes**, nunca

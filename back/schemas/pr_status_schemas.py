@@ -34,6 +34,9 @@ class PullRequestOut(BaseModel):
     build_failed: bool
     comment_count: int | None
     match: Literal["branch", "title"]
+    # Ajuste pedido e correção já enviada — explica o status "PR aberta" com o pedido
+    # do revisor ainda em aberto no Bitbucket.
+    fix_pushed: bool
 
 
 class BranchOut(BaseModel):

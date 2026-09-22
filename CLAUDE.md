@@ -123,7 +123,12 @@ conta a decisão ou o caso real que levou àquilo.
   abertos viraria uma chamada por PR.
 - **O sync grava a transição, não o estado.** Um PR que já estava em "ajustes requisitados"
   quando o espelho nasceu não tem `pr_changes_requested` em `activity_event` — por isso a
-  linha do tempo do PR sinaliza `request_before_history` em vez de inventar a data.
+  linha do tempo do PR sinaliza `request_before_history` em vez de inventar a data, e o
+  status desse PR fica em "ajustes requisitados" mesmo com commit novo.
+- **"Ajustes requisitados" não sai do participante do Bitbucket.** O `changes_requested` do
+  revisor fica lá até ele aprovar ou pedir outro ajuste — nem a correção o limpa. Quem
+  devolve o PR para "PR aberta" é o `activity_event`: commit depois do último pedido
+  (`pr_status.fix_after_request`), a mesma comparação do `pr_timeline.pending_review`.
 - **O sync não guardava história.** Quem precisa de histórico lê `jira_status_transition` e
   `activity_event`, preenchidos **durante o sync** com chave de dedupe.
 - **"Minhas" = `assignee_account_id` da conexão.** Sem `account_id` salvo, nada é filtrado —
