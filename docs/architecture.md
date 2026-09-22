@@ -91,6 +91,11 @@ trabalho acabar, e uma sprint ativa já resolvida sair dela. O filtro é do serv
 (`home_service._has_open_mine`), não da consulta: as mesmas linhas já vêm do banco para o
 progresso e para os lembretes.
 
+A regra de "outra pessoa mexeu na minha tarefa nas últimas 48h" mora em
+`services/sprint_updates.py` porque tem dois consumidores: a linha "Mexeram nestas" de cada
+sprint da Home, agrupada por sprint, e as notificações de tarefa do sino
+(`GET /api/notifications/updates`), que devolve as sprints **ativas** numa lista só.
+
 ## Tempo real
 
 `realtime/bus.py` é um pub/sub `asyncio` em memória — um processo, um dev, sem broker.

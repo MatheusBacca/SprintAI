@@ -4,8 +4,9 @@ import { useNotificationsStore } from '@/stores/notifications'
 import { formatDateTime } from '@/utils/datetime'
 
 /**
- * As notificações que o dev fixou, no topo de toda tela — só o título. Clicar abre
- * a modal do lembrete, que é onde dá para mexer no texto, no horário e concluir.
+ * Os lembretes que o dev fixou, no topo de toda tela — só o título. Clicar abre a modal
+ * do lembrete, que é onde dá para mexer no texto, no horário e concluir. Notificação de
+ * tarefa não se fixa: ela é notícia, e o lugar de acompanhá-la é o canvas da sprint.
  */
 const store = useNotificationsStore()
 
@@ -16,16 +17,16 @@ function title(note) {
 
 <template>
   <ul v-if="store.pinned.length" class="pins" aria-label="Notificações fixadas">
-    <li v-for="note in store.pinned" :key="note.id" class="pins__item" :data-id="note.id">
+    <li v-for="entry in store.pinned" :key="entry.id" class="pins__item" :data-id="entry.note.id">
       <button
         type="button"
         class="pins__open"
-        :title="`${title(note)} — ${formatDateTime(note.remind_at)}`"
-        @click="store.openNote(note)"
+        :title="`${title(entry.note)} — ${formatDateTime(entry.note.remind_at)}`"
+        @click="store.openNote(entry.note)"
       >
-        {{ title(note) }}
+        {{ title(entry.note) }}
       </button>
-      <button type="button" class="pins__off" title="Desafixar" @click="store.togglePin(note.id)">
+      <button type="button" class="pins__off" title="Desafixar" @click="store.togglePin(entry.id)">
         <PinOff :size="12" />
       </button>
     </li>

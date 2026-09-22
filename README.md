@@ -143,7 +143,8 @@ mostra se o stream está de pé). O stream vale para todas as telas: ver
   árvore dela em `/sprints`.
 - **Mexeram nestas:** logo abaixo de cada sprint, uma linha rolável com as suas tarefas
   daquela sprint em que **outra pessoa** mexeu nas últimas 48h — com quem mexeu, o que fez e
-  quantas mexidas houve. Clicar abre o painel da tarefa na aba do evento.
+  quantas mexidas houve. Clicar abre o painel da tarefa na aba do evento. As das sprints
+  ativas também chegam pelo [sino do topo](#notificações-o-sino-no-topo), de qualquer tela.
 - **Pendências da semana:** o topo de cada bloco da Semana (atrasadas, prazo, "Analisar e
   fatiar", sem sprint), com link para a tela inteira.
 - **Lembretes relevantes:** vencidos não vistos, das próximas 48h, fixados e os ligados a uma
@@ -239,7 +240,8 @@ com todo o histórico de PRs de uma vez. Rodar o sync de novo não duplica nada.
   último volta a mostrar todos. Pai e card fora da sprint nunca são apagados — sem eles a
   árvore perde a estrutura.
 - Clique no card abre o **painel lateral da tarefa** (`?tarefa=WAI-XXXX`, Esc fecha) e
-  **centraliza o card**, que senão pode ficar atrás do painel:
+  **centraliza o card** quando ele está cortado ou atrás do painel — valendo também para a
+  tarefa aberta de fora do canvas, pela busca global ou pelo sino:
   - **Detalhes:** descrição do Jira (ADF renderizado em componentes Vue, sem `v-html`; links só http/https/mailto), campos, hierarquia e "Bloqueia (n)";
   - **Dependências:** pai, filhas e links agrupados, com status de PR — clicar numa tarefa do espelho troca o painel; fora do espelho abre no Jira;
   - **PRs:** por repositório — branch, aprovações, pedidos de ajuste, revisores, build, branches sem PR;
@@ -274,18 +276,37 @@ com todo o histórico de PRs de uma vez. Rodar o sync de novo não duplica nada.
 
 ### Notificações (o sino no topo)
 
-Lembrete vencido não abre mais cartão flutuante em cima da tela — ele fica no **sino**,
-à direita do botão de lembretes:
+O sino, à direita do botão de lembretes, junta as duas coisas que chegam sem você pedir:
+**lembrete vencido** e **mexida nas suas tarefas da sprint**. Lembrete vencido não abre
+mais cartão flutuante em cima da tela.
 
 - **Selo abaixo do sino** com quantas notificações ainda não foram vistas. Abrir o painel
-  zera a contagem; um lembrete que vence depois (ou que volta de um "adiar") soma de novo.
-- **O painel** lista as notificações ativas com horário, tarefas ligadas e as ações
-  *Abrir · Adiar 10 min · 1 h · Concluir* — as mesmas de antes. Fecha com `Esc` ou clique fora.
-- **Fixar (📌)** sobe só o **título** da notificação para o topo de todas as telas; clicar nesse
+  zera a contagem; um lembrete que vence depois (ou que volta de um "adiar") e uma mexida
+  nova somam de novo. Fecha com `Esc` ou clique fora.
+- **Lembretes** (os amarelos) trazem horário, tarefas ligadas e as ações
+  *Abrir · Adiar 10 min · 1 h · Concluir* — as mesmas de antes. Vêm primeiro na lista: são
+  cobrança, e ficariam enterrados embaixo do que acabou de acontecer.
+- **Tarefas** são as mesmas mexidas da linha "Mexeram nestas" da Home — suas
+  tarefas das sprints **ativas** em que **outra pessoa** mexeu nas últimas 48h, com quem
+  mexeu, o que fez e quantas mexidas houve. **Abrir na sprint** leva ao canvas *daquela*
+  sprint com o card em foco e o painel da tarefa aberto na aba do evento (comentário →
+  Histórico, PR → PRs). Elas não tocam a notificação do Windows: a primeira leitura traz
+  48h de uma vez, e isso viraria uma saraivada de avisos por algo que já passou.
+- **Filtro por tipo**, logo abaixo do título: *Lembretes* e *Tarefas*, cada um com a sua
+  contagem. Ligar um mostra só ele, ligar os dois mostra tudo, e desligar o último tira o
+  filtro. O que o filtro esconde **continua somando no selo** — visto é o que apareceu na
+  tela, e marcar tudo apagaria em silêncio a novidade que você não viu.
+- **Fixar (📌)** sobe só o **título** do lembrete para o topo de todas as telas; clicar nesse
   título abre a **modal do lembrete**, e o `X` do chip desafixa. Concluir solta o pin sozinho.
-  O "Abrir" do painel e o clique na notificação do Windows levam ao mesmo lugar.
+  O "Abrir" do painel e o clique na notificação do Windows levam ao mesmo lugar. Notificação
+  de tarefa não se fixa: ela é notícia, e o lugar de acompanhá-la é o canvas da sprint.
 - O que está fixado e o que já foi visto é preferência **desta máquina** (`localStorage`), não
-  campo do lembrete: o `pinned` da nota continua sendo o fixar do mural.
+  campo do lembrete: o `pinned` da nota continua sendo o fixar do mural. O filtro vale só
+  para a sessão — recarregar a página volta a mostrar tudo.
+
+| Rota | O que devolve |
+|---|---|
+| `GET /api/notifications/updates` | tarefas suas das sprints ativas que outra pessoa mexeu nas últimas 48h |
 
 ### Modal de lembretes por atalho
 

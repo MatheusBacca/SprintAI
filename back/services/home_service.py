@@ -26,17 +26,14 @@ from schemas.home_schemas import (
     TimelineSegmentOut,
     TimelineSprintOut,
 )
-from schemas.progress_schemas import ProgressOut, SprintProgressOut, SprintUpdateOut
+from schemas.progress_schemas import ProgressOut, SprintProgressOut
 from security.credential_store import CredentialStore
-from services import notes_service, pr_status_service, progress, week_service
+from services import notes_service, pr_status_service, progress, sprint_updates, week_service
 from services.progress import timeline as timeline_math
 from services.sprint_service import jira_identity
 
 TOP_PENDING = 5
 REMINDER_WINDOW = timedelta(hours=48)
-# "Mexeram na minha tarefa enquanto eu não estava olhando": só o que outra pessoa fez.
-UPDATES_WINDOW = timedelta(hours=48)
-MAX_UPDATES = 12
 # Janela desenhada quando a sprint não tem data (não dá para desenhar o nada).
 FALLBACK_WINDOW = timedelta(days=7)
 NO_PARENT = "Sem pai"
@@ -81,11 +78,11 @@ async def get_home(
     # Uma sprint só ocupa espaço na Home enquanto tiver trabalho meu por fazer. Sprint que
     # passou da data e continua aberta fica; sprint em dia sem pendência minha sai.
     working = [s for s in sprints if _has_open_mine(by_sprint.get(s["id"], []))]
-    updates = await _sprint_updates(
+    updates = await sprint_updates.by_sprint(
         pool,
         [s["id"] for s in working],
         account_id=account_id,
-        since=instant - UPDATES_WINDOW,
+        since=instant - sprint_updates.WINDOW,
         browse=browse,
     )
 
@@ -124,44 +121,6 @@ async def get_home(
 def _has_open_mine(rows: list[dict[str, Any]]) -> bool:
     """A sprint tem tarefa minha por fazer? Épico é contêiner, não conta."""
     return any(not progress.is_epic(row) and row.get("status_category") != "done" for row in rows)
-
-
-async def _sprint_updates(
-    pool: asyncpg.Pool,
-    sprint_ids: list[int],
-    *,
-    account_id: str | None,
-    since: datetime,
-    browse: str | None,
-) -> dict[int, list[SprintUpdateOut]]:
-    if not sprint_ids:
-        return {}
-    rows = await activity_repo.recent_by_sprint(
-        pool, sprint_ids, since=since, account_id=account_id, only_others=True
-    )
-    result: dict[int, list[SprintUpdateOut]] = {}
-    for row in rows:
-        cards = result.setdefault(row["sprint_id"], [])
-        if len(cards) >= MAX_UPDATES:
-            continue
-        points = row["story_points"]
-        cards.append(
-            SprintUpdateOut(
-                key=row["issue_key"],
-                summary=row["summary"],
-                status=row["status"],
-                status_category=row["status_category"],
-                story_points=float(points) if points is not None else None,
-                url=f"{browse}{row['issue_key']}" if browse else None,
-                kind=row["kind"],
-                source=row["source"],
-                title=row["title"],
-                actor_name=row["actor_name"],
-                occurred_at=row["occurred_at"],
-                event_count=row["event_count"],
-            )
-        )
-    return result
 
 
 async def get_timeline(

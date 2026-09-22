@@ -3,11 +3,12 @@ import { api } from '@/services/api'
 import { useNotesStore } from '@/stores/notes'
 
 /**
- * Notificações do app: hoje são os lembretes vencidos ainda não vistos.
+ * Notificações do app: os lembretes vencidos ainda não vistos e as tarefas da sprint
+ * ativa em que outra pessoa mexeu nas últimas 48h.
  *
- * Antes cada uma virava um cartão flutuante no canto da tela, que cobria o painel
- * da tarefa e o canvas justamente quando havia mais o que ler. Agora elas moram no
- * sino do topo; só sobe para o header o título daquelas que o dev fixa.
+ * Antes cada lembrete virava um cartão flutuante no canto da tela, que cobria o painel
+ * da tarefa e o canvas justamente quando havia mais o que ler. Agora as duas fontes
+ * moram no sino do topo; só sobe para o header o título do lembrete que o dev fixa.
  *
  * O que é "fixado" e o que já foi "visto" é preferência de máquina, não dado do
  * lembrete — por isso vai no localStorage, e não num campo novo em `note`. O
@@ -19,10 +20,28 @@ const SEEN_KEY = 'sprintai.notifications.seen'
 const MAX_REMEMBERED = 50
 const DEFAULT_POLL_MS = 30_000
 
+/** Os botões de filtro do painel, na ordem em que aparecem. */
+export const NOTIFICATION_KINDS = [
+  { id: 'reminder', label: 'Lembretes' },
+  { id: 'update', label: 'Tarefas' },
+]
+
+/**
+ * Id de uma notificação na lista — é por ele que "visto" e "fixado" lembram de cada
+ * uma. O da tarefa carrega o horário da última mexida: mexida nova é notificação nova,
+ * e o selo volta a contar mesmo com a tarefa já na lista.
+ */
+const reminderId = (id) => `lembrete:${id}`
+const updateId = (update) => `tarefa:${update.sprint_id}:${update.key}@${update.occurred_at}`
+
 function readIds(key) {
   try {
     const saved = JSON.parse(localStorage.getItem(key) ?? '[]')
-    return Array.isArray(saved) ? saved.filter((id) => Number.isInteger(id)) : []
+    if (!Array.isArray(saved)) return []
+    // Antes de as tarefas entrarem no sino, o id guardado era o número do lembrete.
+    return saved
+      .map((id) => (Number.isInteger(id) ? reminderId(id) : id))
+      .filter((id) => typeof id === 'string')
   } catch {
     return []
   }
@@ -38,38 +57,66 @@ function writeIds(key, ids) {
 
 export const useNotificationsStore = defineStore('notifications', {
   state: () => ({
-    items: [],
+    reminders: [],
+    updates: [],
     open: false,
+    /** Tipos ligados nos botões do painel; vazia = sem filtro, mostra tudo. */
+    kinds: [],
     pinnedIds: readIds(PINNED_KEY),
     seenIds: readIds(SEEN_KEY),
     _timer: null,
   }),
   getters: {
-    /** Só o que está no header: fixado que ainda está vencido. */
-    pinned: (state) => state.items.filter((note) => state.pinnedIds.includes(note.id)),
+    /**
+     * A lista do painel. Lembrete é cobrança e tarefa é notícia: os lembretes vêm
+     * primeiro (do mais vencido para o menos), e só então as mexidas, da mais recente
+     * para a mais antiga. Uma ordem só pelo horário enterraria o lembrete de ontem
+     * embaixo do que aconteceu há cinco minutos.
+     */
+    entries: (state) => [
+      ...state.reminders.map((note) => ({ id: reminderId(note.id), kind: 'reminder', note })),
+      ...state.updates.map((update) => ({ id: updateId(update), kind: 'update', update })),
+    ],
+    /** O que o filtro deixa passar — é o que a lista mostra. */
+    visible() {
+      return this.kinds.length
+        ? this.entries.filter((entry) => this.kinds.includes(entry.kind))
+        : this.entries
+    },
+    counts: (state) => ({ reminder: state.reminders.length, update: state.updates.length }),
+    /** Só o que está no header: lembrete fixado que ainda está vencido. */
+    pinned() {
+      return this.entries.filter(
+        (entry) => entry.kind === 'reminder' && this.pinnedIds.includes(entry.id),
+      )
+    },
     isPinned: (state) => (id) => state.pinnedIds.includes(id),
-    unseenCount: (state) => state.items.filter((note) => !state.seenIds.includes(note.id)).length,
+    unseenCount() {
+      return this.entries.filter((entry) => !this.seenIds.includes(entry.id)).length
+    },
   },
   actions: {
     async poll() {
-      let due
-      try {
-        due = await api.get('/notes/reminders/due')
-      } catch {
-        return // API/banco fora do ar: tenta no próximo ciclo.
-      }
-      if (!Array.isArray(due)) return
+      // Uma fonte fora do ar não pode zerar a outra: o sino mostra o que conseguiu ler.
+      const [due, updates] = await Promise.all([
+        api.get('/notes/reminders/due').catch(() => null),
+        api.get('/notifications/updates').catch(() => null),
+      ])
       // Chegou agora = não estava no ciclo anterior. Um lembrete adiado que volta a
       // vencer conta como novo de novo, e é isso que faz o Windows avisar outra vez.
-      const conhecidos = new Set(this.items.map((note) => note.id))
-      const novos = due.filter((note) => !conhecidos.has(note.id))
-      this.items = due
+      const conhecidos = new Set(this.reminders.map((note) => note.id))
+      const novos = Array.isArray(due) ? due.filter((note) => !conhecidos.has(note.id)) : []
+      if (Array.isArray(due)) this.reminders = due
+      if (Array.isArray(updates?.updates)) this.updates = updates.updates
 
       // Resolvido (concluído ou adiado) sai do "já visto": se voltar, volta a contar.
-      const abertos = new Set(due.map((note) => note.id))
-      this._setSeen(this.seenIds.filter((id) => abertos.has(id)))
+      // Mexida que envelheceu para fora da janela some pelo mesmo caminho.
+      const abertas = new Set(this.entries.map((entry) => entry.id))
+      this._setSeen(this.seenIds.filter((id) => abertas.has(id)))
 
       if (this.open) this.markAllSeen()
+      // Só lembrete toca no Windows: a primeira leitura traz 48h de mexidas de uma vez,
+      // e isso viraria uma saraivada de avisos do sistema por algo que já passou.
       for (const note of novos) this._notifyWindows(note)
     },
 
@@ -98,8 +145,21 @@ export const useNotificationsStore = defineStore('notifications', {
       else this.openPanel()
     },
 
+    /** Liga e desliga um tipo no filtro; desligar o último volta a mostrar tudo. */
+    toggleKind(kind) {
+      this.kinds = this.kinds.includes(kind)
+        ? this.kinds.filter((other) => other !== kind)
+        : [...this.kinds, kind]
+    },
+
+    /**
+     * Visto é o que apareceu na tela: com um filtro ligado, o que ele escondeu continua
+     * somando no selo. Marcar tudo apagaria em silêncio a novidade que o dev não viu.
+     */
     markAllSeen() {
-      this._setSeen(this.items.map((note) => note.id))
+      const vistas = new Set(this.seenIds)
+      for (const entry of this.visible) vistas.add(entry.id)
+      this._setSeen([...vistas])
     },
 
     togglePin(id) {
@@ -123,7 +183,7 @@ export const useNotificationsStore = defineStore('notifications', {
     async acknowledge(id) {
       this._drop(id)
       // Concluído não volta: o fixado morre junto, senão o id ficaria preso no disco.
-      if (this.isPinned(id)) this.togglePin(id)
+      if (this.isPinned(reminderId(id))) this.togglePin(reminderId(id))
       await useNotesStore()
         .acknowledge(id)
         .catch(() => {})
@@ -138,8 +198,8 @@ export const useNotificationsStore = defineStore('notifications', {
 
     /** Tira da lista na hora, sem esperar o próximo ciclo redesenhar o painel. */
     _drop(id) {
-      this.items = this.items.filter((note) => note.id !== id)
-      this._setSeen(this.seenIds.filter((other) => other !== id))
+      this.reminders = this.reminders.filter((note) => note.id !== id)
+      this._setSeen(this.seenIds.filter((other) => other !== reminderId(id)))
     },
 
     _setSeen(ids) {

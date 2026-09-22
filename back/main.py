@@ -25,6 +25,7 @@ from routers import (
     home,
     issues,
     notes,
+    notifications,
     pr_status,
     preferences,
     progress,
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router, prefix="/api")
     app.include_router(activity.router, prefix="/api")
+    app.include_router(notifications.router, prefix="/api")
     app.include_router(home.router, prefix="/api")
     app.include_router(progress.router, prefix="/api")
     app.include_router(events.router, prefix="/api")

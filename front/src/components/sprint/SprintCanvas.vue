@@ -122,6 +122,17 @@ watch(
 // Andar pelos resultados da busca move a câmera.
 watch(() => props.focusKey, (key) => focusNode(key))
 
+/**
+ * Pedido do dev: abrir a tarefa centraliza o card na área visível quando ele está
+ * cortado ou atrás da coluna da direita. Já inteiro à vista, a câmera fica onde está —
+ * pular a cada clique faz perder o lugar no canvas.
+ *
+ * Fica no `selectedKey` e não no clique do card porque a tarefa também é aberta de fora
+ * do canvas — pela busca global e pela notificação de tarefa do sino, que chegam com a
+ * árvore já desenhada e sem clique nenhum para reagir.
+ */
+watch(() => props.selectedKey, (key) => focusNode(key, { onlyIfHidden: true }))
+
 function onNodeClick({ event, node }) {
   if (node.type !== 'issue') return
   // Alt + clique destaca os cards no mesmo status do Jira, sem abrir a tarefa nem
@@ -132,10 +143,6 @@ function onNodeClick({ event, node }) {
     return
   }
   emit('select', node.id)
-  // Pedido do dev: abrir a tarefa centraliza o card na área visível quando ele está
-  // cortado ou atrás da coluna da direita. Já inteiro à vista, a câmera fica onde está —
-  // pular a cada clique faz perder o lugar no canvas.
-  focusNode(node.id, { onlyIfHidden: true })
 }
 </script>
 

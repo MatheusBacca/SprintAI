@@ -197,6 +197,8 @@ describe('SprintCanvas: foco da câmera', () => {
     })
 
     wrapper.findComponent({ name: 'VueFlow' }).vm.$emit('node-click', { node: { id: 'WAI-9', type: 'issue' } })
+    // Quem move a câmera é a tarefa aberta, e é a tela que abre: o clique só avisa.
+    await wrapper.setProps({ selectedKey: 'WAI-9' })
     await flushPromises()
 
     // Área visível: 1500 - 500 = 1000 px; o centro do card (1118, 466) vai para (500, 400).
@@ -206,7 +208,7 @@ describe('SprintCanvas: foco da câmera', () => {
   describe('clique num card já à vista', () => {
     const node = { computedPosition: { x: 100, y: 100 }, dimensions: { width: 236, height: 132 } }
 
-    function clickWithCamera(camera, rightInset = 500) {
+    async function openWithCamera(camera, { click = true, rightInset = 500 } = {}) {
       const setViewport = vi.fn()
       const VueFlowStub = { name: 'VueFlow', emits: ['pane-ready', 'node-click', 'pane-click'], template: '<div />' }
       const wrapper = mount(SprintCanvas, {
@@ -220,29 +222,36 @@ describe('SprintCanvas: foco da câmera', () => {
         dimensions: ref({ width: 1500, height: 800 }),
         viewport: ref(camera),
       })
-      wrapper.findComponent({ name: 'VueFlow' }).vm.$emit('node-click', { node: { id: 'WAI-9', type: 'issue' } })
+      if (click) {
+        wrapper.findComponent({ name: 'VueFlow' }).vm.$emit('node-click', { node: { id: 'WAI-9', type: 'issue' } })
+      }
+      await wrapper.setProps({ selectedKey: 'WAI-9' })
+      await flushPromises()
       return { wrapper, setViewport }
     }
 
     it('inteiro na área visível: seleciona sem mover a câmera', async () => {
-      const { wrapper, setViewport } = clickWithCamera({ x: 0, y: 0, zoom: 1 })
-      await flushPromises()
+      const { wrapper, setViewport } = await openWithCamera({ x: 0, y: 0, zoom: 1 })
 
       expect(wrapper.emitted('select').at(-1)).toEqual(['WAI-9'])
       expect(setViewport).not.toHaveBeenCalled()
     })
 
     it('cortado pela borda do canvas: centraliza', async () => {
-      const { setViewport } = clickWithCamera({ x: -200, y: 0, zoom: 1 })
-      await flushPromises()
+      const { setViewport } = await openWithCamera({ x: -200, y: 0, zoom: 1 })
 
       expect(setViewport).toHaveBeenCalled()
     })
 
     it('atrás da coluna da direita: centraliza', async () => {
       // Card vai de 900 a 1136 px; a área visível acaba em 1500 - 500 = 1000.
-      const { setViewport } = clickWithCamera({ x: 800, y: 0, zoom: 1 })
-      await flushPromises()
+      const { setViewport } = await openWithCamera({ x: 800, y: 0, zoom: 1 })
+
+      expect(setViewport).toHaveBeenCalled()
+    })
+
+    it('tarefa aberta sem clique no canvas (notificação, busca global) também centraliza', async () => {
+      const { setViewport } = await openWithCamera({ x: 800, y: 0, zoom: 1 }, { click: false })
 
       expect(setViewport).toHaveBeenCalled()
     })
@@ -252,6 +261,7 @@ describe('SprintCanvas: foco da câmera', () => {
     const { wrapper, fitView } = mountCanvas()
 
     wrapper.findComponent({ name: 'VueFlow' }).vm.$emit('node-click', { node: { id: 'WAI-9', type: 'issue' } })
+    await wrapper.setProps({ selectedKey: 'WAI-9' })
     await flushPromises()
 
     expect(wrapper.emitted('select').at(-1)).toEqual(['WAI-9'])

@@ -16,5 +16,17 @@ export function useIssueNavigation() {
     return router.push({ name: 'sprints', query: { tarefa: key } })
   }
 
-  return { openIssue }
+  /**
+   * Leva sempre ao canvas da sprint pedida, com o card em foco e o painel aberto — é o
+   * destino da notificação de tarefa. Vai junto a sprint porque o seletor pode ter ficado
+   * noutra, e aí o card nem estaria no desenho.
+   */
+  function openIssueInSprint(key, sprintId, tab = null) {
+    ui.requestIssueTab(key, tab)
+    const query = { tarefa: key }
+    if (sprintId) query.sprint = String(sprintId)
+    return router.push({ name: 'sprints', query })
+  }
+
+  return { openIssue, openIssueInSprint }
 }

@@ -35,6 +35,10 @@ onBeforeUnmount(() => {
 // sem esperar o ciclo.
 watch(() => notes.revision, () => notifications.poll())
 
+// O sino também mostra dado do espelho (as mexidas nas tarefas da sprint ativa): sync
+// terminado ou Recarregar refaz a lista junto com as telas.
+watch(() => refresh.revision, () => notifications.poll())
+
 // Duas fontes para o mesmo fato — o `refresh` desempata pelo id da execução.
 watch(
   () => realtime.revisionOf('sync.finished'),
