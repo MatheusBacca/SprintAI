@@ -5,6 +5,7 @@ import { BookOpenText, Plus, Search } from 'lucide-vue-next'
 
 import ContextCard from '@/components/contexts/ContextCard.vue'
 import IssueDrawer from '@/components/issue/IssueDrawer.vue'
+import StatusChip from '@/components/jira/StatusChip.vue'
 import { CONTEXT_KINDS } from '@/constants/contextKinds'
 import { useContextsStore } from '@/stores/contexts'
 import { useRefreshStore } from '@/stores/refresh'
@@ -134,7 +135,13 @@ function resolve(context) {
               {{ group.issue.key }}
             </button>
             <span class="contexts__group-summary">{{ group.issue.summary || 'Fora do espelho local' }}</span>
-            <span v-if="group.issue.status" class="contexts__group-status">{{ group.issue.status }}</span>
+            <StatusChip
+              v-if="group.issue.status && group.issue.in_mirror"
+              class="contexts__group-status contexts__group-status--action"
+              :issue-key="group.issue.key"
+              :status="group.issue.status"
+            />
+            <span v-else-if="group.issue.status" class="contexts__group-status">{{ group.issue.status }}</span>
           </h2>
           <ContextCard
             v-for="c in group.items"
@@ -309,6 +316,20 @@ function resolve(context) {
   flex-shrink: 0;
   font-size: var(--text-xs);
   color: var(--color-text-muted);
+}
+
+.contexts__group-status--action {
+  max-width: 200px;
+  padding: 1px 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: none;
+  font-weight: 500;
+}
+
+.contexts__group-status--action:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .contexts__empty {

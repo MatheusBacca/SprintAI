@@ -155,7 +155,9 @@ describe('IssueDrawer', () => {
     expect(wrapper.find('.drawer__title').text()).toBe('Implementar camada de integração com OpenAI')
     expect(wrapper.find('.drawer__key').text()).toBe('WAI-124')
     expect(wrapper.find('.drawer__key').attributes('href')).toBe('https://weon.atlassian.net/browse/WAI-124')
-    expect(wrapper.findAll('.drawer__bar > *').map((el) => el.classes()[0])).toEqual(['drawer__icon', 'drawer__type', 'drawer__key', 'drawer__chip', 'pr-badge', 'drawer__action', 'drawer__action'])
+    // A classe de layout de cada peça (o chip de SP e o badge trazem as deles antes).
+    const layoutClass = (el) => el.classes().find((c) => c.startsWith('drawer__') || c === 'pr-badge')
+    expect(wrapper.findAll('.drawer__bar > *').map(layoutClass)).toEqual(['drawer__icon', 'drawer__type', 'drawer__key', 'drawer__chip', 'pr-badge', 'drawer__action', 'drawer__action'])
     expect(wrapper.findAll('.drawer__tab').map((t) => t.text())).toEqual(['Detalhes', 'Dependências4', 'PRs', 'Histórico1', 'Contextos'])
     expect(wrapper.find('.drawer__status').text()).toBe(ISSUE.status)
     expect(wrapper.find('.drawer__bar').text()).not.toContain(ISSUE.status)

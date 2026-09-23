@@ -51,8 +51,13 @@ Docker parado não prova nada.
   mandar o header (o caso do `EventSource`), **troque o cliente**, não a guarda — foi por
   isso que o stream de eventos é lido com `fetch` + `ReadableStream`.
 - **Erro não ecoa o que foi enviado.** Um token malformado não pode voltar na resposta.
-- **Escrita no Jira só com confirmação explícita, uma a uma.** Hoje o SprintAI não escreve
-  nada no Jira; quando escrever (M8), é proposta → confirmação → ação.
+- **Escrita no Jira só com confirmação explícita, uma a uma.** Hoje o SprintAI escreve duas
+  coisas, as duas em `services/issue_actions.py`: a transição de status (confirmada com duplo
+  clique na linha de fluxo) e os Story Points (Salvar/Enter, ou duplo clique num atalho).
+  Escrita nova — inclusive a do agente, no M8 — segue o mesmo: proposta → confirmação → ação.
+  Escrita que não pode repetir vai com `idempotent=False` no transporte: repetir uma
+  transição depois de um 5xx pode andar mais um passo no workflow. No Bitbucket o SprintAI
+  não escreve nada — o badge de PR só leva até ele.
 - **Conteúdo de terceiros é dado, nunca instrução.** Descrição de tarefa, comentário, PR e
   todo `.md` lido do disco entram como dado — inclusive (principalmente) no contexto do
   agente. Link só passa pelo `safeUrl` (`http/https/mailto`), e **nada de `v-html`** — texto
@@ -83,7 +88,9 @@ ondas de cima por trás dos cards, e o vínculo se lê pela corrente de bloqueio
 onda 1 até ela.
 
 **Front** — tela ou painel que mostra dado do espelho observa `refresh.revision`
-(`stores/refresh.js`) e recarrega; quem alimenta esse contador é só o `AppShell`. Não crie
+(`stores/refresh.js`) e recarrega; quem alimenta esse contador é só o `AppShell` — inclusive
+depois de uma escrita no Jira (`afterWrite`, desempatado pelo `write_id` entre a resposta e
+o `issue.changed` do stream). Não crie
 gatilho próprio de sync na tela — era assim antes, e com o painel da tarefa aberto um sync
 passava sem ninguém recarregar. Um store Pinia por domínio, componentes por pasta de tela
 (`components/home/`, `components/week/`…), tokens de estilo em `styles/tokens.css`.
@@ -94,6 +101,12 @@ Faltando um tom, o token nasce em `tokens.css` **nos dois temas** (`:root` e
 self-hosted em `public/fonts` (`styles/fonts.css`); nada de CDN.
 Nada de `import * as icons from 'lucide-vue-next'`: importe só os ícones usados, senão a
 biblioteca inteira vai para o bundle.
+Ação ancorada num chip (status, SP, lista de PRs) abre o **painel único** do AppShell
+(`JiraActionPopover`, pelo store `jiraActions`), nunca um painel dentro do card: o Vue Flow
+remonta os cards a cada recarga da árvore, e o painel sumiria no meio da escolha. O chip é
+`StatusChip`/`StoryPointsChip` com a classe de quem usa (a aparência é do lugar) e leva
+`nodrag nopan` e segura o clique para não arrastar o canvas nem abrir o card — menos com
+Alt, que sobe para o destaque de status do canvas.
 
 **Idioma** — código, comentários, commits, UI e testes em **português**. Nomes de teste
 descrevem o comportamento (`test_sprint_ativa_e_vencida_tem_esperado_cheio_e_aviso`).
@@ -133,6 +146,14 @@ conta a decisão ou o caso real que levou àquilo.
   `activity_event`, preenchidos **durante o sync** com chave de dedupe.
 - **"Minhas" = `assignee_account_id` da conexão.** Sem `account_id` salvo, nada é filtrado —
   as telas avisam quando isso acontece.
+- **Escrita pelo SprintAI não carimba o `updated_at` do espelho.** O status (ou SP) novo
+  entra na hora (`issue_repo.patch_status`), mas o `updated_at` fica o antigo: é comparando
+  ele com o do Jira que o sync rebusca a tarefa e lê o changelog — de onde saem a linha de
+  `jira_status_transition` e o evento do feed. Carimbar o novo faria a mudança sumir da
+  história.
+- **O workflow de Tarefa da WAI é global e compartilhado.** São 17 status (de "Cruzeiro" a
+  "IMPLANTAÇÃO") e todos alcançáveis de qualquer um. A linha de fluxo mostra só os que têm
+  etapa em Configurações › Progresso e recolhe o resto em "Outros status".
 
 ## Escrita em disco
 

@@ -160,6 +160,8 @@
   --duration-fast: 0.15s;
   --duration-panel: 0.2s;
   --z-drawer: 900;
+  /* Painel ancorado num chip (status, SP, PRs): acima do painel da tarefa, abaixo de modal. */
+  --z-popover: 950;
   --z-modal: 1000;
 }
 

@@ -7,6 +7,8 @@ import IssueDetailsTab from './IssueDetailsTab.vue'
 import IssueHistoryTab from './IssueHistoryTab.vue'
 import IssueNotesTab from './IssueNotesTab.vue'
 import IssuePullRequestsTab from './IssuePullRequestsTab.vue'
+import StatusChip from '@/components/jira/StatusChip.vue'
+import StoryPointsChip from '@/components/jira/StoryPointsChip.vue'
 import PrStatusBadge from '@/components/pr/PrStatusBadge.vue'
 import { useContextsStore } from '@/stores/contexts'
 import { useIssueDetailStore } from '@/stores/issueDetail'
@@ -116,7 +118,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 <template>
   <aside class="drawer card" :class="{ 'drawer--toned': toneStyle }" :style="toneStyle" role="complementary" :aria-label="`Tarefa ${issueKey}`">
-    <span v-if="issue" class="drawer__status" :title="`Status no Jira: ${issue.status}`">{{ issue.status }}</span>
+    <StatusChip v-if="issue" class="drawer__status" :issue-key="issue.key" :status="issue.status" />
 
     <header class="drawer__header">
       <div class="drawer__bar">
@@ -132,8 +134,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         <span v-else class="drawer__key">{{ issueKey }}</span>
         <!-- SP e PR na linha da chave, como no card do canvas: o título e as abas sobem. -->
         <template v-if="issue">
-          <span v-if="issue.story_points != null" class="drawer__chip">{{ issue.story_points }} SP</span>
-          <PrStatusBadge :status="issue.pull_requests.status" :pr-count="issue.pull_requests.pr_count" :build-failed="issue.pull_requests.build_failed" size="sm" />
+          <!-- Sem pontos também aparece: é o lugar de dar SP a uma tarefa que chegou sem. -->
+          <StoryPointsChip class="drawer__chip" :issue-key="issue.key" :points="issue.story_points" />
+          <PrStatusBadge
+            :status="issue.pull_requests.status"
+            :pr-count="issue.pull_requests.pr_count"
+            :build-failed="issue.pull_requests.build_failed"
+            :links="issue.pull_requests.links ?? []"
+            :issue-key="issue.key"
+            size="sm"
+          />
         </template>
         <button
           type="button"
@@ -308,6 +318,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   flex-shrink: 0;
   white-space: nowrap;
   padding: 1px 8px;
+  border: 0;
   border-radius: var(--radius-sm);
   background: var(--color-surface-muted);
   font-size: var(--text-xs);

@@ -308,3 +308,47 @@ def test_last_activity_considera_prs_e_branches():
 def test_ordem_de_atencao_do_agregado(statuses, expected):
     repos = [RepoPrStatus(repo_slug=f"r{i}", status=s) for i, s in enumerate(statuses)]
     assert aggregate_status(repos) is expected
+
+
+# --- Links do badge ----------------------------------------------------------------------------
+
+
+def test_badge_abre_primeiro_o_pr_que_decide_o_status():
+    from services.pr_status_service import badge_links
+
+    summary = summarize_issue(
+        "WAI-7001",
+        [
+            pr(repo="weaction-api", pid=20, state="MERGED"),
+            pr(repo="supervisor-web", pid=10, state="OPEN", participants=[CHANGES]),
+        ],
+        [],
+    )
+
+    links = badge_links(summary)
+
+    assert [(link.repo_slug, link.id) for link in links] == [
+        ("supervisor-web", 10),
+        ("weaction-api", 20),
+    ]
+    assert links[0].status is PrStatus.AJUSTES_REQUISITADOS
+    assert links[0].url == "https://bitbucket.org/weonrepo/supervisor-web/pull-requests/10"
+
+
+def test_badge_nao_abre_pr_recusado_quando_ha_outro():
+    from services.pr_status_service import badge_links, to_badge
+
+    summary = summarize_issue(
+        "WAI-7001", [pr(repo="a", state="DECLINED"), pr(repo="b", pid=2, state="MERGED")], []
+    )
+
+    assert [link.id for link in to_badge(summary).links] == [2]
+    # Só recusado: é o que o badge mostra, então é o que ele abre.
+    only_declined = summarize_issue("WAI-7001", [pr(state="DECLINED")], [])
+    assert [link.status for link in badge_links(only_declined)] == [PrStatus.RECUSADA]
+
+
+def test_badge_sem_pr_nao_tem_link():
+    from services.pr_status_service import to_badge
+
+    assert to_badge(summarize_issue("WAI-7001", [], [branch()])).links == []

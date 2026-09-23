@@ -53,6 +53,21 @@ async def unseen_changes(
     return {k: changed_fields(seen[k], shot) for k, shot in current_by_key.items() if k in seen}
 
 
+async def acknowledge_own_change(
+    pool: asyncpg.Pool, issue_key: str, changes: dict[str, Any]
+) -> None:
+    """O dev mexeu no card pelo próprio SprintAI: a mudança dele não acende a bolinha.
+
+    Só o campo mexido entra na foto — refazê-la inteira (`mark_seen`) engoliria a mudança
+    de outra pessoa que o dev ainda não viu, como um responsável trocado.
+    """
+    fields = {k: v for k, v in changes.items() if k in FIELDS}
+    if fields.get("story_points") is not None:
+        fields["story_points"] = float(fields["story_points"])
+    if fields:
+        await seen_repo.merge_existing(pool, issue_key, fields)
+
+
 async def mark_seen(pool: asyncpg.Pool, issue_key: str) -> bool:
     """Refaz a foto com o estado atual do espelho. `False` se a tarefa não está nele."""
     row = await issue_repo.issue(pool, issue_key)

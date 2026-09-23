@@ -105,11 +105,23 @@ function fullyVisible(node, pane, camera) {
   )
 }
 
+/**
+ * Mesma sprint com os mesmos cards: é recarga (sync, "Recarregar", status movido pelo
+ * próprio canvas), não desenho novo. Reenquadrar aí tirava a câmera de onde o dev
+ * estava a cada status trocado num card.
+ */
+function sameFrame(tree, previous) {
+  if (!previous || tree?.sprint?.id !== previous.sprint?.id) return false
+  const keys = (t) => (t.nodes ?? []).map((n) => n.key).sort().join(',')
+  return keys(tree) === keys(previous)
+}
+
 // Nova sprint (ou filtro de "só minhas"): reenquadra — a não ser que já exista um
 // card em foco (link direto para a tarefa), que aí é nele que a câmera pousa.
 watch(
   () => props.tree,
-  async () => {
+  async (tree, previous) => {
+    if (sameFrame(tree, previous)) return
     await nextTick()
     setTimeout(() => {
       const key = props.focusKey ?? props.selectedKey

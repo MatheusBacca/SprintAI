@@ -5,6 +5,8 @@ import { useConnectionsStore } from '@/stores/connections'
 
 const TOKEN_URL = 'https://id.atlassian.com/manage-profile/security/api-tokens'
 const SCOPES = 'read:jira-work, read:jira-user, read:board-scope:jira-software, read:sprint:jira-software'
+// Só para mover status e mudar Story Points pelo SprintAI; sem ele, o resto continua lendo.
+const WRITE_SCOPE = 'write:jira-work'
 
 const store = useConnectionsStore()
 
@@ -60,9 +62,11 @@ async function submit() {
       <span class="field__label">Tipo de token</span>
       <select v-model="form.auth_mode" class="field__input">
         <option value="classic">Token clássico (acesso da sua conta)</option>
-        <option value="scoped">Token com escopos (recomendado, só leitura)</option>
+        <option value="scoped">Token com escopos (recomendado)</option>
       </select>
-      <span v-if="form.auth_mode === 'scoped'" class="field__hint">Escopos: {{ SCOPES }}</span>
+      <span v-if="form.auth_mode === 'scoped'" class="field__hint">
+        Escopos: {{ SCOPES }}. Para mover status e mudar Story Points pelo SprintAI, some {{ WRITE_SCOPE }}.
+      </span>
     </label>
 
     <label class="field">

@@ -3,7 +3,8 @@
 - Basic auth (e-mail + token) aplicado só para hosts da lista permitida: uma URL de
   paginação apontando para outro host é recusada antes de enviar credenciais.
 - Novas tentativas com backoff em 429/502/503/504 e falhas de rede, respeitando
-  `Retry-After`.
+  `Retry-After`. Escrita que não pode repetir (`idempotent=False`, a transição do Jira)
+  só tenta de novo quando o pedido com certeza não chegou: 429 e falha de conexão.
 """
 
 import asyncio
@@ -20,6 +21,8 @@ logger = get_logger(__name__)
 
 DEFAULT_TIMEOUT = httpx.Timeout(20.0, connect=5.0)
 RETRY_STATUSES = {429, 502, 503, 504}
+# 429 é recusa antes de processar; 5xx e timeout de leitura podem ter chegado a aplicar.
+UNSAFE_RETRY_STATUSES = {429}
 MAX_BACKOFF_SECONDS = 60.0
 
 Sleep = Callable[[float], Awaitable[None]]
@@ -84,8 +87,10 @@ class ApiTransport:
         *,
         params: dict[str, Any] | list[tuple[str, Any]] | None = None,
         json: Any = None,
+        idempotent: bool = True,
     ) -> Any:
         url = self._resolve_url(path_or_url)
+        retry_statuses = RETRY_STATUSES if idempotent else UNSAFE_RETRY_STATUSES
         attempt = 0
         while True:
             response: httpx.Response | None = None
@@ -99,6 +104,13 @@ class ApiTransport:
                     headers={"Accept": "application/json"},
                 )
             except httpx.TransportError as exc:
+                sent_maybe = not isinstance(exc, httpx.ConnectError | httpx.ConnectTimeout)
+                if sent_maybe and not idempotent:
+                    raise IntegrationUnavailable(
+                        self.service,
+                        f"{self.service}: sem resposta a tempo — confira no {self.service} "
+                        "se a mudança entrou.",
+                    ) from exc
                 if attempt >= self._max_retries:
                     raise IntegrationUnavailable(
                         self.service, f"{self.service}: não foi possível conectar."
@@ -106,7 +118,7 @@ class ApiTransport:
             else:
                 if response.status_code < 400:
                     return response.json() if response.content else None
-                if response.status_code not in RETRY_STATUSES or attempt >= self._max_retries:
+                if response.status_code not in retry_statuses or attempt >= self._max_retries:
                     raise error_for_status(self.service, response.status_code)
 
             delay = _retry_delay(response, attempt)
@@ -127,3 +139,6 @@ class ApiTransport:
 
     async def post(self, path_or_url: str, **kwargs) -> Any:
         return await self.request("POST", path_or_url, **kwargs)
+
+    async def put(self, path_or_url: str, **kwargs) -> Any:
+        return await self.request("PUT", path_or_url, **kwargs)

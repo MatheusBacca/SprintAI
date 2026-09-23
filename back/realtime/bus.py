@@ -27,6 +27,8 @@ NOTE_CHANGED = "note.changed"
 CONTEXT_CHANGED = "context.changed"
 HARNESS_CHANGED = "harness.changed"
 PROGRESS_CHANGED = "progress.changed"
+# O dev mudou status ou Story Points pelo SprintAI (a escrita já está no espelho).
+ISSUE_CHANGED = "issue.changed"
 
 
 @dataclass(frozen=True)

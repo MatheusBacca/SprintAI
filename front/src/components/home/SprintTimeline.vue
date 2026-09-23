@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { ChevronDown, ChevronRight, GitBranch, ListChecks, Milestone } from 'lucide-vue-next'
+import StoryPointsChip from '@/components/jira/StoryPointsChip.vue'
 import PrStatusBadge from '@/components/pr/PrStatusBadge.vue'
 
 /**
@@ -295,12 +296,20 @@ const percent = (value) => `${Math.round((value ?? 0) * 100)}%`
                 <span class="tl__status" :style="{ background: row.issue.progress.stage_color ?? 'var(--color-surface-muted)' }">
                   {{ row.issue.progress.stage_label ?? row.issue.status }}
                 </span>
-                <span v-if="row.issue.story_points != null" class="tl__sp">{{ row.issue.story_points }}</span>
+                <StoryPointsChip
+                  v-if="row.issue.story_points != null"
+                  class="tl__sp"
+                  :issue-key="row.issue.key"
+                  :points="row.issue.story_points"
+                  :suffix="false"
+                />
                 <PrStatusBadge
                   v-if="row.issue.pr"
                   :status="row.issue.pr.status"
                   :pr-count="row.issue.pr.pr_count"
                   :build-failed="row.issue.pr.build_failed"
+                  :links="row.issue.pr.links ?? []"
+                  :issue-key="row.issue.key"
                   size="sm"
                 />
               </template>
@@ -653,6 +662,10 @@ button.tl__name:hover {
 
 .tl__sp {
   flex-shrink: 0;
+  padding: 0 3px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
   font-size: 10px;
   font-weight: 600;
   color: var(--color-text-secondary);

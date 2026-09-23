@@ -14,9 +14,10 @@ export const useRefreshStore = defineStore('refresh', {
   state: () => ({
     revision: 0,
     at: null,
-    /** 'sync' ou 'manual' — a tela pode contar ao dev por que recarregou. */
+    /** 'sync', 'manual' ou 'jira' — a tela pode contar ao dev por que recarregou. */
     reason: null,
     lastRunId: null,
+    recentWrites: [],
   }),
   actions: {
     /**
@@ -28,6 +29,21 @@ export const useRefreshStore = defineStore('refresh', {
       if (runId != null && runId === this.lastRunId) return
       this.lastRunId = runId
       this.bump('sync')
+    },
+
+    /**
+     * O dev mudou status ou Story Points pelo SprintAI. O aviso chega pela resposta, na
+     * aba que escreveu, e pelo stream (`issue.changed`), que avisa também as outras abas
+     * — o id da escrita desempata, como o da execução no fim do sync. Guarda alguns ids
+     * e não só o último: duas escritas seguidas podem chegar intercaladas pelos dois
+     * caminhos.
+     */
+    afterWrite(writeId = null) {
+      if (writeId != null) {
+        if (this.recentWrites.includes(writeId)) return
+        this.recentWrites = [...this.recentWrites.slice(-19), writeId]
+      }
+      this.bump('jira')
     },
 
     /** Botão "Recarregar": recarrega mesmo que nada tenha mudado no espelho. */

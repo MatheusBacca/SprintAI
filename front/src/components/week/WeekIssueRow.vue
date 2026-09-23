@@ -1,6 +1,8 @@
 <script setup>
 import { computed } from 'vue'
 import { CalendarClock, CircleHelp, History } from 'lucide-vue-next'
+import StatusChip from '@/components/jira/StatusChip.vue'
+import StoryPointsChip from '@/components/jira/StoryPointsChip.vue'
 import PrStatusBadge from '@/components/pr/PrStatusBadge.vue'
 
 const props = defineProps({
@@ -32,7 +34,6 @@ const leftover = computed(() => props.issue.sprint_state === 'closed' && !done.v
         <span class="wrow__summary" :title="issue.summary">{{ issue.summary }}</span>
       </span>
       <span class="wrow__meta">
-        <span class="wrow__status" :data-category="issue.status_category">{{ issue.status }}</span>
         <span v-if="showDue && dueLabel" class="wrow__due" :class="{ 'wrow__due--late': late }">
           <CalendarClock :size="12" /> {{ dueLabel }}
         </span>
@@ -46,9 +47,20 @@ const leftover = computed(() => props.issue.sprint_state === 'closed' && !done.v
         <span v-if="issue.parent_summary" class="wrow__parent" :title="issue.parent_summary">{{ issue.parent_summary }}</span>
       </span>
     </button>
+    <!-- Status, SP e PR ficam fora do botão da linha: cada um é um botão (ou link) próprio,
+         e botão dentro de botão não existe em HTML. -->
     <span class="wrow__side">
-      <span v-if="issue.story_points != null" class="wrow__sp">{{ issue.story_points }} SP</span>
-      <PrStatusBadge v-if="issue.pr" :status="issue.pr.status" :pr-count="issue.pr.pr_count" :build-failed="issue.pr.build_failed" size="sm" />
+      <StatusChip class="wrow__status" :data-category="issue.status_category" :issue-key="issue.key" :status="issue.status" />
+      <StoryPointsChip v-if="issue.story_points != null" class="wrow__sp" :issue-key="issue.key" :points="issue.story_points" />
+      <PrStatusBadge
+        v-if="issue.pr"
+        :status="issue.pr.status"
+        :pr-count="issue.pr.pr_count"
+        :build-failed="issue.pr.build_failed"
+        :links="issue.pr.links ?? []"
+        :issue-key="issue.key"
+        size="sm"
+      />
     </span>
   </li>
 </template>
@@ -121,10 +133,14 @@ const leftover = computed(() => props.issue.sprint_state === 'closed' && !done.v
 }
 
 .wrow__status {
+  max-width: 180px;
   padding: 0 6px;
+  border: 0;
   border-radius: 999px;
   background: var(--color-surface-muted);
+  font-size: 11px;
   font-weight: 600;
+  line-height: 18px;
   color: var(--color-text-secondary);
 }
 
@@ -171,8 +187,13 @@ const leftover = computed(() => props.issue.sprint_state === 'closed' && !done.v
 }
 
 .wrow__sp {
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
   font-size: 11px;
   font-weight: 600;
+  line-height: 18px;
   color: var(--color-text-secondary);
   white-space: nowrap;
 }

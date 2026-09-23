@@ -131,3 +131,28 @@ async def pick(
         mine,
     )
     return [dict(r) for r in rows]
+
+
+# --- Escrita feita pelo SprintAI no Jira ----------------------------------------------
+# O espelho recebe o valor novo na hora, para a tela não mostrar o antigo até o próximo
+# sync. `updated_at` fica como estava de propósito: é comparando ele com o do Jira que o
+# sync decide rebuscar a tarefa e ler o changelog — e é do changelog que saem a linha de
+# `jira_status_transition` (timeline) e o evento do feed. Carimbar o `updated` novo aqui
+# faria o sync pular a tarefa e a mudança sumir da história.
+
+
+async def patch_status(conn: Executor, key: str, *, status: str, status_category: str) -> bool:
+    result = await conn.execute(
+        "UPDATE jira_issue SET status = $2, status_category = $3 WHERE key = $1",
+        key,
+        status,
+        status_category,
+    )
+    return result.endswith(" 1")
+
+
+async def patch_story_points(conn: Executor, key: str, story_points: float | None) -> bool:
+    result = await conn.execute(
+        "UPDATE jira_issue SET story_points = $2 WHERE key = $1", key, story_points
+    )
+    return result.endswith(" 1")

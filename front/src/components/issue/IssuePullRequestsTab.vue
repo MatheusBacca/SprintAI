@@ -122,7 +122,7 @@ function reviewCount(pr) {
               #{{ pr.id }} {{ pr.title }} <ExternalLink :size="11" />
             </a>
             <span v-else class="pr__title">#{{ pr.id }} {{ pr.title }}</span>
-            <PrStatusBadge :status="pr.status" size="sm" />
+            <PrStatusBadge :status="pr.status" :href="pr.url" size="sm" />
           </div>
 
           <div class="pr__branch">

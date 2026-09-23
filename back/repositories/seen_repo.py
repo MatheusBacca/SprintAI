@@ -38,3 +38,13 @@ async def upsert(conn: Executor, issue_key: str, snapshot: dict[str, Any]) -> No
         issue_key,
         snapshot,
     )
+
+
+async def merge_existing(conn: Executor, issue_key: str, fields: dict[str, Any]) -> None:
+    """Soma campos à foto que já existe, sem criar uma: card que nunca foi desenhado
+    ganha a foto inteira na primeira carga do canvas."""
+    await conn.execute(
+        "UPDATE issue_seen SET snapshot = snapshot || $2::jsonb WHERE issue_key = $1",
+        issue_key,
+        fields,
+    )

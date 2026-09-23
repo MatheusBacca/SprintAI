@@ -18,7 +18,8 @@ Segurança local:
 - o banco só é publicado em loopback;
 - **tokens do Jira e Bitbucket nunca vão para `.env`, banco, logs ou para o front** — ficam no Cofre do Windows (serviço `sprintai` no Gerenciador de Credenciais), cadastrados em Configurações › Conexões e só salvos depois de testados;
 - a API recusa (403) requests sem o header `X-SprintAI`, com `Host` fora de loopback (DNS rebinding) ou com `Origin` que não seja o front;
-- erros de validação não ecoam o valor enviado (um token malformado não volta na resposta).
+- erros de validação não ecoam o valor enviado (um token malformado não volta na resposta);
+- **o SprintAI escreve só duas coisas no Jira**, e só por gesto explícito na tela: a transição de status (duplo clique) e os Story Points (Salvar). Veja [Ações no Jira e no Bitbucket](#ações-no-jira-e-no-bitbucket).
 
 ## Setup
 
@@ -175,7 +176,7 @@ Regras que valem a pena saber:
 | `GET /api/home?tz=` | progresso das sprints ativas, topo das pendências da semana e lembretes relevantes |
 | `GET /api/home/timeline?tz=&include_next=` | faixas de sprint, linhas agrupadas por pai com barras segmentadas e setas de bloqueio |
 | `GET /api/activity?cursor=&limit=&source=&only_others=` | feed de atividade, do mais novo para o mais antigo |
-| `GET /api/events` | stream de eventos locais (`sync.finished`, `activity.new`, `note.changed`, `context.changed`, `progress.changed`) |
+| `GET /api/events` | stream de eventos locais (`sync.finished`, `activity.new`, `note.changed`, `context.changed`, `progress.changed`, `issue.changed`) |
 | `GET/PUT /api/progress/stages` | etapas do progresso e em qual delas cai cada status do espelho |
 
 O `GET /api/events` é `text/event-stream`, mas **não** é consumido por `EventSource`: a API
@@ -254,6 +255,47 @@ com todo o histórico de PRs de uma vez. Rodar o sync de novo não duplica nada.
 | `GET /api/sprints/{id}/tree?only_mine=` | nós, arestas (parent/link/blocks), grupos e contadores |
 | `GET /api/issues/{key}` | detalhe da tarefa (espelho): campos, descrição ADF, dependências, comentários, PRs |
 | `GET /api/issues/{key}/changelog` | histórico de mudanças, ao vivo do Jira |
+
+## Ações no Jira e no Bitbucket
+
+Onde a tarefa aparece — card do canvas, painel lateral, Semana, dependências, Contextos e a
+timeline da Home — três peças deixam de ser só rótulo:
+
+- **Selo de status** (com a setinha): abre a **linha de fluxo** do Jira ancorada no selo.
+  **Clique escolhe, duplo clique move** — o duplo clique é a confirmação; um clique perdido
+  não muda nada. No teclado, Enter escolhe e o segundo Enter no mesmo passo move.
+  - A linha segue as **etapas de Configurações › Progresso** (análise → desenvolvimento →
+    review → testes → concluído), com o status atual marcado. O workflow de Tarefa da WAI é
+    global e tem 17 status, então os que não têm etapa ficam em **"Outros status"**,
+    recolhidos — mapear um status numa etapa o traz para a linha.
+  - Status sem transição a partir do atual aparece apagado; transição cuja tela pede campo
+    obrigatório aparece como "pede campos no Jira" e fica para o Jira.
+  - O status atual é lido **na hora** do Jira. Se o espelho estiver atrás, o painel avisa.
+- **"N SP"**: abre o editor de Story Points — atalhos da régua (1, 2, 3, 5, 8, 13; duplo
+  clique grava direto) ou um valor no campo (vírgula vale), Enter salva, **Remover** apaga.
+  Campo vazio não apaga nada. No painel da tarefa o chip aparece mesmo sem pontos
+  ("sem SP"), para dar SP a quem chegou sem.
+- **Badge de PR**: leva ao PR no Bitbucket. Com um PR é link direto; com vários, abre a lista
+  (o PR que decide o status do card vem primeiro). Recusado e substituído só entram se forem
+  tudo o que há; "Sem PR" e "Branch sem PR" continuam só rótulo. No Bitbucket nada é escrito.
+
+Depois que o Jira aceita, o espelho recebe o valor novo na hora e todas as telas e abas
+abertas recarregam (evento `issue.changed` no stream). A **história** da mudança — o
+segmento novo na timeline e o evento no feed — chega no próximo sync, pelo changelog, como
+qualquer outra mudança: por isso a escrita não mexe no `updated_at` do espelho.
+
+O painel é um só para o app e fecha com Esc, clique fora ou quando o selo sai da tela; ele
+acompanha o selo ao rolar e no zoom do canvas. Recarregar a mesma sprint (sync, Recarregar,
+status movido) não tira mais a câmera do canvas do lugar.
+
+Token com escopos precisa de **`write:jira-work`** para as duas escritas; sem ele, o resto
+continua lendo e o painel mostra o erro do Jira.
+
+| Rota | O que faz |
+|---|---|
+| `GET /api/issues/{key}/transitions` | linha de fluxo: status atual (ao vivo), passos do workflow e as transições possíveis |
+| `POST /api/issues/{key}/transitions` | move a tarefa (`{ "transition_id": "31" }`); 409 se a transição não existe mais ou pede campos |
+| `PUT /api/issues/{key}/story-points` | grava os Story Points (`{ "story_points": 5 }`, `null` apaga); 409 se o campo não está na tela de edição |
 
 ## Lembretes (`/lembretes`)
 
@@ -369,6 +411,7 @@ Regras em `back/services/pr_status.py` (funções puras, 100% de cobertura):
 - **Por repositório:** PR aberto prevalece sobre mergeado; recusado só conta se for tudo que há. Branch com a chave e sem PR no repo = Branch sem PR.
 - **No card (agregado):** o que pede atenção vence — Sem PR < Branch sem PR < Ajustes requisitados < Rascunho < PR aberta < Aprovada < Mergeada. Repositório só com PR recusado e branch antiga (anterior à última atividade de PR) não puxam o card para baixo.
 - **Vínculo:** chave no nome da branch (`feature/WAI-7120`) ou citada no título (PR que entrega várias tarefas); o detalhe informa qual.
+- **Badge clicável:** leva ao PR no Bitbucket (vários PRs abrem a lista) — ver [Ações no Jira e no Bitbucket](#ações-no-jira-e-no-bitbucket).
 
 ### Histórico da PR
 

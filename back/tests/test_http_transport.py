@@ -119,3 +119,52 @@ async def test_resposta_vazia_devolve_none(transport):
     respx.post(f"{BASE}/x").mock(return_value=httpx.Response(204))
 
     assert await transport.post("/x") is None
+
+
+@respx.mock
+async def test_escrita_nao_idempotente_nao_repete_5xx(transport, sleep):
+    # A transição pode ter entrado antes do 503: repetir andaria mais um passo no workflow.
+    route = respx.post(f"{BASE}/rest/api/3/issue/WAI-1/transitions").mock(
+        return_value=httpx.Response(503)
+    )
+
+    with pytest.raises(IntegrationUnavailable):
+        await transport.post("/rest/api/3/issue/WAI-1/transitions", json={}, idempotent=False)
+
+    assert route.call_count == 1
+    assert sleep.calls == []
+
+
+@respx.mock
+async def test_escrita_nao_idempotente_repete_429(transport, sleep):
+    route = respx.post(f"{BASE}/rest/api/3/issue/WAI-1/transitions").mock(
+        side_effect=[httpx.Response(429), httpx.Response(204)]
+    )
+
+    body = await transport.post(
+        "/rest/api/3/issue/WAI-1/transitions", json={}, idempotent=False
+    )
+
+    assert body is None
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_escrita_nao_idempotente_sem_resposta_pede_conferir_no_jira(transport, sleep):
+    respx.post(f"{BASE}/rest/api/3/issue/WAI-1/transitions").mock(
+        side_effect=httpx.ReadTimeout("lento")
+    )
+
+    with pytest.raises(IntegrationUnavailable) as caught:
+        await transport.post("/rest/api/3/issue/WAI-1/transitions", json={}, idempotent=False)
+
+    assert "confira no Jira" in caught.value.message
+    assert sleep.calls == []
+
+
+@respx.mock
+async def test_put_usa_o_mesmo_transporte(transport):
+    route = respx.put(f"{BASE}/rest/api/3/issue/WAI-1").mock(return_value=httpx.Response(204))
+
+    assert await transport.put("/rest/api/3/issue/WAI-1", json={"fields": {}}) is None
+    assert route.calls.last.request.headers["authorization"].startswith("Basic ")

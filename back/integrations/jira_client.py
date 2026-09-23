@@ -1,9 +1,12 @@
-"""Cliente somente-leitura do Jira Cloud (REST v3 + Agile 1.0).
+"""Cliente do Jira Cloud (REST v3 + Agile 1.0).
 
 - Busca de issues pelo endpoint novo `POST /rest/api/3/search/jql` (paginação por
   `nextPageToken`); o `/rest/api/3/search` antigo foi descontinuado pela Atlassian.
 - Token clássico fala direto com o site; token com escopos passa pelo gateway
   `api.atlassian.com/ex/jira/{cloudId}`.
+- Escreve só duas coisas, e só a pedido do dev na tela: a transição de status e o
+  campo Story Points (`transition_issue` e `edit_issue`). Token com escopos precisa de
+  `write:jira-work` para elas.
 """
 
 from collections.abc import AsyncIterator, Iterable
@@ -171,6 +174,35 @@ class JiraClient:
             f"/rest/api/3/issue/{key}/changelog", items_key="values", page_size=page_size
         ):
             yield entry
+
+    # --- Workflow e edição --------------------------------------------------------
+
+    async def transitions(self, key: str) -> list[dict[str, Any]]:
+        """Transições que o workflow oferece a partir do status atual, com os campos da
+        tela de cada uma (`fields`) — é o que diz se ela pede preenchimento."""
+        page = await self._http.get(
+            f"/rest/api/3/issue/{key}/transitions", params={"expand": "transitions.fields"}
+        )
+        return page.get("transitions", [])
+
+    async def transition_issue(self, key: str, transition_id: str) -> None:
+        # Repetir uma transição que já entrou falharia (ou pior, andaria mais um passo).
+        await self._http.post(
+            f"/rest/api/3/issue/{key}/transitions",
+            json={"transition": {"id": transition_id}},
+            idempotent=False,
+        )
+
+    async def edit_meta(self, key: str) -> dict[str, Any]:
+        """Campos que a tela de edição da issue deixa alterar."""
+        return await self._http.get(f"/rest/api/3/issue/{key}/editmeta")
+
+    async def edit_issue(self, key: str, fields: dict[str, Any]) -> None:
+        await self._http.put(f"/rest/api/3/issue/{key}", json={"fields": fields})
+
+    async def project_statuses(self, project_key: str) -> list[dict[str, Any]]:
+        """Status de cada tipo de issue do projeto — os passos do workflow de cada tipo."""
+        return await self._http.get(f"/rest/api/3/project/{project_key}/statuses")
 
     # --- Agile: boards e sprints ------------------------------------------------
 

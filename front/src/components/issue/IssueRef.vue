@@ -1,5 +1,6 @@
 <script setup>
 import { ExternalLink } from 'lucide-vue-next'
+import StatusChip from '@/components/jira/StatusChip.vue'
 import PrStatusBadge from '@/components/pr/PrStatusBadge.vue'
 
 defineProps({
@@ -25,8 +26,18 @@ const emit = defineEmits(['open'])
     <span v-else class="ref__key ref__key--external">{{ item.key }}</span>
 
     <span class="ref__summary" :title="item.summary">{{ item.summary || '—' }}</span>
-    <span v-if="item.status" class="ref__status">{{ item.status }}</span>
-    <PrStatusBadge v-if="item.pr" :status="item.pr.status" :pr-count="item.pr.pr_count" :build-failed="item.pr.build_failed" size="sm" />
+    <!-- Fora do espelho, o status é o que o link trouxe: não dá para mover daqui. -->
+    <StatusChip v-if="item.status && item.in_mirror" class="ref__status ref__status--action" :issue-key="item.key" :status="item.status" />
+    <span v-else-if="item.status" class="ref__status">{{ item.status }}</span>
+    <PrStatusBadge
+      v-if="item.pr"
+      :status="item.pr.status"
+      :pr-count="item.pr.pr_count"
+      :build-failed="item.pr.build_failed"
+      :links="item.pr.links ?? []"
+      :issue-key="item.key"
+      size="sm"
+    />
   </li>
 </template>
 
@@ -80,5 +91,18 @@ const emit = defineEmits(['open'])
   flex-shrink: 0;
   font-size: var(--text-xs);
   color: var(--color-text-muted);
+}
+
+.ref__status--action {
+  max-width: 160px;
+  padding: 1px 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: none;
+}
+
+.ref__status--action:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 </style>

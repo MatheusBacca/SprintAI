@@ -3,6 +3,8 @@ import { computed, inject } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import { CANVAS_MARKS, nodeMarks } from './canvasMarks'
 import { Ban, CircleCheck, Layers, Link2, MessageSquareWarning, SquareCheck, StickyNote } from 'lucide-vue-next'
+import StatusChip from '@/components/jira/StatusChip.vue'
+import StoryPointsChip from '@/components/jira/StoryPointsChip.vue'
 import PrStatusBadge from '@/components/pr/PrStatusBadge.vue'
 import { PR_STATUS } from '@/constants/prStatus'
 import { useUiStore } from '@/stores/ui'
@@ -130,7 +132,9 @@ const updates = computed(() => {
       <component :is="corner.icon" :size="15" />
     </span>
 
-    <span class="node__status" :title="`Status no Jira: ${issue.status}`">{{ issue.status }}</span>
+    <!-- Card fora do espelho (dados do link) não tem o que mover: fica só o rótulo. -->
+    <span v-if="issue.partial" class="node__status" :title="`Status no Jira: ${issue.status}`">{{ issue.status }}</span>
+    <StatusChip v-else class="node__status" :issue-key="issue.key" :status="issue.status" />
 
     <header class="node__header">
       <span class="node__icon" :class="{ 'node__icon--blocked': waitingBlocker }">
@@ -152,7 +156,10 @@ const updates = computed(() => {
         @click.stop
       >{{ issue.key }}</a>
       <span v-else class="node__key">{{ issue.key }}</span>
-      <span v-if="issue.story_points != null" class="node__points" title="Story Points">{{ issue.story_points }} SP</span>
+      <template v-if="issue.story_points != null">
+        <span v-if="issue.partial" class="node__points" title="Story Points">{{ issue.story_points }} SP</span>
+        <StoryPointsChip v-else class="node__points" :issue-key="issue.key" :points="issue.story_points" />
+      </template>
       <span v-if="issue.is_parent_type && childCount" class="node__points">{{ childCount }} filhas</span>
       <Link2 v-if="issue.parent_via === 'link'" :size="12" class="node__via" aria-label="pai por link" />
       <span v-if="!issue.is_mine && initials" class="node__avatar" :title="issue.assignee_name">{{ initials }}</span>
@@ -163,7 +170,14 @@ const updates = computed(() => {
 
     <footer class="node__footer">
       <template v-if="issue.in_sprint && issue.pr">
-        <PrStatusBadge :status="issue.pr.status" :pr-count="issue.pr.pr_count" :build-failed="issue.pr.build_failed" size="sm" />
+        <PrStatusBadge
+          :status="issue.pr.status"
+          :pr-count="issue.pr.pr_count"
+          :build-failed="issue.pr.build_failed"
+          :links="issue.pr.links ?? []"
+          :issue-key="issue.key"
+          size="sm"
+        />
         <span v-if="waitingBlocker" class="node__blocked">bloqueada por {{ issue.blockers_without_pr.join(', ') }}</span>
       </template>
       <button
@@ -361,8 +375,11 @@ a.node__key:hover {
   flex-shrink: 0;
   white-space: nowrap;
   padding: 0 5px;
+  border: 0;
   border-radius: var(--radius-sm);
   background: var(--color-surface-muted);
+  font-size: inherit;
+  color: inherit;
 }
 
 /* Status do Jira sentado no contorno, no canto oposto ao marcador de PR. O fundo é

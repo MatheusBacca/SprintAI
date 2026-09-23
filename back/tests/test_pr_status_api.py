@@ -173,6 +173,7 @@ async def test_lote_para_os_cards(db_app, client, seeded):
     assert response.status_code == 200
     body = response.json()
     assert sorted(body) == ["WAI-1", "WAI-8278", "WAI-8305", "WAI-8400"]
+    links = body["WAI-8278"].pop("links")
     assert body["WAI-8278"] == {
         "status": "ajustes_requisitados",
         "status_label": "Ajustes requisitados",
@@ -180,8 +181,15 @@ async def test_lote_para_os_cards(db_app, client, seeded):
         "open_pr_count": 1,
         "build_failed": True,
     }
+    # O badge abre primeiro o PR que decide o status do card.
+    assert [(link["repo_slug"], link["id"], link["status"]) for link in links] == [
+        ("supervisor-web", 10, "ajustes_requisitados"),
+        ("weaction-api", 20, "mergeada"),
+    ]
+    assert links[0]["url"] == "https://bitbucket.org/weonrepo/supervisor-web/pull-requests/10"
     assert body["WAI-8305"]["status"] == "mergeada"  # citada no título do PR
     assert body["WAI-8400"]["status"] == "branch_sem_pr"
+    assert body["WAI-8400"]["links"] == []
     assert body["WAI-1"]["status"] == "sem_pr"
 
 

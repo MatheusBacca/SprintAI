@@ -100,7 +100,7 @@ sprint da Home, agrupada por sprint, e as notificações de tarefa do sino
 
 `realtime/bus.py` é um pub/sub `asyncio` em memória — um processo, um dev, sem broker.
 Quem escreve publica (`note.changed`, `context.changed`, `activity.new`, `progress.changed`,
-`sync.finished`); `GET /api/events` transmite para as abas abertas.
+`sync.finished`, `issue.changed`); `GET /api/events` transmite para as abas abertas.
 
 A fila de cada assinante tem teto: uma aba lenta descarta o evento mais antigo em vez de
 segurar o publicador — perder um aviso não corrompe nada, porque a tela recarrega do
@@ -108,6 +108,33 @@ servidor quando o recebe.
 
 O stream fica aberto de propósito, então `uvicorn.run` usa
 `timeout_graceful_shutdown=5`: sem teto, cada reload esperaria por ele para sempre.
+
+## Escrita no Jira
+
+`services/issue_actions.py` é o único lugar que escreve no Jira, e só duas coisas, cada uma
+disparada por um gesto explícito do dev (duplo clique no status, Salvar nos pontos):
+
+1. **Transição de status** — `GET /api/issues/{key}/transitions` lê *ao vivo* o status atual,
+   as transições (com os campos de tela, `expand=transitions.fields`) e os status do workflow
+   do tipo da tarefa (`/project/{key}/statuses`), e monta a linha na ordem das etapas de
+   progresso. O `POST` relê as transições antes de aplicar: é o Jira quem diz para onde ela
+   leva, e ela pode ter sumido se alguém mexeu na tarefa depois que a lista abriu.
+2. **Story Points** — o campo gravado é o primeiro candidato (na prioridade do sync) que o
+   `editmeta` da tarefa aceita; projeto team-managed usa "Story point estimate".
+
+Depois que o Jira aceita:
+
+- o **espelho** recebe o valor novo na hora, **sem** carimbar o `updated_at` — o próximo sync
+  vê o `updated` do Jira mais novo, rebusca a tarefa e grava a transição e o evento a partir
+  do changelog, como qualquer outra mudança;
+- a **foto do card** (`issue_seen`) recebe só o campo mexido, para a mudança do próprio dev
+  não acender a bolinha — sem engolir outra mudança que ele ainda não viu;
+- o barramento publica `issue.changed` com um `write_id`, e o front recarrega uma vez só
+  (a resposta do POST e o evento do stream trazem o mesmo id).
+
+A transição vai com `idempotent=False`: o transporte só tenta de novo em 429 e falha de
+conexão, quando o pedido com certeza não chegou. Um 5xx ou timeout de leitura vira erro com
+"confira no Jira se a mudança entrou", em vez de uma segunda transição.
 
 ## Escrita em disco
 

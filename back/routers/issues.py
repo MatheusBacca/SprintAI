@@ -4,10 +4,18 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
 from database.pool import get_pool
-from schemas.issue_schemas import ChangelogOut, IssueDetailOut, IssuePickOut
+from schemas.issue_schemas import (
+    ChangelogOut,
+    IssueDetailOut,
+    IssueFlowOut,
+    IssuePickOut,
+    IssueWriteOut,
+    StoryPointsIn,
+    TransitionIn,
+)
 from schemas.pr_status_schemas import ISSUE_KEY_PATTERN
 from security.credential_store import CredentialStore, get_credential_store
-from services import card_updates, issue_service
+from services import card_updates, issue_actions, issue_service
 
 router = APIRouter(prefix="/issues", tags=["issues"])
 
@@ -52,3 +60,40 @@ async def mark_issue_seen(pool: Pool, issue_key: IssueKey):
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail=f"{issue_key} não está no espelho local."
         )
+
+
+def _not_in_mirror(issue_key: str) -> HTTPException:
+    return HTTPException(
+        status.HTTP_404_NOT_FOUND, detail=f"{issue_key} não está no espelho local."
+    )
+
+
+@router.get("/{issue_key}/transitions", response_model=IssueFlowOut)
+async def issue_flow(pool: Pool, store: Store, issue_key: IssueKey):
+    """Linha de fluxo do workflow, com as transições que o Jira oferece agora."""
+    try:
+        return await issue_actions.get_flow(pool, store, issue_key)
+    except issue_actions.IssueNotInMirror as exc:
+        raise _not_in_mirror(issue_key) from exc
+
+
+@router.post("/{issue_key}/transitions", response_model=IssueWriteOut)
+async def transition_issue(pool: Pool, store: Store, issue_key: IssueKey, body: TransitionIn):
+    """Move a tarefa no Jira. A tela só chama depois do duplo clique do dev."""
+    try:
+        return await issue_actions.apply_transition(pool, store, issue_key, body.transition_id)
+    except issue_actions.IssueNotInMirror as exc:
+        raise _not_in_mirror(issue_key) from exc
+    except issue_actions.IssueActionConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=exc.message) from exc
+
+
+@router.put("/{issue_key}/story-points", response_model=IssueWriteOut)
+async def set_story_points(pool: Pool, store: Store, issue_key: IssueKey, body: StoryPointsIn):
+    """Grava os Story Points no Jira (`null` apaga)."""
+    try:
+        return await issue_actions.set_story_points(pool, store, issue_key, body.story_points)
+    except issue_actions.IssueNotInMirror as exc:
+        raise _not_in_mirror(issue_key) from exc
+    except issue_actions.IssueActionConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=exc.message) from exc

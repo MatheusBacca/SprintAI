@@ -6,12 +6,13 @@ from repositories import pr_status_repo
 from schemas.pr_status_schemas import (
     BranchOut,
     IssuePrSummaryOut,
+    PrLinkOut,
     PrStatusBadgeOut,
     PullRequestOut,
     RepoPrStatusOut,
     ReviewerOut,
 )
-from services.pr_status import LABELS, IssuePrSummary, summarize_issue
+from services.pr_status import CLOSED_WITHOUT_MERGE, LABELS, IssuePrSummary, summarize_issue
 
 
 async def summaries(pool: asyncpg.Pool, issue_keys: Iterable[str]) -> dict[str, IssuePrSummary]:
@@ -21,6 +22,28 @@ async def summaries(pool: asyncpg.Pool, issue_keys: Iterable[str]) -> dict[str, 
     return {key: summarize_issue(key, pr_rows, branch_rows) for key in keys}
 
 
+def badge_links(summary: IssuePrSummary) -> list[PrLinkOut]:
+    """PRs que o badge abre, na ordem de atenção: repositório que decide o status primeiro
+    e, dentro dele, aberto antes de mergeado — o primeiro é o PR que o badge está contando.
+
+    Recusado e substituído ficam de fora enquanto houver outro PR: não pesam no status do
+    card, e abrir um deles pelo badge seria engano. Sendo tudo o que há, são eles.
+    """
+    prs = [pr for repo in summary.repos for pr in repo.pull_requests if pr.url]
+    live = [pr for pr in prs if pr.status not in CLOSED_WITHOUT_MERGE]
+    return [
+        PrLinkOut(
+            repo_slug=pr.repo_slug,
+            id=pr.id,
+            title=pr.title,
+            status=pr.status,
+            status_label=LABELS[pr.status],
+            url=pr.url,
+        )
+        for pr in live or prs
+    ]
+
+
 def to_badge(summary: IssuePrSummary) -> PrStatusBadgeOut:
     return PrStatusBadgeOut(
         status=summary.status,
@@ -28,6 +51,7 @@ def to_badge(summary: IssuePrSummary) -> PrStatusBadgeOut:
         pr_count=summary.pr_count,
         open_pr_count=summary.open_pr_count,
         build_failed=summary.build_failed,
+        links=badge_links(summary),
     )
 
 
@@ -76,4 +100,5 @@ def to_detail(summary: IssuePrSummary) -> IssuePrSummaryOut:
             )
             for repo in summary.repos
         ],
+        links=badge_links(summary),
     )

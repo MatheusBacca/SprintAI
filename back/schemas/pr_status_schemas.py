@@ -53,6 +53,17 @@ class RepoPrStatusOut(BaseModel):
     branches: list[BranchOut]
 
 
+class PrLinkOut(BaseModel):
+    """Um PR que o badge abre no Bitbucket."""
+
+    repo_slug: str
+    id: int
+    title: str
+    status: PrStatus
+    status_label: str
+    url: str
+
+
 class IssuePrSummaryOut(BaseModel):
     issue_key: str
     status: PrStatus
@@ -62,6 +73,7 @@ class IssuePrSummaryOut(BaseModel):
     build_failed: bool
     last_activity: datetime | None
     repos: list[RepoPrStatusOut]
+    links: list[PrLinkOut] = []
 
 
 class PrTimelineEntryOut(BaseModel):
@@ -104,6 +116,9 @@ class PrStatusBadgeOut(BaseModel):
     pr_count: int
     open_pr_count: int
     build_failed: bool
+    # Do PR que decide o status para o resto: com um, o badge é o link; com vários, abre
+    # a lista para escolher.
+    links: list[PrLinkOut] = []
 
 
 class PrStatusBatchIn(BaseModel):
