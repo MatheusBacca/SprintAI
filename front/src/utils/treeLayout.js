@@ -3,9 +3,9 @@
  *
  *   [ Épico A ]        [ Épico B ]       ← fileira das raízes, cada uma sobre as suas
  *   ── Onda de implementação 1 ─────────────
- *   [filha A] [filha A] [filha B] [sem pai]   ← quem ninguém bloqueia, de todos os épicos
+ *   [filha A] [filha A] [filha B] [sem pai]   ← quem não tem antecessora, de todos os épicos
  *   ── Onda de implementação 2 ─────────────
- *             [filha A]                   ← cada bloqueada abaixo do bloqueador
+ *             [filha A]                   ← cada uma abaixo do bloqueador (ou da origem)
  *   [sub    ]                             ← descendentes empilhados abaixo da filha
  *
  * É **uma moldura só para a sprint inteira**. Antes cada épico tinha a sua caixa e as
@@ -65,13 +65,18 @@ function groupCells(group, nodesByKey, inGroup) {
 }
 
 /**
- * Ondas de implementação: a onda 1 são as tarefas que ninguém bloqueia; cada outra
- * entra uma onda depois do seu bloqueador mais tardio. É o que dá a leitura de "isto
- * só começa quando aquilo terminar" sem precisar seguir seta por seta.
+ * Ondas de implementação: a onda 1 são as tarefas sem antecessora; cada outra entra
+ * uma onda depois da sua antecessora mais tardia. É o que dá a leitura de "isto só
+ * começa quando aquilo terminar" sem precisar seguir seta por seta.
  *
- * Só bloqueio *entre tarefas que estão no desenho* conta: um bloqueador fora da sprint
- * não tem onda de onde empurrar o card. Como a sprint hoje é um desenho só, bloqueio
- * entre épicos diferentes vale — e é justamente o que a onda existe para mostrar.
+ * Antecessora (`predecessors`) é o bloqueador ("Blocks") ou a origem ("is caused by"),
+ * **concluída ou não**. Antes a onda saía do `blocked_by`, que perde o bloqueador quando
+ * ele fecha: a cada tarefa concluída a sprint subia para a onda 1 e as ondas se
+ * desmanchavam justo quando dava para ler o que já tinha sido feito.
+ *
+ * Só antecessora *que está no desenho* conta: uma fora da sprint não tem onda de onde
+ * empurrar o card. Como a sprint hoje é um desenho só, vínculo entre épicos diferentes
+ * vale — e é justamente o que a onda existe para mostrar.
  */
 export function implementationWaves(cells, nodesByKey) {
   const naLinha = new Set(cells)
@@ -83,7 +88,7 @@ export function implementationWaves(cells, nodesByKey) {
     // dado nosso: fecha em 0 para não entrar em recursão infinita.
     if (caminho.has(key)) return 0
     caminho.add(key)
-    const anteriores = (nodesByKey[key]?.blocked_by ?? [])
+    const anteriores = (nodesByKey[key]?.predecessors ?? [])
       .filter((b) => b !== key && naLinha.has(b))
       .map((b) => resolver(b, caminho))
     caminho.delete(key)
@@ -100,8 +105,8 @@ export function implementationWaves(cells, nodesByKey) {
 }
 
 /**
- * Coluna de cada célula. A partir da segunda onda cada tarefa tenta a coluna do seu
- * bloqueador, para cair logo abaixo dele; quem disputa a mesma coluna (duas tarefas
+ * Coluna de cada célula. A partir da segunda onda cada tarefa tenta a coluna da sua
+ * antecessora, para cair logo abaixo dela; quem disputa a mesma coluna (duas tarefas
  * liberadas pela mesma) vai para a primeira livre à direita.
  */
 function assignColumns(ondas, nodesByKey) {
@@ -118,10 +123,10 @@ function assignColumns(ondas, nodesByKey) {
     const ocupadas = new Set()
     const disputadas = []
     for (const key of onda) {
-      const doBloqueador = (nodesByKey[key]?.blocked_by ?? [])
+      const daAntecessora = (nodesByKey[key]?.predecessors ?? [])
         .map((b) => coluna[b])
         .filter((c) => c !== undefined)
-      const desejada = doBloqueador.length ? Math.min(...doBloqueador) : 0
+      const desejada = daAntecessora.length ? Math.min(...daAntecessora) : 0
       if (ocupadas.has(desejada)) {
         disputadas.push([key, desejada])
         continue
@@ -186,7 +191,7 @@ export function layoutSprint(groups, nodesByKey) {
   const cells = grupos.flatMap((g) => g.cells)
   const ondas = implementationWaves(cells, nodesByKey)
   const coluna = assignColumns(ondas, nodesByKey)
-  // Sem bloqueio nenhum não há o que separar: a sprint fica com a linha única de sempre.
+  // Sem vínculo de ordem nenhum não há o que separar: a sprint fica com a linha única de sempre.
   const comOndas = ondas.length > 1
 
   const positions = {}
@@ -273,6 +278,12 @@ export function layoutTree(tree, { selectedKey = null } = {}) {
     }
   }
 
+  /** Arestas que dão a ordem das ondas, com o rótulo que vai no meio da seta. */
+  const ordem = new Map([
+    ['blocks', 'bloqueia'],
+    ['causes', 'origina'],
+  ])
+
   /** O alvo está numa onda abaixo da origem. */
   const empilhado = (source, target) => {
     const de = ondaPorKey[source]
@@ -287,15 +298,17 @@ export function layoutTree(tree, { selectedKey = null } = {}) {
     // leva da onda 1 até ela.
     .filter((e) => !(e.kind === 'parent' && (ondaPorKey[e.target] ?? 1) > 1))
     .map((e) => {
-      const vertical = e.kind !== 'blocks' || empilhado(e.source, e.target)
+      const deOrdem = ordem.has(e.kind)
+      const vertical = !deOrdem || empilhado(e.source, e.target)
       return {
         id: `${e.kind}:${e.source}->${e.target}`,
         source: e.source,
         target: e.target,
-        type: e.kind === 'blocks' && !vertical ? 'default' : 'smoothstep',
+        type: deOrdem && !vertical ? 'default' : 'smoothstep',
         sourceHandle: vertical ? 'bottom' : 'right',
         targetHandle: vertical ? 'top' : 'left',
-        label: e.kind === 'blocks' ? 'bloqueia' : undefined,
+        label: ordem.get(e.kind),
+        // A animação é a espera do bloqueio; a origem é só de onde a tarefa veio.
         animated: e.kind === 'blocks',
         class: `edge edge--${e.kind}`,
         markerEnd: 'arrowclosed',

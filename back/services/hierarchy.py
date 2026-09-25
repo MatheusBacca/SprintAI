@@ -8,6 +8,8 @@
 PARENT_ISSUE_TYPES = frozenset({"Épico", "Epic", "Enhancements", "Enhancement", "Feature"})
 HIERARCHY_LINK_TYPES = frozenset({"Relates", "Divisão do ticket", "Polaris work item link"})
 BLOCK_LINK_TYPE = "Blocks"
+# "causes" / "is caused by": o Ajuste que nasceu de uma entrega aponta para ela.
+CAUSE_LINK_TYPE = "Problem/Incident"
 
 
 def is_hierarchy_link(link_type: str | None, target_type: str | None) -> bool:

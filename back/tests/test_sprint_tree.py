@@ -190,6 +190,59 @@ def test_bloqueador_fora_do_espelho_usa_status_do_snapshot():
     assert tree.nodes["WAI-1"].blocked_by == ["OUT-1"]
     assert tree.nodes["WAI-2"].blocked is False
     assert not [e for e in tree.edges if e.kind == "blocks"]  # bloqueador não está no grafo
+    # Fora do grafo não há onda de onde empurrar.
+    assert tree.nodes["WAI-1"].predecessors == []
+
+
+def test_bloqueador_concluido_desbloqueia_mas_continua_antes_na_onda():
+    # Caso real da Sprint 75: WAI-8548 bloqueava WAI-7889 e as duas foram concluídas.
+    # Sem a ordem, a 7889 subia para a onda 1 e as ondas se desmanchavam.
+    tree = build_tree(
+        sprint_issues=[
+            issue("WAI-8548", status_category="done"),
+            issue("WAI-7889", status_category="done"),
+        ],
+        related_issues=[],
+        links=[link("WAI-8548", "WAI-7889", type_="Blocks", target_type="Tarefa")],
+        my_account_id=ME,
+    )
+
+    node = tree.nodes["WAI-7889"]
+    assert (node.blocked, node.blocked_by) == (False, [])
+    assert node.predecessors == ["WAI-8548"]
+    assert tree.counters["blocked"] == 0
+
+
+def test_is_caused_by_vira_seta_origina_e_ordem_de_onda_sem_bloquear():
+    tree = build_tree(
+        sprint_issues=[
+            issue("WAI-7889", status_category="done"),
+            issue("WAI-8694", type_="Ajuste"),
+            issue("WAI-8705"),
+        ],
+        related_issues=[],
+        links=[
+            link(
+                "WAI-8694",
+                "WAI-7889",
+                type_="Problem/Incident",
+                direction="inward",
+                target_type="Tarefa",
+            ),
+            # mesmo vínculo visto da origem: não duplica
+            link("WAI-7889", "WAI-8694", type_="Problem/Incident", target_type="Ajuste"),
+            # Relates entre tarefas não tem direção: não entra na ordem
+            link("WAI-8705", "WAI-8694", target_type="Ajuste"),
+        ],
+        my_account_id=ME,
+    )
+
+    causes = [(e.source, e.target, e.label) for e in tree.edges if e.kind == "causes"]
+    assert causes == [("WAI-7889", "WAI-8694", "origina")]
+    assert tree.nodes["WAI-8694"].predecessors == ["WAI-7889"]
+    assert tree.nodes["WAI-8694"].blocked is False
+    assert tree.nodes["WAI-8705"].predecessors == []
+    assert tree.nodes["WAI-8705"].parent_key is None
 
 
 def test_filtro_so_minhas():

@@ -197,6 +197,39 @@ async def test_bloqueio_libera_o_icone_quando_o_bloqueador_abre_pr(db_app, clien
     assert nodes["WAI-7003"]["blockers_without_pr"] == ["WAI-7001"]
 
 
+async def test_bloqueador_concluido_mantem_a_ordem_da_onda(db_app, client, db_pool, seeded):
+    await db_pool.execute(
+        "UPDATE jira_issue SET status = 'Concluído', status_category = 'done' "
+        "WHERE key = 'WAI-7001'"
+    )
+
+    body = (await client.get("/api/sprints/3995/tree")).json()
+
+    nodes = {n["key"]: n for n in body["nodes"]}
+    assert (nodes["WAI-7003"]["blocked"], nodes["WAI-7003"]["blocked_by"]) == (False, [])
+    assert nodes["WAI-7003"]["predecessors"] == ["WAI-7001"]
+    assert body["counters"]["blocked"] == 0
+
+
+async def test_tarefa_originada_por_outra_vem_depois_dela(db_app, client, db_pool, seeded):
+    await _issue(db_pool, "WAI-7004", type_="Ajuste")
+    await db_pool.execute("INSERT INTO jira_sprint_issue VALUES (3995, 'WAI-7004')")
+    await db_pool.execute(
+        """
+        INSERT INTO jira_issue_link (id, source_key, target_key, link_type, direction, label, target_type)
+        VALUES ('2', 'WAI-7004', 'WAI-7002', 'Problem/Incident', 'inward', 'is caused by', 'Tarefa')
+        """
+    )
+
+    body = (await client.get("/api/sprints/3995/tree")).json()
+
+    nodes = {n["key"]: n for n in body["nodes"]}
+    assert nodes["WAI-7004"]["predecessors"] == ["WAI-7002"]
+    assert nodes["WAI-7004"]["blocked"] is False
+    edges = {(e["source"], e["target"], e["kind"]): e["label"] for e in body["edges"]}
+    assert edges[("WAI-7002", "WAI-7004", "causes")] == "origina"
+
+
 async def test_card_conta_so_lembretes_nao_arquivados(db_app, client, seeded):
     for title, archived in (("Ver retry", False), ("Revisar log", False), ("Antigo", True)):
         note = (

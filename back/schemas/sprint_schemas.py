@@ -46,6 +46,10 @@ class TreeNodeOut(BaseModel):
     # de bloqueio no lugar do ícone do tipo.
     blockers_without_pr: list[str] = []
     blocks: list[str]
+    # Quem vem antes nas ondas de implementação: bloqueadores e origens ("is caused by")
+    # que estão no desenho, concluídos ou não — o `blocked_by` perde o bloqueador quando
+    # ele fecha, e a onda não pode se desmanchar por isso.
+    predecessors: list[str] = []
     children: list[str]
     url: str | None
     pr: PrStatusBadgeOut | None
@@ -59,7 +63,7 @@ class TreeNodeOut(BaseModel):
 class TreeEdgeOut(BaseModel):
     source: str
     target: str
-    kind: Literal["parent", "link", "blocks"]
+    kind: Literal["parent", "link", "blocks", "causes"]
     label: str | None = None
 
 

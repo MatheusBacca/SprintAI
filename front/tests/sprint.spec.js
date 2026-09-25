@@ -40,6 +40,7 @@ function node(key, overrides = {}) {
     blocked: false,
     blocked_by: [],
     blocks: [],
+    predecessors: [],
     children: [],
     url: `https://weon.atlassian.net/browse/${key}`,
     pr: { status: 'sem_pr', status_label: 'Sem PR', pr_count: 0, open_pr_count: 0, build_failed: false },
@@ -57,7 +58,7 @@ function sampleTree() {
       node('WAI-1', { issue_type: 'Épico', is_parent_type: true, in_sprint: false, group: 'WAI-1', children, pr: null }),
       ...children.map((k) => node(k, { parent_key: 'WAI-1', parent_via: 'parent', group: 'WAI-1', depth: 1 })),
       node('WAI-7', { children: ['WAI-8'] }),
-      node('WAI-8', { issue_type: 'Subtarefa', parent_key: 'WAI-7', parent_via: 'parent', depth: 1, blocked: true, blocked_by: ['WAI-2'] }),
+      node('WAI-8', { issue_type: 'Subtarefa', parent_key: 'WAI-7', parent_via: 'parent', depth: 1, blocked: true, blocked_by: ['WAI-2'], predecessors: ['WAI-2'] }),
     ],
     edges: [
       ...children.map((k) => ({ source: 'WAI-1', target: k, kind: 'parent' })),
@@ -190,6 +191,7 @@ describe('ondas de implementação', () => {
           depth: 1,
           blocked: Boolean(bloqueios[k]),
           blocked_by: bloqueios[k] ?? [],
+          predecessors: bloqueios[k] ?? [],
           blocks: filhas.filter((outra) => (bloqueios[outra] ?? []).includes(k)),
         }),
       ),
@@ -224,9 +226,9 @@ describe('ondas de implementação', () => {
     ])
   })
 
-  it('bloqueador fora do desenho não empurra o card para outra onda', () => {
+  it('antecessora fora do desenho não empurra o card para outra onda', () => {
     const byKey = {
-      'WAI-1': node('WAI-1', { blocked: true, blocked_by: ['WAI-999'] }),
+      'WAI-1': node('WAI-1', { blocked: true, blocked_by: ['WAI-999'], predecessors: ['WAI-999'] }),
       'WAI-2': node('WAI-2'),
     }
 
@@ -241,7 +243,7 @@ describe('ondas de implementação', () => {
     tree.nodes.push(
       node('WAI-90', { is_parent_type: true, in_sprint: false, children: ['WAI-91', 'WAI-92'] }),
       node('WAI-91', { parent_key: 'WAI-90' }),
-      node('WAI-92', { parent_key: 'WAI-90', blocked: true, blocked_by: ['WAI-2'] }),
+      node('WAI-92', { parent_key: 'WAI-90', blocked: true, blocked_by: ['WAI-2'], predecessors: ['WAI-2'] }),
     )
     tree.groups.splice(1, 0, { key: 'WAI-90', root_key: 'WAI-90', issue_keys: ['WAI-90', 'WAI-91', 'WAI-92'] })
     const byKey = Object.fromEntries(tree.nodes.map((n) => [n.key, n]))
@@ -255,8 +257,8 @@ describe('ondas de implementação', () => {
 
   it('ciclo de bloqueio não trava o cálculo', () => {
     const byKey = {
-      'WAI-1': node('WAI-1', { blocked: true, blocked_by: ['WAI-2'] }),
-      'WAI-2': node('WAI-2', { blocked: true, blocked_by: ['WAI-1'] }),
+      'WAI-1': node('WAI-1', { blocked: true, blocked_by: ['WAI-2'], predecessors: ['WAI-2'] }),
+      'WAI-2': node('WAI-2', { blocked: true, blocked_by: ['WAI-1'], predecessors: ['WAI-1'] }),
     }
 
     const ondas = implementationWaves(['WAI-1', 'WAI-2'], byKey)
@@ -340,6 +342,72 @@ describe('ondas de implementação', () => {
     const doEpico = edges.filter((e) => e.source === 'WAI-7326').map((e) => e.target)
 
     expect(doEpico).toEqual(['WAI-7889', 'WAI-8428', 'WAI-8432'])
+  })
+
+  // Sprint 75 - Growth: WAI-8548 bloqueava WAI-7889 (as duas já concluídas), e dois
+  // Ajustes "is caused by" WAI-7889. A WAI-8705 só "relates to" um deles.
+  function sprintComOrigens() {
+    const concluida = { status: 'Concluído', status_category: 'done' }
+    const nodes = [
+      node('WAI-8548', concluida),
+      node('WAI-7889', { ...concluida, predecessors: ['WAI-8548'] }),
+      node('WAI-8690', { issue_type: 'Ajuste', predecessors: ['WAI-7889'] }),
+      node('WAI-8694', { issue_type: 'Ajuste', predecessors: ['WAI-7889'] }),
+      node('WAI-8705'),
+    ]
+    return {
+      tree: {
+        sprint: { id: 4029, name: 'Sprint 75 - Growth', state: 'active', start_date: null, end_date: null, goal: null, issue_count: 5, mine_count: 5, done_count: 2 },
+        only_mine: false,
+        counters: {},
+        nodes,
+        edges: [
+          { source: 'WAI-8548', target: 'WAI-7889', kind: 'blocks', label: 'bloqueia' },
+          { source: 'WAI-7889', target: 'WAI-8690', kind: 'causes', label: 'origina' },
+          { source: 'WAI-7889', target: 'WAI-8694', kind: 'causes', label: 'origina' },
+        ],
+        groups: [{ key: '__sem_pai__', root_key: null, issue_keys: nodes.map((n) => n.key) }],
+      },
+      byKey: Object.fromEntries(nodes.map((n) => [n.key, n])),
+    }
+  }
+
+  it('bloqueador concluído continua segurando a onda: a sprint não se desmancha', () => {
+    const { tree, byKey } = sprintComOrigens()
+
+    const ondas = implementationWaves(tree.groups[0].issue_keys, byKey)
+
+    // A WAI-7889 não está mais bloqueada (blocked_by vazio), mas segue depois da WAI-8548.
+    expect(byKey['WAI-7889'].blocked_by).toEqual([])
+    expect(ondas).toEqual([['WAI-8548', 'WAI-8705'], ['WAI-7889'], ['WAI-8690', 'WAI-8694']])
+  })
+
+  it('tarefa originada ("is caused by") desce para baixo da origem', () => {
+    const { tree, byKey } = sprintComOrigens()
+
+    const { positions } = layoutSprint(tree.groups, byKey)
+
+    expect(positions['WAI-8690'].x).toBe(positions['WAI-7889'].x)
+    expect(positions['WAI-8694'].x).toBe(positions['WAI-7889'].x + NODE_WIDTH + COLUMN_GAP)
+    expect(positions['WAI-8694'].y).toBeGreaterThan(positions['WAI-7889'].y + NODE_HEIGHT)
+    // "Relates" não tem direção: a WAI-8705 fica na onda 1.
+    expect(positions['WAI-8705'].y).toBe(positions['WAI-8548'].y)
+  })
+
+  it('a origem vira seta "origina" de cima para baixo, parada', () => {
+    const { tree } = sprintComOrigens()
+
+    const { edges } = layoutTree(tree)
+
+    expect(edges.find((e) => e.id === 'causes:WAI-7889->WAI-8694')).toMatchObject({
+      sourceHandle: 'bottom',
+      targetHandle: 'top',
+      type: 'smoothstep',
+      label: 'origina',
+      animated: false,
+      class: 'edge edge--causes',
+    })
+    expect(edges.find((e) => e.id === 'blocks:WAI-8548->WAI-7889')).toMatchObject({ label: 'bloqueia', animated: true })
   })
 })
 

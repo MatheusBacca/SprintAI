@@ -222,14 +222,16 @@ com todo o histórico de PRs de uma vez. Rodar o sync de novo não duplica nada.
   cima, cada um centralizado sobre as suas tarefas, e **as tarefas sem pai entram na mesma
   linha das outras** em vez de numa caixa à parte. Quem diz de quem a tarefa é continua sendo
   a seta que desce do épico.
-- Cards com tipo, título, chave, SP, status do Jira e badge de PR; borda vermelha quando há bloqueador não concluído; seta "bloqueia" entre tarefas.
-- **Ondas de implementação**: quando há bloqueio entre as tarefas do desenho, a linha
-  única vira faixas separadas por um pontilhado — "Onda de implementação 1" são as tarefas
-  que ninguém bloqueia, e cada tarefa desce para a onda seguinte à do seu bloqueador mais
-  tardio, na coluna dele. Dá para ler o que dá para começar hoje sem seguir seta por seta.
-  Duas tarefas liberadas pela mesma ficam lado a lado na onda seguinte. Como a sprint é um
-  desenho só, bloqueio entre épicos diferentes também conta. Sprint sem bloqueio nenhum
-  continua em linha única, sem faixa.
+- Cards com tipo, título, chave, SP, status do Jira e badge de PR; borda vermelha quando há bloqueador não concluído; seta vermelha "bloqueia" entre tarefas e seta âmbar "origina" da tarefa de onde um Ajuste nasceu ("is caused by").
+- **Ondas de implementação**: quando há bloqueio ou origem entre as tarefas do desenho, a
+  linha única vira faixas separadas por um pontilhado — "Onda de implementação 1" são as
+  tarefas sem antecessora, e cada tarefa desce para a onda seguinte à do seu bloqueador (ou
+  da tarefa que a originou) mais tardio, na coluna dele. Dá para ler o que dá para começar
+  hoje sem seguir seta por seta. Duas tarefas liberadas pela mesma ficam lado a lado na
+  onda seguinte. A ordem **não se desfaz quando o bloqueador é concluído**: o card deixa de
+  contar como bloqueado, mas continua na onda de baixo. "Relates" entre tarefas não tem
+  direção e não mexe nas ondas. Como a sprint é um desenho só, vínculo entre épicos
+  diferentes também conta. Sprint sem vínculo nenhum continua em linha única, sem faixa.
 - **Marcador no canto superior direito do card**, para varrer o canvas sem ler o rodapé de
   cada um: check verde em **Aprovada**, check roxo em **Mergeada** e o ícone laranja em
   **Ajustes requisitados**. Os outros status continuam só na cor da borda e no badge.

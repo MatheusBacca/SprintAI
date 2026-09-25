@@ -138,6 +138,7 @@ async def sprint_tree(
                 blocked_by=n.blocked_by,
                 blockers_without_pr=blockers_without_pr(n.blocked_by, blocker_summaries),
                 blocks=n.blocks,
+                predecessors=n.predecessors,
                 children=n.children,
                 url=f"{base_url}{n.key}" if base_url else None,
                 pr=pr_status_service.to_badge(summaries[n.key]) if n.key in summaries else None,

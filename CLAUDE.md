@@ -81,11 +81,14 @@ Flow não inicializa em jsdom. `layoutSprint` desenha a sprint **numa moldura s�
 numa fileira em cima, cada um centralizado sobre as suas tarefas, e todo o resto — inclusive
 as tarefas sem pai — dividindo as mesmas ondas abaixo. Uma moldura por épico mais uma "Sem
 pai" espalhava a sprint em desenhos que não se comparavam. As **ondas de implementação**
-(`implementationWaves`) saem do `blocked_by` de cada card, contando só bloqueador que esteja
-no desenho — fora da sprint não há onda de onde empurrar; entre épicos diferentes conta, e é
-o que a onda existe para mostrar. Quem cai na onda 2+ perde a seta do épico: ela cruzaria as
-ondas de cima por trás dos cards, e o vínculo se lê pela corrente de bloqueio que leva da
-onda 1 até ela.
+(`implementationWaves`) saem do `predecessors` de cada card — bloqueador ("Blocks") e origem
+("is caused by", link `Problem/Incident`), **concluídos ou não** — contando só quem esteja no
+desenho: fora da sprint não há onda de onde empurrar; entre épicos diferentes conta, e é o
+que a onda existe para mostrar. Não use o `blocked_by` para isso: ele perde o bloqueador
+quando ele conclui, e a sprint se desmanchava numa linha só conforme as tarefas fechavam.
+"Relates" entre tarefas não tem direção e não entra na ordem. Quem cai na onda 2+ perde a
+seta do épico: ela cruzaria as ondas de cima por trás dos cards, e o vínculo se lê pela
+corrente de bloqueio (ou de origem) que leva da onda 1 até ela.
 
 **Front** — tela ou painel que mostra dado do espelho observa `refresh.revision`
 (`stores/refresh.js`) e recarrega; quem alimenta esse contador é só o `AppShell` — inclusive

@@ -8,12 +8,24 @@ Regras:
   sem ancestral desse tipo vão para o grupo "Sem pai" (subtarefas continuam aninhadas).
 - Bloqueio: link "Blocks" entre tarefas do grafo vira seta; tarefa com bloqueador ainda
   não concluído conta como bloqueada.
+- Origem: link "is caused by" entre tarefas do grafo vira seta "origina".
+- Ordem das ondas (`predecessors`): bloqueadores e origens do grafo, **concluídos ou não**.
+  O bloqueio se desfaz quando o bloqueador fecha; a ordem em que as coisas foram feitas,
+  não — senão a sprint se desmancha numa linha só conforme as tarefas vão sendo concluídas.
 """
 
 from dataclasses import dataclass, field
 from typing import Any
 
-from services.hierarchy import BLOCK_LINK_TYPE, PARENT_ISSUE_TYPES, is_hierarchy_link
+from services.hierarchy import (
+    BLOCK_LINK_TYPE,
+    CAUSE_LINK_TYPE,
+    PARENT_ISSUE_TYPES,
+    is_hierarchy_link,
+)
+
+# Tipo de link → (tipo da aresta, rótulo). Origem da aresta é quem vem antes.
+DEPENDENCY_LINKS = {BLOCK_LINK_TYPE: ("blocks", "bloqueia"), CAUSE_LINK_TYPE: ("causes", "origina")}
 
 NO_PARENT_GROUP = "__sem_pai__"
 
@@ -36,6 +48,7 @@ class TreeNode:
     depth: int = 0
     blocked_by: list[str] = field(default_factory=list)
     blocks: list[str] = field(default_factory=list)
+    predecessors: list[str] = field(default_factory=list)
     children: list[str] = field(default_factory=list)
     # nó montado só com o snapshot do link (pai fora do espelho)
     partial: bool = False
@@ -49,7 +62,7 @@ class TreeNode:
 class TreeEdge:
     source: str
     target: str
-    kind: str  # "parent" | "link" | "blocks"
+    kind: str  # "parent" | "link" | "blocks" | "causes"
     label: str | None = None
 
 
@@ -180,7 +193,7 @@ def build_tree(
         for n in nodes.values()
         if n.parent_key
     ]
-    edges += _block_edges(nodes, links_by_source, related)
+    edges += _dependency_edges(nodes, links_by_source, related)
 
     groups = _groups(nodes)
     sprint_nodes = [n for n in nodes.values() if n.in_sprint]
@@ -242,31 +255,36 @@ def _groups(nodes: dict[str, TreeNode]) -> list[TreeGroup]:
     ]
 
 
-def _block_edges(
+def _dependency_edges(
     nodes: dict[str, TreeNode],
     links_by_source: dict[str, list[dict[str, Any]]],
     related: dict[str, dict[str, Any]],
 ) -> list[TreeEdge]:
-    edges: dict[tuple[str, str], TreeEdge] = {}
+    edges: dict[tuple[str, str, str], TreeEdge] = {}
     for source, source_links in links_by_source.items():
         if source not in nodes:
             continue
         for link in source_links:
-            if link["link_type"] != BLOCK_LINK_TYPE:
+            if link["link_type"] not in DEPENDENCY_LINKS:
                 continue
+            kind, label = DEPENDENCY_LINKS[link["link_type"]]
             target = link["target_key"]
-            blocker, blocked = (
-                (source, target) if link["direction"] == "outward" else (target, source)
-            )
-            if blocked in nodes and blocker not in nodes[blocked].blocked_by:
-                if not _is_done(blocker, nodes, related, link):
-                    nodes[blocked].blocked_by.append(blocker)
-            if blocker in nodes and blocked not in nodes[blocker].blocks:
-                nodes[blocker].blocks.append(blocked)
-            if blocker in nodes and blocked in nodes:
-                edges[(blocker, blocked)] = TreeEdge(
-                    source=blocker, target=blocked, kind="blocks", label="bloqueia"
+            before, after = (source, target) if link["direction"] == "outward" else (target, source)
+            if kind == "blocks":
+                if after in nodes and before not in nodes[after].blocked_by:
+                    if not _is_done(before, nodes, related, link):
+                        nodes[after].blocked_by.append(before)
+                if before in nodes and after not in nodes[before].blocks:
+                    nodes[before].blocks.append(after)
+            if before in nodes and after in nodes and before != after:
+                if before not in nodes[after].predecessors:
+                    nodes[after].predecessors.append(before)
+                edges[(kind, before, after)] = TreeEdge(
+                    source=before, target=after, kind=kind, label=label
                 )
+    # A consulta dos links não tem ordem: sem isto a resposta mudaria a cada chamada.
+    for node in nodes.values():
+        node.predecessors.sort()
     return list(edges.values())
 
 

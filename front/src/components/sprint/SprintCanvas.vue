@@ -246,4 +246,19 @@ function onNodeClick({ event, node }) {
   font-size: 11px;
   font-weight: 600;
 }
+
+.canvas :deep(.edge--causes path.vue-flow__edge-path) {
+  stroke: var(--color-warning);
+  stroke-width: 1.8;
+}
+
+.canvas :deep(.edge--causes .vue-flow__edge-textbg) {
+  fill: var(--color-warning-surface);
+}
+
+.canvas :deep(.edge--causes .vue-flow__edge-text) {
+  fill: var(--color-warning-text);
+  font-size: 11px;
+  font-weight: 600;
+}
 </style>
