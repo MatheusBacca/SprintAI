@@ -206,6 +206,8 @@ async def test_lembrete_relevante_vencido_fixado_ou_da_sprint(
     await client.post("/api/notes", json={"title": "Fixado", "pinned": True})
     await client.post("/api/notes", json={"title": "Da tarefa da sprint", "issue_keys": ["WAI-1"]})
     await client.post("/api/notes", json={"title": "Solto e sem hora"})
+    # Futuro para o NOW do teste e passado para o relógio real: "vencido" tem de contar a
+    # partir do relógio da Home, não do `now()` do banco.
     await client.post(
         "/api/notes", json={"title": "Semana que vem", "remind_at": "2026-09-25T09:00:00-03:00"}
     )

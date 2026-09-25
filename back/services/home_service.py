@@ -100,6 +100,7 @@ async def get_home(
 
     reminder_rows = await notes_repo.relevant(
         pool,
+        now=instant,
         until=instant + REMINDER_WINDOW,
         issue_keys=[i["key"] for i in issues],
     )

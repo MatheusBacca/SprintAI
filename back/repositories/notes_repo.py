@@ -231,26 +231,31 @@ async def snooze(conn: Executor, note_id: int, until: datetime) -> bool:
 
 
 async def relevant(
-    conn: Executor, *, until: datetime, issue_keys: list[str], limit: int = 8
+    conn: Executor, *, now: datetime, until: datetime, issue_keys: list[str], limit: int = 8
 ) -> list[dict[str, Any]]:
     """Lembretes que a Home mostra: vencidos ainda não vistos, os das próximas horas,
-    os fixados e os ligados a uma tarefa da sprint ativa. Vencido primeiro."""
+    os fixados e os ligados a uma tarefa da sprint ativa. Vencido primeiro.
+
+    "Vencido" e "próximas horas" contam a partir do mesmo `now` que deu o `until`. Com o
+    `now()` do banco numa ponta e o relógio da Home na outra, um lembrete futuro para a
+    Home virava "vencido" assim que o relógio real passava dele."""
     rows = await conn.fetch(
         f"""
         SELECT {NOTE_COLUMNS}, NULL::real AS rank,
-               (n.remind_at IS NOT NULL AND n.reminded_at IS NULL AND n.remind_at <= now())
+               (n.remind_at IS NOT NULL AND n.reminded_at IS NULL AND n.remind_at <= $1)
                    AS overdue
         FROM note n
         WHERE NOT n.archived AND (
-            (n.remind_at IS NOT NULL AND n.reminded_at IS NULL AND n.remind_at <= now())
-            OR (n.remind_at > now() AND n.remind_at <= $1)
+            (n.remind_at IS NOT NULL AND n.reminded_at IS NULL AND n.remind_at <= $1)
+            OR (n.remind_at > $1 AND n.remind_at <= $2)
             OR n.pinned
             OR EXISTS (SELECT 1 FROM note_issue_link l
-                       WHERE l.note_id = n.id AND l.issue_key = ANY($2::text[]))
+                       WHERE l.note_id = n.id AND l.issue_key = ANY($3::text[]))
         )
         ORDER BY overdue DESC, n.pinned DESC, n.remind_at NULLS LAST, n.updated_at DESC
-        LIMIT $3
+        LIMIT $4
         """,
+        now,
         until,
         issue_keys,
         limit,
