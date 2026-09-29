@@ -179,6 +179,57 @@ async def test_mudanca_de_etapa_do_pr_acende_o_card(db_app, client, db_pool, see
     assert nodes["WAI-7001"]["unseen_changes"] == ["pr"]
 
 
+REVIEWER = {"role": "REVIEWER", "approved": False, "state": None, "name": "Rafael"}
+APPROVED = {"role": "REVIEWER", "approved": True, "state": "approved", "name": "Felipe"}
+
+
+async def _participants(pool, participants):
+    await pool.execute(
+        "UPDATE bb_pull_request SET participants = $1 WHERE repo_slug = 'monitoria' AND id = 412",
+        participants,
+    )
+
+
+async def _tree_nodes(client):
+    return {n["key"]: n for n in (await client.get("/api/sprints/3995/tree")).json()["nodes"]}
+
+
+async def test_trocar_a_regra_de_aprovacao_nao_acende_o_card(db_app, client, db_pool, seeded):
+    await _participants(db_pool, [REVIEWER, APPROVED])
+    assert (await _tree_nodes(client))["WAI-7001"]["pr"]["status"] == "aprovada"
+
+    await client.put("/api/preferences/pr-approval", json={"min_percent": 100})
+
+    node = (await _tree_nodes(client))["WAI-7001"]
+    assert node["pr"]["status"] == "pr_aberta"
+    assert node["unseen_changes"] == []  # a mudança foi do próprio dev
+
+
+async def test_trocar_a_regra_mantem_aceso_o_que_mudou_de_verdade(
+    db_app, client, db_pool, seeded
+):
+    await _tree_nodes(client)  # foto: PR aberta, sem revisor
+    await _participants(db_pool, [APPROVED])  # o revisor aprovou (1/1) — ainda não visto
+
+    await client.put("/api/preferences/pr-approval", json={"min_percent": 100})
+
+    node = (await _tree_nodes(client))["WAI-7001"]
+    assert node["pr"]["status"] == "aprovada"
+    assert node["unseen_changes"] == ["pr"]
+
+
+async def test_aprovacao_nova_sem_mudar_a_etapa_acende_o_card(db_app, client, db_pool, seeded):
+    await client.put("/api/preferences/pr-approval", json={"min_percent": 50})
+    await _participants(db_pool, [REVIEWER, APPROVED])
+    await _tree_nodes(client)  # foto: aprovada, 1/2
+
+    await _participants(db_pool, [dict(REVIEWER, approved=True, state="approved"), APPROVED])
+
+    node = (await _tree_nodes(client))["WAI-7001"]
+    assert node["pr"]["review"]["approvals"] == 2
+    assert node["unseen_changes"] == ["pr_review"]
+
+
 async def test_marcar_visto_tarefa_fora_do_espelho_da_404(db_app, client, seeded):
     assert (await client.post("/api/issues/WAI-9999/seen")).status_code == 404
 

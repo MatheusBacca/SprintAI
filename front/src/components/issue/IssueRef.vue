@@ -36,6 +36,7 @@ const emit = defineEmits(['open'])
       :build-failed="item.pr.build_failed"
       :links="item.pr.links ?? []"
       :issue-key="item.key"
+      :review="item.pr.review"
       size="sm"
     />
   </li>

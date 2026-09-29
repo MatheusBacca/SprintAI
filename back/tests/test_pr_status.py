@@ -3,10 +3,13 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from services.pr_status import (
+    ApprovalRule,
     PrStatus,
     RepoPrStatus,
+    ReviewProgress,
     aggregate_status,
     derive_pr_status,
+    review_progress,
     summarize_issue,
 )
 
@@ -14,7 +17,12 @@ T0 = datetime(2026, 9, 10, 12, 0, tzinfo=UTC)
 
 REVIEWER = {"role": "REVIEWER", "approved": False, "state": None, "name": "Revisor"}
 APPROVED = {"role": "REVIEWER", "approved": True, "state": "approved", "name": "Aprovador"}
+APPROVED_2 = {"role": "REVIEWER", "approved": True, "state": "approved", "name": "Outro"}
 CHANGES = {"role": "REVIEWER", "approved": False, "state": "changes_requested", "name": "Crítico"}
+COMMENTER = {"role": "PARTICIPANT", "approved": False, "state": None, "name": "Curioso"}
+
+ALL = ApprovalRule(min_percent=100)
+HALF = ApprovalRule(min_percent=50)
 
 
 def pr(
@@ -92,6 +100,137 @@ def test_correcao_enviada_devolve_o_pr_para_pr_aberta():
         )
         is PrStatus.PR_ABERTA
     )
+
+
+# --- Regra de aprovação ------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("percent", "reviewers", "required"),
+    [
+        (0, 3, 1),  # regra de antes: basta uma
+        (50, 2, 1),
+        (50, 3, 2),  # metade de 3 arredonda para cima
+        (100, 3, 3),
+        (100, 0, 1),  # sem revisor, uma aprovação continua sendo o piso
+        (0, 0, 1),
+    ],
+)
+def test_aprovacoes_que_a_regra_pede(percent, reviewers, required):
+    assert ApprovalRule(min_percent=percent).required(reviewers) == required
+
+
+@pytest.mark.parametrize(
+    ("value", "percent"),
+    [
+        (None, 0),
+        ({"min_percent": 50}, 50),
+        ({"min_percent": 100}, 100),
+        ({"min_percent": 150}, 0),
+        ({"min_percent": "50"}, 0),
+        ({"min_percent": True}, 0),
+        ([50], 0),
+    ],
+)
+def test_regra_salva_invalida_cai_na_de_antes(value, percent):
+    assert ApprovalRule.from_setting(value).min_percent == percent
+
+
+@pytest.mark.parametrize(
+    ("participants", "rule", "expected"),
+    [
+        # Caso real WAI-8791: um dos dois revisores aprovou.
+        ([REVIEWER, APPROVED], ALL, PrStatus.PR_ABERTA),
+        ([REVIEWER, APPROVED], HALF, PrStatus.APROVADA),
+        ([APPROVED, APPROVED_2], ALL, PrStatus.APROVADA),
+        ([REVIEWER, REVIEWER, APPROVED], HALF, PrStatus.PR_ABERTA),
+        ([REVIEWER, APPROVED, APPROVED_2], HALF, PrStatus.APROVADA),
+        # Quem só comentou não conta como revisor que falta aprovar.
+        ([APPROVED, COMMENTER], ALL, PrStatus.APROVADA),
+        ([REVIEWER], HALF, PrStatus.PR_ABERTA),
+    ],
+)
+def test_status_por_pr_segue_a_regra(participants, rule, expected):
+    assert (
+        derive_pr_status(state="OPEN", draft=False, participants=participants, rule=rule)
+        is expected
+    )
+
+
+def test_pedido_de_ajuste_vence_a_regra_ja_batida():
+    participants = [APPROVED, APPROVED_2, CHANGES]
+
+    assert (
+        derive_pr_status(state="OPEN", draft=False, participants=participants, rule=HALF)
+        is PrStatus.AJUSTES_REQUISITADOS
+    )
+    # Correção no ar: quem pediu o ajuste ainda não olhou, então não vira "aprovada".
+    assert (
+        derive_pr_status(
+            state="OPEN", draft=False, participants=participants, fix_pushed=True, rule=HALF
+        )
+        is PrStatus.PR_ABERTA
+    )
+
+
+def test_andamento_da_review_conta_aprovacoes_e_ajustes_pendentes():
+    review = review_progress(
+        state="OPEN",
+        draft=False,
+        participants=[REVIEWER, APPROVED, CHANGES, COMMENTER],
+        rule=ALL,
+    )
+
+    assert review == ReviewProgress(approvals=1, reviewers=3, changes_requested=1, required=3)
+
+
+def test_correcao_enviada_tira_o_amarelo_da_barra():
+    review = review_progress(
+        state="OPEN", draft=False, participants=[APPROVED, CHANGES], fix_pushed=True
+    )
+
+    assert (review.approvals, review.changes_requested) == (1, 0)
+
+
+@pytest.mark.parametrize(
+    ("state", "draft", "participants"),
+    [
+        ("MERGED", False, [APPROVED]),
+        ("DECLINED", False, [CHANGES]),
+        ("OPEN", True, [APPROVED]),
+        ("OPEN", False, []),
+        ("OPEN", False, [COMMENTER]),
+    ],
+)
+def test_sem_review_andando_nao_ha_barra(state, draft, participants):
+    assert review_progress(state=state, draft=draft, participants=participants) is None
+
+
+def test_review_do_card_e_a_do_pr_que_decide_o_status():
+    summary = summarize_issue(
+        "WAI-7001",
+        [
+            pr(repo="weaction-api", pid=20, state="MERGED", participants=[APPROVED]),
+            pr(repo="supervisor-web", pid=10, participants=[REVIEWER, APPROVED]),
+            pr(repo="supervisor-web", pid=11, participants=[APPROVED], updated=T0 - timedelta(1)),
+        ],
+        [],
+        ALL,
+    )
+
+    # pid 11 já está aprovado (1/1), pid 10 não (1/2): o card fica em "PR aberta" pelo 10.
+    assert summary.status is PrStatus.PR_ABERTA
+    assert summary.review == ReviewProgress(
+        approvals=1, reviewers=2, changes_requested=0, required=2
+    )
+    supervisor = summary.repos[0]
+    assert (supervisor.repo_slug, supervisor.review) == ("supervisor-web", summary.review)
+    assert summary.repos[1].review is None  # repo só com mergeado
+
+
+def test_card_sem_pr_aberto_nao_tem_review():
+    assert summarize_issue("WAI-7001", [pr(state="MERGED", participants=[APPROVED])], []).review is None
+    assert summarize_issue("WAI-7001", [], [branch()]).review is None
 
 
 @pytest.mark.parametrize(
@@ -352,3 +491,28 @@ def test_badge_sem_pr_nao_tem_link():
     from services.pr_status_service import to_badge
 
     assert to_badge(summarize_issue("WAI-7001", [], [branch()])).links == []
+
+
+def test_badge_leva_a_review_do_card_e_a_de_cada_link():
+    from services.pr_status_service import to_badge
+
+    summary = summarize_issue(
+        "WAI-7001",
+        [
+            pr(repo="supervisor-web", pid=10, participants=[REVIEWER, APPROVED, CHANGES]),
+            pr(repo="weaction-api", pid=20, state="MERGED", participants=[APPROVED]),
+        ],
+        [],
+        HALF,
+    )
+
+    badge = to_badge(summary)
+
+    assert badge.status is PrStatus.AJUSTES_REQUISITADOS
+    assert badge.review.model_dump() == {
+        "approvals": 1,
+        "reviewers": 3,
+        "changes_requested": 1,
+        "required": 2,
+    }
+    assert [link.review.approvals if link.review else None for link in badge.links] == [1, None]

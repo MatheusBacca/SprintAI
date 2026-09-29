@@ -5,7 +5,7 @@ Por PR:
     OPEN + draft → rascunho
     OPEN + algum "changes requested" e ainda sem correção → ajustes_requisitados
     OPEN + algum "changes requested" com correção já enviada → pr_aberta
-    OPEN + ≥1 aprovação → aprovada
+    OPEN + aprovações que a regra pede (`ApprovalRule`) → aprovada
     OPEN → pr_aberta
 
 Por repositório (uma tarefa pode ter vários PRs no mesmo repo):
@@ -68,6 +68,52 @@ FAILED_BUILDS = {"FAILED", "STOPPED"}
 
 
 @dataclass(frozen=True)
+class ApprovalRule:
+    """Quanto dos revisores precisa aprovar para o PR contar como aprovado.
+
+    `min_percent` 0 é a regra de antes da configuração — basta uma aprovação —; 50 é
+    "pelo menos metade" e 100, "todos". Uma aprovação é o piso de qualquer regra: PR sem
+    ninguém aprovando não está aprovado nem com 0%.
+    """
+
+    min_percent: int = 0
+
+    @classmethod
+    def from_setting(cls, value: Any) -> "ApprovalRule":
+        """Sem configuração salva vale a regra de antes: nada muda sozinho no card."""
+        percent = value.get("min_percent") if isinstance(value, dict) else None
+        if isinstance(percent, int) and not isinstance(percent, bool) and 0 <= percent <= 100:
+            return cls(min_percent=percent)
+        return cls()
+
+    def to_setting(self) -> dict[str, int]:
+        return {"min_percent": self.min_percent}
+
+    def required(self, reviewers: int) -> int:
+        # Teto em inteiro: 50% de 3 revisores são 2 aprovações, não 1,5.
+        return max(1, -(-reviewers * self.min_percent // 100))
+
+    def approved(self, approvals: int, reviewers: int) -> bool:
+        return approvals >= self.required(reviewers)
+
+
+DEFAULT_RULE = ApprovalRule()
+
+
+@dataclass(frozen=True)
+class ReviewProgress:
+    """Andamento da review de um PR aberto — o badge vira a barra e o "N/X"."""
+
+    approvals: int
+    reviewers: int
+    # Pedidos de ajuste ainda sem correção: o amarelo da barra. Com a correção no ar a vez
+    # é do revisor, e o pedaço dele volta a ser espera — o mesmo que o status já diz.
+    changes_requested: int
+    # Aprovações que a regra pede para o PR contar como aprovado.
+    required: int
+
+
+@dataclass(frozen=True)
 class Reviewer:
     name: str | None
     role: str | None
@@ -96,6 +142,7 @@ class PullRequestLink:
     match: str
     # Ajuste pedido e correção já subida — o PR voltou para a fila do revisor.
     fix_pushed: bool = False
+    review: ReviewProgress | None = None
 
     @property
     def build_failed(self) -> bool:
@@ -116,6 +163,7 @@ class RepoPrStatus:
     status: PrStatus
     pull_requests: list[PullRequestLink] = field(default_factory=list)
     branches: list[BranchLink] = field(default_factory=list)
+    review: ReviewProgress | None = None
 
 
 @dataclass
@@ -127,6 +175,8 @@ class IssuePrSummary:
     build_failed: bool
     repos: list[RepoPrStatus]
     last_activity: datetime | None
+    # Do PR que decide o status — o mesmo que o badge abre primeiro.
+    review: ReviewProgress | None = None
 
     @property
     def label(self) -> str:
@@ -154,12 +204,22 @@ def fix_after_request(last_request: datetime | None, last_commit: datetime | Non
     return last_commit >= last_request
 
 
+def _is_reviewer(participant: dict[str, Any]) -> bool:
+    """Revisor designado ou quem se manifestou — quem só comentou não entra na conta."""
+    return (
+        participant.get("role") == "REVIEWER"
+        or bool(participant.get("approved"))
+        or bool(participant.get("state"))
+    )
+
+
 def derive_pr_status(
     *,
     state: str,
     draft: bool,
     participants: list[dict[str, Any]],
     fix_pushed: bool = False,
+    rule: ApprovalRule = DEFAULT_RULE,
 ) -> PrStatus:
     if state == "MERGED":
         return PrStatus.MERGEADA
@@ -171,15 +231,39 @@ def derive_pr_status(
         return PrStatus.RASCUNHO
     if any(p.get("state") == "changes_requested" for p in participants):
         # Com a correção no ar a bola está com o revisor, não comigo — o card volta a
-        # "PR aberta" e não a "aprovada": a aprovação que existe é de outro revisor, e
-        # quem pediu o ajuste ainda não olhou a correção.
+        # "PR aberta" e não a "aprovada", nem com a regra já batida pelos outros: quem
+        # pediu o ajuste ainda não olhou a correção.
         return PrStatus.PR_ABERTA if fix_pushed else PrStatus.AJUSTES_REQUISITADOS
-    if any(p.get("approved") for p in participants):
+    approvals = sum(1 for p in participants if p.get("approved"))
+    if rule.approved(approvals, sum(1 for p in participants if _is_reviewer(p))):
         return PrStatus.APROVADA
     return PrStatus.PR_ABERTA
 
 
-def pull_request_link(issue_key: str, row: dict[str, Any]) -> PullRequestLink:
+def review_progress(
+    *,
+    state: str,
+    draft: bool,
+    participants: list[dict[str, Any]],
+    fix_pushed: bool = False,
+    rule: ApprovalRule = DEFAULT_RULE,
+) -> ReviewProgress | None:
+    """Só PR aberto, fora do rascunho e com alguém revisando tem review andando."""
+    reviewers = [p for p in participants if _is_reviewer(p)]
+    if state != "OPEN" or draft or not reviewers:
+        return None
+    changes = sum(1 for p in reviewers if p.get("state") == "changes_requested")
+    return ReviewProgress(
+        approvals=sum(1 for p in reviewers if p.get("approved")),
+        reviewers=len(reviewers),
+        changes_requested=0 if fix_pushed else changes,
+        required=rule.required(len(reviewers)),
+    )
+
+
+def pull_request_link(
+    issue_key: str, row: dict[str, Any], rule: ApprovalRule = DEFAULT_RULE
+) -> PullRequestLink:
     participants = row.get("participants") or []
     fix_pushed = fix_after_request(
         row.get("last_changes_requested_at"), row.get("last_commit_at")
@@ -187,17 +271,19 @@ def pull_request_link(issue_key: str, row: dict[str, Any]) -> PullRequestLink:
     branch_keys = extract_issue_keys(
         row.get("source_branch"), project_keys=[issue_key.split("-", 1)[0]]
     )
+    pr_state = {
+        "state": row["state"],
+        "draft": bool(row.get("draft")),
+        "participants": participants,
+        "fix_pushed": fix_pushed,
+        "rule": rule,
+    }
     return PullRequestLink(
         repo_slug=row["repo_slug"],
         id=row["id"],
         title=row.get("title") or "",
         state=row["state"],
-        status=derive_pr_status(
-            state=row["state"],
-            draft=bool(row.get("draft")),
-            participants=participants,
-            fix_pushed=fix_pushed,
-        ),
+        status=derive_pr_status(**pr_state),
         draft=bool(row.get("draft")),
         source_branch=row.get("source_branch"),
         destination_branch=row.get("destination_branch"),
@@ -213,12 +299,13 @@ def pull_request_link(issue_key: str, row: dict[str, Any]) -> PullRequestLink:
                 state=p.get("state"),
             )
             for p in participants
-            if p.get("role") == "REVIEWER" or p.get("approved") or p.get("state")
+            if _is_reviewer(p)
         ],
         build_status=row.get("build_status"),
         comment_count=row.get("comment_count"),
         match="branch" if issue_key in branch_keys else "title",
         fix_pushed=fix_pushed,
+        review=review_progress(**pr_state),
     )
 
 
@@ -240,6 +327,13 @@ def _relevance(pr: PullRequestLink) -> tuple[int, float]:
     return group, recency
 
 
+def _deciding_review(
+    items: list[PullRequestLink] | list[RepoPrStatus], status: PrStatus
+) -> ReviewProgress | None:
+    """A review de quem decide o status: o primeiro, na ordem de atenção, que está nele."""
+    return next((item.review for item in items if item.status == status), None)
+
+
 def repo_status(prs: list[PullRequestLink], branches: list[BranchLink]) -> PrStatus:
     if not prs:
         return PrStatus.BRANCH_SEM_PR if branches else PrStatus.SEM_PR
@@ -257,9 +351,16 @@ def repo_status(prs: list[PullRequestLink], branches: list[BranchLink]) -> PrSta
 
 
 def summarize_issue(
-    issue_key: str, pr_rows: list[dict[str, Any]], branch_rows: list[dict[str, Any]]
+    issue_key: str,
+    pr_rows: list[dict[str, Any]],
+    branch_rows: list[dict[str, Any]],
+    rule: ApprovalRule = DEFAULT_RULE,
 ) -> IssuePrSummary:
-    prs = [pull_request_link(issue_key, row) for row in pr_rows if issue_key in row["issue_keys"]]
+    prs = [
+        pull_request_link(issue_key, row, rule)
+        for row in pr_rows
+        if issue_key in row["issue_keys"]
+    ]
     last_pr_activity = max((pr.updated_on for pr in prs if pr.updated_on), default=None)
 
     prs_by_repo: dict[str, list[PullRequestLink]] = defaultdict(list)
@@ -285,27 +386,32 @@ def summarize_issue(
             branches_by_repo.get(slug, []),
             key=lambda b: -(b.target_date.timestamp() if b.target_date else 0),
         )
+        of_repo = repo_status(repo_prs, repo_branches)
         repos.append(
             RepoPrStatus(
                 repo_slug=slug,
-                status=repo_status(repo_prs, repo_branches),
+                status=of_repo,
                 pull_requests=repo_prs,
                 branches=repo_branches,
+                review=_deciding_review(repo_prs, of_repo),
             )
         )
 
+    status = aggregate_status(repos)
+    repos = sorted(repos, key=lambda r: _repo_order(r.status))
     return IssuePrSummary(
         issue_key=issue_key,
-        status=aggregate_status(repos),
+        status=status,
         pr_count=len(prs),
         open_pr_count=sum(1 for pr in prs if pr.state == "OPEN"),
         build_failed=any(pr.build_failed for pr in prs),
-        repos=sorted(repos, key=lambda r: _repo_order(r.status)),
+        repos=repos,
         last_activity=max(
             [pr.updated_on for pr in prs if pr.updated_on]
             + [b.target_date for r in repos for b in r.branches if b.target_date],
             default=None,
         ),
+        review=_deciding_review(repos, status),
     )
 
 

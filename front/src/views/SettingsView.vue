@@ -5,6 +5,7 @@ import { ShieldCheck } from 'lucide-vue-next'
 import BitbucketConnectionForm from '@/components/settings/BitbucketConnectionForm.vue'
 import ConnectionCard from '@/components/settings/ConnectionCard.vue'
 import JiraConnectionForm from '@/components/settings/JiraConnectionForm.vue'
+import PrApprovalPanel from '@/components/settings/PrApprovalPanel.vue'
 import ProgressStagesPanel from '@/components/settings/ProgressStagesPanel.vue'
 import ShortcutsPanel from '@/components/settings/ShortcutsPanel.vue'
 import SyncSettingsPanel from '@/components/settings/SyncSettingsPanel.vue'
@@ -18,6 +19,7 @@ const tabs = [
   { id: 'conexoes', label: 'Conexões' },
   { id: 'sincronizacao', label: 'Sincronização' },
   { id: 'progresso', label: 'Progresso' },
+  { id: 'pull-requests', label: 'Pull requests' },
   { id: 'atalhos', label: 'Atalhos' },
 ]
 
@@ -57,6 +59,7 @@ onMounted(() => store.load())
 
     <SyncSettingsPanel v-if="activeTab === 'sincronizacao'" />
     <ProgressStagesPanel v-else-if="activeTab === 'progresso'" />
+    <PrApprovalPanel v-else-if="activeTab === 'pull-requests'" />
     <ShortcutsPanel v-else-if="activeTab === 'atalhos'" />
 
     <template v-else>

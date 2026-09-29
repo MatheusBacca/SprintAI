@@ -28,3 +28,21 @@ export const PR_STATUS_LEGEND = [
 export function prStatusMeta(status) {
   return PR_STATUS[status] ?? PR_STATUS.sem_pr
 }
+
+/** Status em que a review está andando: o badge mostra a barra e o "N/X". */
+export const REVIEW_STATUSES = new Set(['ajustes_requisitados', 'pr_aberta', 'aprovada'])
+
+/**
+ * Regras de Configurações › Pull requests (`min_percent` do back). 0 é a de antes — basta
+ * uma aprovação — e continua sendo o padrão, para nenhum card mudar sozinho.
+ */
+export const APPROVAL_RULES = [
+  { percent: 0, label: 'Uma aprovação', hint: 'O PR fica "Aprovada" com a primeira aprovação, qualquer que seja o número de revisores.' },
+  { percent: 50, label: 'Pelo menos 50%', hint: 'Metade dos revisores precisa aprovar — com 3 revisores, são 2 aprovações.' },
+  { percent: 100, label: 'Todos', hint: 'Todos os revisores precisam aprovar.' },
+]
+
+/** Por extenso, para o title — no badge fica só o "N/X". */
+export function approvalsLabel({ approvals, reviewers }) {
+  return `${approvals}/${reviewers} ${reviewers === 1 ? 'aprovação' : 'aprovações'}`
+}

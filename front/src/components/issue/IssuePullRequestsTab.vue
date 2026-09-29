@@ -112,7 +112,7 @@ function reviewCount(pr) {
     <article v-for="repo in summary.repos" :key="repo.repo_slug" class="prs__repo">
       <header class="prs__repo-header">
         <strong>{{ repo.repo_slug }}</strong>
-        <PrStatusBadge :status="repo.status" size="sm" />
+        <PrStatusBadge :status="repo.status" :review="repo.review" size="sm" />
       </header>
 
       <ul class="prs__list">
@@ -122,7 +122,7 @@ function reviewCount(pr) {
               #{{ pr.id }} {{ pr.title }} <ExternalLink :size="11" />
             </a>
             <span v-else class="pr__title">#{{ pr.id }} {{ pr.title }}</span>
-            <PrStatusBadge :status="pr.status" :href="pr.url" size="sm" />
+            <PrStatusBadge :status="pr.status" :href="pr.url" :review="pr.review" size="sm" />
           </div>
 
           <div class="pr__branch">

@@ -97,6 +97,7 @@ async def sprint_tree(
                 story_points=n.story_points,
                 assignee_name=n.assignee_name,
                 pr_status=summaries[n.key].status if n.key in summaries else None,
+                pr_review=summaries[n.key].review if n.key in summaries else None,
                 with_pr=n.in_sprint,
             )
             for n in tree.nodes.values()

@@ -310,6 +310,7 @@ const percent = (value) => `${Math.round((value ?? 0) * 100)}%`
                   :build-failed="row.issue.pr.build_failed"
                   :links="row.issue.pr.links ?? []"
                   :issue-key="row.issue.key"
+                  :review="row.issue.pr.review"
                   size="sm"
                 />
               </template>

@@ -142,6 +142,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             :build-failed="issue.pull_requests.build_failed"
             :links="issue.pull_requests.links ?? []"
             :issue-key="issue.key"
+            :review="issue.pull_requests.review"
             size="sm"
           />
         </template>

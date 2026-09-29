@@ -404,7 +404,20 @@ Segunda a domingo no fuso do navegador, com navegação entre semanas (`?dia=AAA
 
 Regras em `back/services/pr_status.py` (funções puras, 100% de cobertura):
 
-- **Por PR:** Mergeada · Recusada · Substituída · Rascunho (draft) · Ajustes requisitados (algum *changes requested* ainda sem correção) · Aprovada (≥1 aprovação) · PR aberta.
+- **Por PR:** Mergeada · Recusada · Substituída · Rascunho (draft) · Ajustes requisitados (algum *changes requested* ainda sem correção) · Aprovada (as aprovações que a regra pede) · PR aberta.
+- **Regra de aprovação** em **Configurações › Pull requests**: *Uma aprovação* (a regra de
+  sempre, e o padrão), *Pelo menos 50%* ou *Todos* os revisores — gravada em
+  `app_setting.pr_approval` como porcentagem, com teto (50% de 3 revisores são 2 aprovações).
+  Revisor é quem foi designado ou se manifestou; quem só comentou não conta. Pedido de ajuste
+  continua vencendo: com ele no ar — ou respondido e esperando o revisor olhar — o PR não vira
+  Aprovada, nem com a regra já batida pelos outros. Trocar a regra não acende a bolinha de
+  "teve atualização" nos cards que mudaram de etapa por causa dela.
+- **Badge com a review andando** (PR aberta, Aprovada ou Ajustes requisitados, com revisor): o
+  rótulo vira **"N/X"**, à direita de uma barra em listras diagonais — verde para quem aprovou,
+  amarelo para ajuste pedido e ainda sem correção, liso para quem falta revisar. O texto fica
+  fora da barra: por cima das listras ele ficava ruim de ler. O status segue na borda, no ícone
+  e no *title* ("1/2 aprovações", e quantas aprovações faltam). No
+  card do canvas, uma aprovação nova acende a bolinha mesmo sem mudar a etapa.
 - **Correção enviada devolve o PR a "PR aberta":** o Bitbucket mantém o *changes requested* do
   revisor até ele mexer de novo, então quem diz que a correção subiu é o histórico do espelho —
   commit registrado depois do último pedido de ajuste (`activity_event`). A aba PRs mostra
@@ -454,6 +467,7 @@ Onde a Clipboard API é negada, cai para a seleção temporária e copia só o t
 | `GET /api/issues/{key}/pull-requests` | detalhe por repositório: PRs, aprovações, ajustes, build, branches sem PR |
 | `GET /api/pull-requests/{repo}/{id}/timeline` | histórico do PR: comentários da review + eventos |
 | `POST /api/pr-status` `{"keys": [...]}` | status agregado de várias tarefas (cards da árvore) |
+| `GET/PUT /api/preferences/pr-approval` `{"min_percent": 0\|50\|100}` | regra de aprovação do PR |
 
 ## Tema e tipografia
 

@@ -15,6 +15,23 @@ class ReviewerOut(BaseModel):
     state: str | None
 
 
+class ReviewProgressOut(BaseModel):
+    """Andamento da review de um PR aberto: o badge mostra a barra e o "N/X"."""
+
+    approvals: int
+    reviewers: int
+    # Pedidos de ajuste ainda sem correção (o amarelo da barra).
+    changes_requested: int
+    # Aprovações que a regra de Configurações › Pull requests pede.
+    required: int
+
+
+class ApprovalRuleSettings(BaseModel):
+    """0 é a regra de antes (basta uma aprovação), 50 é "pelo menos metade", 100 "todos"."""
+
+    min_percent: int = Field(ge=0, le=100, strict=True)
+
+
 class PullRequestOut(BaseModel):
     repo_slug: str
     id: int
@@ -37,6 +54,7 @@ class PullRequestOut(BaseModel):
     # Ajuste pedido e correção já enviada — explica o status "PR aberta" com o pedido
     # do revisor ainda em aberto no Bitbucket.
     fix_pushed: bool
+    review: ReviewProgressOut | None = None
 
 
 class BranchOut(BaseModel):
@@ -51,6 +69,7 @@ class RepoPrStatusOut(BaseModel):
     status_label: str
     pull_requests: list[PullRequestOut]
     branches: list[BranchOut]
+    review: ReviewProgressOut | None = None
 
 
 class PrLinkOut(BaseModel):
@@ -62,6 +81,7 @@ class PrLinkOut(BaseModel):
     status: PrStatus
     status_label: str
     url: str
+    review: ReviewProgressOut | None = None
 
 
 class IssuePrSummaryOut(BaseModel):
@@ -74,6 +94,7 @@ class IssuePrSummaryOut(BaseModel):
     last_activity: datetime | None
     repos: list[RepoPrStatusOut]
     links: list[PrLinkOut] = []
+    review: ReviewProgressOut | None = None
 
 
 class PrTimelineEntryOut(BaseModel):
@@ -119,6 +140,7 @@ class PrStatusBadgeOut(BaseModel):
     # Do PR que decide o status para o resto: com um, o badge é o link; com vários, abre
     # a lista para escolher.
     links: list[PrLinkOut] = []
+    review: ReviewProgressOut | None = None
 
 
 class PrStatusBatchIn(BaseModel):

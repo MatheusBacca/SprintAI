@@ -27,7 +27,7 @@ const store = useJiraActionsStore()
           :title="`Abrir ${link.repo_slug} #${link.id} no Bitbucket`"
           @click="store.close()"
         >
-          <PrStatusBadge :status="link.status" size="sm" />
+          <PrStatusBadge :status="link.status" :review="link.review" size="sm" />
           <span class="prlinks__ref">{{ link.repo_slug }} #{{ link.id }}</span>
           <span class="prlinks__name">{{ link.title }}</span>
           <ExternalLink :size="12" class="prlinks__icon" aria-hidden="true" />

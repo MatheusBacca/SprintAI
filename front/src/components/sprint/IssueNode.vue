@@ -99,7 +99,13 @@ function openNotes(event) {
   if (!event.altKey) useUiStore().requestIssueTab(issue.value.key, 'lembretes')
 }
 
-const CHANGE_LABELS = { status: 'status', pr: 'etapa do PR', story_points: 'Story Points', assignee: 'responsável' }
+const CHANGE_LABELS = {
+  status: 'status',
+  pr: 'etapa do PR',
+  pr_review: 'aprovações do PR',
+  story_points: 'Story Points',
+  assignee: 'responsável',
+}
 
 const updates = computed(() => {
   const fields = issue.value.unseen_changes ?? []
@@ -179,6 +185,7 @@ const updates = computed(() => {
           :build-failed="issue.pr.build_failed"
           :links="issue.pr.links ?? []"
           :issue-key="issue.key"
+          :review="issue.pr.review"
           size="sm"
         />
         <span v-if="waitingBlocker" class="node__blocked">bloqueada por {{ issue.blockers_without_pr.join(', ') }}</span>

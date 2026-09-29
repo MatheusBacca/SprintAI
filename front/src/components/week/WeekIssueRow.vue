@@ -59,6 +59,7 @@ const leftover = computed(() => props.issue.sprint_state === 'closed' && !done.v
         :build-failed="issue.pr.build_failed"
         :links="issue.pr.links ?? []"
         :issue-key="issue.key"
+        :review="issue.pr.review"
         size="sm"
       />
     </span>

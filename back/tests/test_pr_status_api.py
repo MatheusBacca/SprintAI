@@ -180,6 +180,7 @@ async def test_lote_para_os_cards(db_app, client, seeded):
         "pr_count": 2,
         "open_pr_count": 1,
         "build_failed": True,
+        "review": {"approvals": 0, "reviewers": 1, "changes_requested": 1, "required": 1},
     }
     # O badge abre primeiro o PR que decide o status do card.
     assert [(link["repo_slug"], link["id"], link["status"]) for link in links] == [
@@ -197,3 +198,48 @@ async def test_lote_para_os_cards(db_app, client, seeded):
 async def test_lote_invalido_da_422(db_app, client, keys):
     response = await client.post("/api/pr-status", json={"keys": keys})
     assert response.status_code == 422
+
+
+# --- Regra de aprovação ------------------------------------------------------------------------
+
+REVIEWER = {"role": "REVIEWER", "approved": False, "state": None, "name": "Rafael"}
+APPROVED = {"role": "REVIEWER", "approved": True, "state": "approved", "name": "Felipe"}
+
+
+async def test_regra_de_aprovacao_comeca_na_de_antes(db_app, client):
+    response = await client.get("/api/preferences/pr-approval")
+
+    assert response.status_code == 200
+    assert response.json() == {"min_percent": 0}
+
+
+async def test_regra_de_aprovacao_decide_quando_o_pr_esta_aprovado(db_app, client, db_pool):
+    # Caso real WAI-8791: dois revisores, um aprovou.
+    await bitbucket_repo.upsert_pull_requests(
+        db_pool,
+        [row("qualificai", 37, "OPEN", "WAI-8791-trial", ["WAI-8791"], participants=[REVIEWER, APPROVED])],
+    )
+
+    async def badge():
+        return (await client.post("/api/pr-status", json={"keys": ["WAI-8791"]})).json()["WAI-8791"]
+
+    assert (await badge())["status"] == "aprovada"  # uma aprovação basta, como antes
+
+    saved = await client.put("/api/preferences/pr-approval", json={"min_percent": 100})
+    assert saved.json() == {"min_percent": 100}
+    assert (await client.get("/api/preferences/pr-approval")).json() == {"min_percent": 100}
+    result = await badge()
+    assert result["status"] == "pr_aberta"
+    assert result["review"] == {"approvals": 1, "reviewers": 2, "changes_requested": 0, "required": 2}
+    assert result["links"][0]["review"]["required"] == 2
+
+    await client.put("/api/preferences/pr-approval", json={"min_percent": 50})
+    assert (await badge())["status"] == "aprovada"
+
+
+@pytest.mark.parametrize("payload", [{"min_percent": 101}, {"min_percent": -1}, {"min_percent": "50"}, {}])
+async def test_regra_de_aprovacao_invalida_da_422(db_app, client, payload):
+    response = await client.put("/api/preferences/pr-approval", json=payload)
+
+    assert response.status_code == 422
+    assert (await client.get("/api/preferences/pr-approval")).json() == {"min_percent": 0}
