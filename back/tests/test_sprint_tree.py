@@ -100,8 +100,113 @@ def test_parent_tem_prioridade_sobre_link():
         my_account_id=ME,
     )
 
-    assert tree.nodes["WAI-10"].parent_key == "WAI-1"
-    assert "WAI-50" not in tree.nodes
+    node = tree.nodes["WAI-10"]
+    assert (node.parent_key, node.parent_via) == ("WAI-1", "parent")
+    # O link não vira o pai: fica como co-pai, sem tirar a tarefa do grupo do épico.
+    assert node.co_parents == ["WAI-50"]
+    assert keys_of(tree, "WAI-1") == ["WAI-1", "WAI-10"]
+
+
+def test_tarefa_fatiada_desce_do_epico_e_do_enhancements():
+    # Sprint 76 - Growth: as Tarefas do plano gratuito têm o Épico QualificAI no `parent`
+    # e um "Relates" para o Enhancements, que também tem a "Analisar e fatiar" dele.
+    tree = build_tree(
+        sprint_issues=[
+            issue("WAI-8790", parent="WAI-7326"),
+            issue("WAI-8791", parent="WAI-7326"),
+            issue("WAI-8678", status_category="done"),
+        ],
+        related_issues=[
+            issue("WAI-7326", type_="Épico", assignee=None),
+            issue("WAI-8677", type_="Enhancements", assignee=None),
+        ],
+        links=[
+            link("WAI-8790", "WAI-8677"),
+            link("WAI-8790", "WAI-8678", target_type="Tarefa"),
+            link("WAI-8791", "WAI-8677"),
+            link("WAI-8678", "WAI-8677", type_="Divisão do ticket", direction="inward"),
+        ],
+        my_account_id=ME,
+    )
+
+    assert [g.root_key for g in tree.groups] == ["WAI-7326", "WAI-8677"]
+    assert keys_of(tree, "WAI-7326") == ["WAI-7326", "WAI-8790", "WAI-8791"]
+    assert tree.nodes["WAI-8790"].co_parents == ["WAI-8677"]
+    enhancements = tree.nodes["WAI-8677"]
+    assert (enhancements.children, enhancements.co_children) == (
+        ["WAI-8678"],
+        ["WAI-8790", "WAI-8791"],
+    )
+    assert {(e.source, e.target, e.kind) for e in tree.edges} == {
+        ("WAI-7326", "WAI-8790", "parent"),
+        ("WAI-7326", "WAI-8791", "parent"),
+        ("WAI-8677", "WAI-8678", "link"),
+        ("WAI-8677", "WAI-8790", "link"),
+        ("WAI-8677", "WAI-8791", "link"),
+    }
+    assert tree.counters["parents"] == 2
+
+
+def test_co_pai_fora_do_grafo_entra_como_raiz_sem_subir_os_ancestrais():
+    tree = build_tree(
+        sprint_issues=[issue("WAI-10", parent="WAI-1")],
+        related_issues=[
+            issue("WAI-1", type_="Épico"),
+            issue("WAI-50", type_="Enhancements", parent="WAI-40"),
+            issue("WAI-40", type_="Feature"),
+        ],
+        links=[link("WAI-10", "WAI-50")],
+        my_account_id=ME,
+    )
+
+    # Está no desenho só por causa da WAI-10: puxar a Feature dela seria um card sem tarefa.
+    assert "WAI-40" not in tree.nodes
+    assert tree.nodes["WAI-50"].parent_key is None
+    assert [g.root_key for g in tree.groups] == ["WAI-1", "WAI-50"]
+
+
+def test_co_pai_que_nao_e_raiz_nao_vira_seta():
+    # WAI-50 é pai (por link) da WAI-11 e filho do épico WAI-1: a seta dela para a WAI-10
+    # sairia de um card da linha das tarefas, não da fileira de cima.
+    tree = build_tree(
+        sprint_issues=[issue("WAI-10", parent="WAI-1"), issue("WAI-11")],
+        related_issues=[issue("WAI-1", type_="Épico"), issue("WAI-50", type_="Enhancements")],
+        links=[
+            link("WAI-11", "WAI-50"),
+            link("WAI-10", "WAI-50"),
+            link("WAI-50", "WAI-1", target_type="Épico"),
+        ],
+        my_account_id=ME,
+    )
+
+    assert tree.nodes["WAI-50"].parent_key == "WAI-1"
+    assert tree.nodes["WAI-10"].co_parents == []
+    assert ("WAI-50", "WAI-10") not in {(e.source, e.target) for e in tree.edges}
+
+
+def test_link_para_o_proprio_ancestral_nao_duplica_a_seta():
+    tree = build_tree(
+        sprint_issues=[issue("WAI-10", parent="WAI-1")],
+        related_issues=[issue("WAI-1", type_="Épico")],
+        links=[link("WAI-10", "WAI-1", target_type="Épico")],
+        my_account_id=ME,
+    )
+
+    assert tree.nodes["WAI-10"].co_parents == []
+    assert [(e.source, e.target, e.kind) for e in tree.edges] == [("WAI-1", "WAI-10", "parent")]
+
+
+def test_ancestral_fora_da_sprint_nao_puxa_co_pai():
+    tree = build_tree(
+        sprint_issues=[issue("WAI-10", parent="WAI-1")],
+        related_issues=[issue("WAI-1", type_="Épico")],
+        links=[link("WAI-1", "WAI-60"), link("WAI-1", "WAI-61")],
+        my_account_id=ME,
+    )
+
+    # O primeiro link segue sendo o pai do épico; o segundo não vira card no desenho.
+    assert tree.nodes["WAI-1"].parent_key == "WAI-60"
+    assert "WAI-61" not in tree.nodes
 
 
 def test_tarefas_sem_pai_ficam_no_grupo_sem_pai_com_subtarefas_aninhadas():

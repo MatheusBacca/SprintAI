@@ -45,7 +45,10 @@ const initials = computed(() =>
     .join('')
     .toUpperCase(),
 )
-const childCount = computed(() => issue.value.children.length)
+// O Enhancements tem de filha só a "Analisar e fatiar"; as Tarefas que saíram dela ficam
+// no Épico e chegam como co-filhas — sem somar, o card dizia "1 filhas" para um plano de
+// cinco tarefas.
+const childCount = computed(() => issue.value.children.length + (issue.value.co_children?.length ?? 0))
 
 /**
  * Marcador no canto superior direito: dá para varrer o canvas inteiro sem ler o

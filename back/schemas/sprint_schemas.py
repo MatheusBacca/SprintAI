@@ -51,6 +51,10 @@ class TreeNodeOut(BaseModel):
     # ele fecha, e a onda não pode se desmanchar por isso.
     predecessors: list[str] = []
     children: list[str]
+    # Pais por link de hierarquia além do `parent_key` (o Enhancements de uma Tarefa que já
+    # tem Épico), e o inverso no pai. Dão só a seta e a vizinhança no desenho, não o grupo.
+    co_parents: list[str] = []
+    co_children: list[str] = []
     url: str | None
     pr: PrStatusBadgeOut | None
     stage: StageRefOut | None = None

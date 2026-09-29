@@ -87,8 +87,12 @@ desenho: fora da sprint não há onda de onde empurrar; entre épicos diferentes
 que a onda existe para mostrar. Não use o `blocked_by` para isso: ele perde o bloqueador
 quando ele conclui, e a sprint se desmanchava numa linha só conforme as tarefas fechavam.
 "Relates" entre tarefas não tem direção e não entra na ordem. Quem cai na onda 2+ perde a
-seta do épico: ela cruzaria as ondas de cima por trás dos cards, e o vínculo se lê pela
-corrente de bloqueio (ou de origem) que leva da onda 1 até ela.
+seta do épico (e a de qualquer pai por link): ela cruzaria as ondas de cima por trás dos
+cards, e o vínculo se lê pela corrente de bloqueio (ou de origem) que leva da onda 1 até ela.
+A Tarefa fatiada tem **dois pais**: o Épico no `parent` e o Enhancements num "Relates". O
+pai principal segue sendo um só (dá o grupo e a pilha); o outro vem em `co_parents`, vira
+seta "link" a mais, e o grupo dele é puxado para logo depois do grupo do épico — senão o
+Enhancements, que só tem a "Analisar e fatiar" de filha, caía na ponta da sprint.
 
 **Front** — tela ou painel que mostra dado do espelho observa `refresh.revision`
 (`stores/refresh.js`) e recarrega; quem alimenta esse contador é só o `AppShell` — inclusive

@@ -6,6 +6,8 @@ Regras:
   implements).
 - Grupo: cada ancestral de topo que é Épico/Enhancements vira a raiz de um grupo; tarefas
   sem ancestral desse tipo vão para o grupo "Sem pai" (subtarefas continuam aninhadas).
+- Co-pai: os outros links de hierarquia de uma tarefa da sprint, além do pai principal,
+  quando apontam para a raiz de outro grupo. Viram seta "link" a mais, sem mudar a árvore.
 - Bloqueio: link "Blocks" entre tarefas do grafo vira seta; tarefa com bloqueador ainda
   não concluído conta como bloqueada.
 - Origem: link "is caused by" entre tarefas do grafo vira seta "origina".
@@ -50,6 +52,8 @@ class TreeNode:
     blocks: list[str] = field(default_factory=list)
     predecessors: list[str] = field(default_factory=list)
     children: list[str] = field(default_factory=list)
+    co_parents: list[str] = field(default_factory=list)
+    co_children: list[str] = field(default_factory=list)
     # nó montado só com o snapshot do link (pai fora do espelho)
     partial: bool = False
 
@@ -180,6 +184,7 @@ def build_tree(
             pending.append(parent_key)
 
     _break_cycles(nodes)
+    _link_co_parents(nodes, links_by_source, related, my_account_id)
     for node in nodes.values():
         if node.parent_key:
             nodes[node.parent_key].children.append(node.key)
@@ -192,6 +197,11 @@ def build_tree(
         )
         for n in nodes.values()
         if n.parent_key
+    ]
+    edges += [
+        TreeEdge(source=co_parent, target=n.key, kind="link")
+        for n in nodes.values()
+        for co_parent in n.co_parents
     ]
     edges += _dependency_edges(nodes, links_by_source, related)
 
@@ -221,6 +231,53 @@ def _break_cycles(nodes: dict[str, TreeNode]) -> None:
             current = nodes[current.parent_key]
 
 
+def _link_co_parents(
+    nodes: dict[str, TreeNode],
+    links_by_source: dict[str, list[dict[str, Any]]],
+    related: dict[str, dict[str, Any]],
+    my_account_id: str | None,
+) -> None:
+    """A Tarefa de dev fatiada nasce no Épico (`parent`) e fica ligada por "Relates" ao
+    Enhancements de onde saiu (WAI-8790: Épico WAI-7326, Enhancements WAI-8677). O pai
+    principal continua sendo um só — é ele que dá o grupo e a pilha —, mas sem o segundo o
+    Enhancements ficava na ponta da sprint, pendurado só na "Analisar e fatiar".
+
+    Só conta para tarefa da sprint (ancestral não puxa co-pai, senão cada link do épico
+    viraria card no desenho) e só quando o co-pai é raiz de grupo: é da fileira de cima que
+    a seta desce. O co-pai que não estava no grafo entra sem subir os ancestrais dele — está
+    no desenho só por causa desta tarefa."""
+    for node in [n for n in nodes.values() if n.in_sprint]:
+        ancestors = set()
+        current = node
+        while current.parent_key:
+            ancestors.add(current.parent_key)
+            current = nodes[current.parent_key]
+        for link in links_by_source.get(node.key, []):
+            target = link["target_key"]
+            if not is_hierarchy_link(link["link_type"], link.get("target_type")):
+                continue
+            if target == node.key or target in ancestors or target in node.co_parents:
+                continue
+            candidate = nodes.get(target) or (
+                _node(related[target], my_account_id=my_account_id, in_sprint=False)
+                if target in related
+                else _partial_node(link)
+            )
+            if not _is_group_root(candidate):
+                continue
+            nodes.setdefault(target, candidate)
+            node.co_parents.append(target)
+            candidate.co_children.append(node.key)
+    # A consulta dos links não tem ordem: sem isto a resposta mudaria a cada chamada.
+    for node in nodes.values():
+        node.co_parents.sort()
+        node.co_children.sort()
+
+
+def _is_group_root(node: TreeNode) -> bool:
+    return not node.parent_key and (node.is_parent_type or not node.in_sprint)
+
+
 def _top_ancestor(nodes: dict[str, TreeNode], key: str) -> tuple[str, int]:
     depth = 0
     current = nodes[key]
@@ -235,8 +292,7 @@ def _groups(nodes: dict[str, TreeNode]) -> list[TreeGroup]:
     for key in nodes:
         top, depth = _top_ancestor(nodes, key)
         nodes[key].depth = depth
-        top_node = nodes[top]
-        group = top if (top_node.is_parent_type or not top_node.in_sprint) else NO_PARENT_GROUP
+        group = top if _is_group_root(nodes[top]) else NO_PARENT_GROUP
         nodes[key].group = group
         by_group.setdefault(group, []).append(key)
 

@@ -145,22 +145,47 @@ function assignColumns(ondas, nodesByKey) {
   return coluna
 }
 
+/**
+ * Ordem dos grupos no desenho: a que o back mandou, mas o grupo de um co-pai entra logo
+ * depois do grupo com quem divide tarefas. A Tarefa fatiada nasce no Épico (`parent`) e
+ * fica ligada por "Relates" ao Enhancements de onde saiu; na ordem do back (por tamanho)
+ * o Enhancements, que só tem a "Analisar e fatiar" como filha, caía na ponta da sprint.
+ */
+function ordenarGrupos(groups, nodesByKey) {
+  const coPais = new Map(
+    groups.map((g) => [g, new Set(g.issue_keys.flatMap((k) => nodesByKey[k]?.co_parents ?? []))]),
+  )
+  const vizinhos = (a, b) =>
+    (b.root_key && coPais.get(a).has(b.root_key)) || (a.root_key && coPais.get(b).has(a.root_key))
+
+  const ordem = []
+  const visitar = (group) => {
+    if (ordem.includes(group)) return
+    ordem.push(group)
+    for (const outro of groups) if (vizinhos(group, outro)) visitar(outro)
+  }
+  groups.forEach(visitar)
+  return ordem
+}
+
 const colunaX = (indice) => indice * (NODE_WIDTH + COLUMN_GAP)
 const larguraAte = (colunas) => (colunas ? colunas * NODE_WIDTH + (colunas - 1) * COLUMN_GAP : 0)
 
 /**
- * Fileira das raízes: cada épico centralizado sobre as suas próprias tarefas, e quem
- * não tem nenhuma no desenho entra numa coluna livre à direita. Depois um passe da
- * esquerda para a direita empurra quem encavalou — dois épicos de uma tarefa cada,
- * em colunas vizinhas, cairiam no mesmo lugar.
+ * Fileira das raízes: cada épico centralizado sobre as suas próprias tarefas e as que
+ * divide como co-pai, e quem não tem nenhuma no desenho entra numa coluna livre à
+ * direita. Depois um passe da esquerda para a direita empurra quem encavalou — dois
+ * épicos de uma tarefa cada, em colunas vizinhas, cairiam no mesmo lugar; e o co-pai,
+ * centralizado sobre as tarefas do épico, cai ao lado dele.
  */
-function layoutRoots(grupos, positions, colunasUsadas) {
+function layoutRoots(grupos, positions, colunasUsadas, nodesByKey) {
   const fileira = []
   let livre = colunasUsadas
 
   for (const { group, cells } of grupos) {
     if (!group.root_key) continue
-    const xs = cells.map((k) => positions[k]?.x).filter((x) => x !== undefined)
+    const cobertas = [...cells, ...(nodesByKey[group.root_key]?.co_children ?? [])]
+    const xs = cobertas.map((k) => positions[k]?.x).filter((x) => x !== undefined)
     if (xs.length) fileira.push({ key: group.root_key, x: (Math.min(...xs) + Math.max(...xs)) / 2 })
     else {
       fileira.push({ key: group.root_key, x: colunaX(livre) })
@@ -181,7 +206,7 @@ function layoutRoots(grupos, positions, colunasUsadas) {
 
 /** Posições de toda a sprint + tamanho do desenho + as ondas desenhadas. */
 export function layoutSprint(groups, nodesByKey) {
-  const grupos = groups.map((group) => {
+  const grupos = ordenarGrupos(groups, nodesByKey).map((group) => {
     const inGroup = new Set(group.issue_keys)
     return { group, inGroup, cells: groupCells(group, nodesByKey, inGroup) }
   })
@@ -218,7 +243,7 @@ export function layoutSprint(groups, nodesByKey) {
   })
 
   const colunasUsadas = cells.length ? Math.max(...cells.map((k) => coluna[k] + 1)) : 0
-  const raizes = layoutRoots(grupos, positions, colunasUsadas)
+  const raizes = layoutRoots(grupos, positions, colunasUsadas, nodesByKey)
 
   const width = Math.max(larguraAte(colunasUsadas), raizes.width)
   const height = cells.length ? top : raizes.hasRoots ? NODE_HEIGHT : 0
@@ -284,6 +309,8 @@ export function layoutTree(tree, { selectedKey = null } = {}) {
     ['causes', 'origina'],
   ])
 
+  const hierarquia = new Set(['parent', 'link'])
+
   /** O alvo está numa onda abaixo da origem. */
   const empilhado = (source, target) => {
     const de = ondaPorKey[source]
@@ -295,8 +322,9 @@ export function layoutTree(tree, { selectedKey = null } = {}) {
     .filter((e) => nodesByKey[e.source] && nodesByKey[e.target])
     // A seta do épico até uma tarefa de onda 2+ atravessaria as ondas de cima por trás
     // dos cards. O vínculo com o épico continua legível pela corrente de bloqueio que
-    // leva da onda 1 até ela.
-    .filter((e) => !(e.kind === 'parent' && (ondaPorKey[e.target] ?? 1) > 1))
+    // leva da onda 1 até ela. Vale também para o pai por link: o Enhancements de uma
+    // fatia puxaria uma seta para cada tarefa da corrente, não só para a da onda 1.
+    .filter((e) => !(hierarquia.has(e.kind) && (ondaPorKey[e.target] ?? 1) > 1))
     .map((e) => {
       const deOrdem = ordem.has(e.kind)
       const vertical = !deOrdem || empilhado(e.source, e.target)

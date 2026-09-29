@@ -140,6 +140,8 @@ async def sprint_tree(
                 blocks=n.blocks,
                 predecessors=n.predecessors,
                 children=n.children,
+                co_parents=n.co_parents,
+                co_children=n.co_children,
                 url=f"{base_url}{n.key}" if base_url else None,
                 pr=pr_status_service.to_badge(summaries[n.key]) if n.key in summaries else None,
                 stage=stage_ref(stages.stage_of(n.status)),

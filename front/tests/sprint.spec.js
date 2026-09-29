@@ -42,6 +42,8 @@ function node(key, overrides = {}) {
     blocks: [],
     predecessors: [],
     children: [],
+    co_parents: [],
+    co_children: [],
     url: `https://weon.atlassian.net/browse/${key}`,
     pr: { status: 'sem_pr', status_label: 'Sem PR', pr_count: 0, open_pr_count: 0, build_failed: false },
     ...overrides,
@@ -411,6 +413,99 @@ describe('ondas de implementação', () => {
   })
 })
 
+const ETAPAS = [
+  { id: 'analise', label: 'Análise', order: 0, weight: 0, color: '#94a3b8' },
+  { id: 'desenvolvimento', label: 'Desenvolvimento', order: 1, weight: 0.5, color: '#2f7cf6' },
+  { id: 'review', label: 'Review', order: 2, weight: 0.75, color: '#f59e0b' },
+  { id: 'testes', label: 'Testes', order: 3, weight: 0.95, color: '#8a4fff' },
+  { id: 'concluido', label: 'Concluído', order: 4, weight: 1, color: '#10b981' },
+]
+const etapa = (id) => {
+  const { label, color } = ETAPAS.find((e) => e.id === id)
+  return { stage: { id, label, color } }
+}
+
+// Sprint 76 - Growth: as Tarefas do plano gratuito estão no Épico WAI-7326 (`parent`) e
+// ligadas por "Relates" ao Enhancements WAI-8677, cuja filha é a "Analisar e fatiar"
+// WAI-8678. O back ordena os grupos por tamanho, e o Feature WAI-8766 vem no meio. As
+// etapas são as de 29/09/2026: a corrente 8790 → 8793 em desenvolvimento e a 8794,
+// bloqueada pelas duas primeiras, ainda em análise.
+function sprintDoPlanoGratuito({ comAnalise = true } = {}) {
+  const fatias = ['WAI-8790', 'WAI-8791', 'WAI-8792', 'WAI-8793', 'WAI-8794']
+  const antes = { 'WAI-8791': ['WAI-8790'], 'WAI-8792': ['WAI-8791'], 'WAI-8793': ['WAI-8792'], 'WAI-8794': ['WAI-8790', 'WAI-8791'] }
+  const pai = (key, via = 'parent', extra = {}) => ({ parent_key: key, parent_via: via, group: key, depth: 1, ...extra })
+  const nodes = [
+    node('WAI-7326', { issue_type: 'Épico', is_parent_type: true, in_sprint: false, group: 'WAI-7326', children: fatias, pr: null, ...etapa('analise') }),
+    ...fatias.map((k) =>
+      node(k, pai('WAI-7326', 'parent', { co_parents: ['WAI-8677'], predecessors: antes[k] ?? [], ...etapa(k === 'WAI-8794' ? 'analise' : 'desenvolvimento') })),
+    ),
+    node('WAI-8766', { issue_type: 'Feature', is_parent_type: true, in_sprint: false, group: 'WAI-8766', children: ['WAI-8767', 'WAI-8850'], pr: null, ...etapa('analise') }),
+    node('WAI-8767', pai('WAI-8766', 'link', etapa('concluido'))),
+    node('WAI-8850', pai('WAI-8766', 'link', etapa('analise'))),
+    node('WAI-8677', { issue_type: 'Enhancements', is_parent_type: true, in_sprint: false, group: 'WAI-8677', children: comAnalise ? ['WAI-8678'] : [], co_children: fatias, pr: null, ...etapa('analise') }),
+    ...(comAnalise ? [node('WAI-8678', pai('WAI-8677', 'link', { status: 'Concluído', status_category: 'done', ...etapa('concluido') }))] : []),
+    node('WAI-6797', etapa('review')),
+  ]
+  return {
+    sprint: { id: 4031, name: 'Sprint 76 - Growth', state: 'active', start_date: null, end_date: null, goal: null, issue_count: 9, mine_count: 9, done_count: 1 },
+    only_mine: false,
+    counters: {},
+    nodes,
+    edges: [
+      ...fatias.map((k) => ({ source: 'WAI-7326', target: k, kind: 'parent' })),
+      ...fatias.map((k) => ({ source: 'WAI-8677', target: k, kind: 'link' })),
+      ...(comAnalise ? [{ source: 'WAI-8677', target: 'WAI-8678', kind: 'link' }] : []),
+      { source: 'WAI-8766', target: 'WAI-8767', kind: 'link' },
+      { source: 'WAI-8766', target: 'WAI-8850', kind: 'link' },
+      ...Object.entries(antes).flatMap(([alvo, origens]) => origens.map((origem) => ({ source: origem, target: alvo, kind: 'blocks', label: 'bloqueia' }))),
+    ],
+    groups: [
+      { key: 'WAI-7326', root_key: 'WAI-7326', issue_keys: ['WAI-7326', ...fatias] },
+      { key: 'WAI-8766', root_key: 'WAI-8766', issue_keys: ['WAI-8766', 'WAI-8767', 'WAI-8850'] },
+      { key: 'WAI-8677', root_key: 'WAI-8677', issue_keys: comAnalise ? ['WAI-8677', 'WAI-8678'] : ['WAI-8677'] },
+      { key: '__sem_pai__', root_key: null, issue_keys: ['WAI-6797'] },
+    ],
+  }
+}
+
+describe('co-pai: Enhancements ao lado do Épico', () => {
+  const passo = NODE_WIDTH + COLUMN_GAP
+  const posicoes = (tree) => layoutSprint(tree.groups, Object.fromEntries(tree.nodes.map((n) => [n.key, n]))).positions
+
+  it('o Enhancements fica logo ao lado do Épico, e a "Analisar e fatiar" ao lado da onda 1 dele', () => {
+    const positions = posicoes(sprintDoPlanoGratuito())
+
+    expect(positions['WAI-8677'].y).toBe(0)
+    expect(positions['WAI-8677'].x).toBe(positions['WAI-7326'].x + passo)
+    expect(positions['WAI-8678'].x).toBe(positions['WAI-8790'].x + passo)
+    expect(positions['WAI-8678'].y).toBe(positions['WAI-8790'].y)
+    // O Feature, que o back mandava antes do Enhancements, vem depois dele.
+    expect(positions['WAI-8766'].x).toBeGreaterThan(positions['WAI-8677'].x)
+    expect(positions['WAI-8767'].x).toBeGreaterThan(positions['WAI-8678'].x)
+  })
+
+  it('sem a "Analisar e fatiar" na sprint, o Enhancements continua ao lado do Épico, não na ponta', () => {
+    const positions = posicoes(sprintDoPlanoGratuito({ comAnalise: false }))
+
+    expect(positions['WAI-8677'].x).toBe(positions['WAI-7326'].x + passo)
+    expect(positions['WAI-8677'].x).toBeLessThan(positions['WAI-6797'].x)
+  })
+
+  it('a tarefa da onda 1 desce do Épico e do Enhancements; as da corrente, de nenhum dos dois', () => {
+    const { edges } = layoutTree(sprintDoPlanoGratuito())
+    const ids = edges.map((e) => e.id)
+
+    expect(edges.find((e) => e.id === 'link:WAI-8677->WAI-8790')).toMatchObject({ sourceHandle: 'bottom', targetHandle: 'top', class: 'edge edge--link' })
+    expect(ids).toContain('parent:WAI-7326->WAI-8790')
+    expect(ids).toContain('link:WAI-8677->WAI-8678')
+    expect(ids.filter((id) => id.startsWith('link:WAI-8677->') || id.startsWith('parent:WAI-7326->')).sort()).toEqual([
+      'link:WAI-8677->WAI-8678',
+      'link:WAI-8677->WAI-8790',
+      'parent:WAI-7326->WAI-8790',
+    ])
+  })
+})
+
 describe('IssueNode', () => {
   const mountNode = (issue, selected = false) =>
     mount(IssueNode, { props: { data: { issue, selected } }, global: { stubs: { Handle: true } } })
@@ -518,6 +613,13 @@ describe('IssueNode', () => {
 
     const other = mountNode(node('WAI-9', { is_mine: false, assignee_name: 'Outro Dev' }))
     expect(other.find('.node__avatar').text()).toBe('OD')
+  })
+
+  it('Enhancements conta nas filhas as Tarefas fatiadas que moram no Épico', () => {
+    const fatias = ['WAI-8790', 'WAI-8791', 'WAI-8792', 'WAI-8793', 'WAI-8794']
+    const enhancements = mountNode(node('WAI-8677', { issue_type: 'Enhancements', is_parent_type: true, in_sprint: false, children: ['WAI-8678'], co_children: fatias, pr: null }))
+
+    expect(enhancements.text()).toContain('6 filhas')
   })
 
   it('status do Jira fica no contorno, na cor da etapa', () => {
