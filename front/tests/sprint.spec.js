@@ -3,7 +3,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
+import GroupFrameNode from '@/components/sprint/GroupFrameNode.vue'
 import IssueNode from '@/components/sprint/IssueNode.vue'
+import StageFilter from '@/components/sprint/StageFilter.vue'
 import SprintView from '@/views/SprintView.vue'
 import { routes } from '@/router/routes'
 import { useScreenContextStore } from '@/stores/screenContext'
@@ -19,6 +21,7 @@ import {
   layoutSprint,
   layoutTree,
 } from '@/utils/treeLayout'
+import { countByStage, filterTreeByStages } from '@/utils/stageFilter'
 
 function node(key, overrides = {}) {
   return {
@@ -503,6 +506,103 @@ describe('co-pai: Enhancements ao lado do Épico', () => {
       'link:WAI-8677->WAI-8790',
       'parent:WAI-7326->WAI-8790',
     ])
+  })
+})
+
+describe('filtro por etapa', () => {
+  const chaves = (tree) => tree.nodes.map((n) => n.key).sort()
+  const porChave = (tree) => Object.fromEntries(tree.nodes.map((n) => [n.key, n]))
+
+  it('sem etapa ligada devolve a mesma árvore: o canvas não tem o que redesenhar', () => {
+    const tree = sprintDoPlanoGratuito()
+
+    expect(filterTreeByStages(tree, [])).toBe(tree)
+  })
+
+  it('fica a tarefa da etapa com o Épico e o Enhancements acima dela', () => {
+    const recorte = filterTreeByStages(sprintDoPlanoGratuito(), ['desenvolvimento'])
+
+    expect(chaves(recorte)).toEqual(['WAI-7326', 'WAI-8677', 'WAI-8790', 'WAI-8791', 'WAI-8792', 'WAI-8793'])
+    // A "Analisar e fatiar" concluída saiu; o Enhancements fica pela co-filha.
+    expect(recorte.groups.map((g) => [g.key, g.issue_keys])).toEqual([
+      ['WAI-7326', ['WAI-7326', 'WAI-8790', 'WAI-8791', 'WAI-8792', 'WAI-8793']],
+      ['WAI-8677', ['WAI-8677']],
+    ])
+    const ficaram = new Set(chaves(recorte))
+    expect(recorte.edges.every((e) => ficaram.has(e.source) && ficaram.has(e.target))).toBe(true)
+    expect(recorte.edges).toContainEqual({ source: 'WAI-8790', target: 'WAI-8791', kind: 'blocks', label: 'bloqueia' })
+  })
+
+  it('bloqueador de outra etapa sai, e a bloqueada sobe para a onda 1', () => {
+    const recorte = filterTreeByStages(sprintDoPlanoGratuito(), ['analise'])
+
+    // Épico e Feature em análise não entram por si: estão fora da sprint, só sobem com a filha.
+    expect(chaves(recorte)).toEqual(['WAI-7326', 'WAI-8677', 'WAI-8766', 'WAI-8794', 'WAI-8850'])
+    const { positions, waves } = layoutSprint(recorte.groups, porChave(recorte))
+    expect(waves).toEqual([])
+    expect(positions['WAI-8794'].y).toBe(positions['WAI-8850'].y)
+  })
+
+  it('etapas ligadas somam: quem cai em qualquer uma fica', () => {
+    const recorte = filterTreeByStages(sprintDoPlanoGratuito(), ['review', 'concluido'])
+
+    expect(chaves(recorte)).toEqual(['WAI-6797', 'WAI-8677', 'WAI-8678', 'WAI-8766', 'WAI-8767'])
+  })
+
+  it('subtarefa na etapa traz a tarefa-mãe junto, mesmo de outra etapa', () => {
+    const tree = sampleTree()
+    for (const n of tree.nodes) Object.assign(n, etapa(n.key === 'WAI-8' ? 'review' : 'desenvolvimento'))
+
+    const recorte = filterTreeByStages(tree, ['review'])
+
+    expect(chaves(recorte)).toEqual(['WAI-7', 'WAI-8'])
+    expect(recorte.edges).toEqual([{ source: 'WAI-7', target: 'WAI-8', kind: 'parent' }])
+  })
+
+  it('a moldura conta o recorte sobre o total da sprint', () => {
+    const { nodes } = layoutTree(filterTreeByStages(sprintDoPlanoGratuito(), ['desenvolvimento']))
+    const moldura = nodes.find((n) => n.type === 'group-frame')
+
+    expect([moldura.data.count, moldura.data.total]).toEqual([4, 9])
+    expect(mount(GroupFrameNode, { props: { data: moldura.data } }).text()).toBe('4 de 9 tarefa(s) na sprint')
+    expect(mount(GroupFrameNode, { props: { data: { count: 9, total: null, width: 1, height: 1 } } }).text()).toBe('9 tarefa(s) na sprint')
+  })
+
+  it('conta as tarefas da sprint por etapa, sem os pais de fora', () => {
+    expect(countByStage(sprintDoPlanoGratuito())).toEqual({ desenvolvimento: 4, analise: 2, concluido: 2, review: 1 })
+  })
+})
+
+describe('StageFilter', () => {
+  const mountChips = (modelValue = []) =>
+    mount(StageFilter, { props: { stages: [...ETAPAS].reverse(), counts: { desenvolvimento: 4, review: 1 }, modelValue } })
+
+  it('um chip por etapa, na ordem de Configurações, com a contagem e a cor dela', () => {
+    const chips = mountChips().findAll('.stages__chip')
+
+    expect(chips.map((c) => c.text())).toEqual(['Análise 0', 'Desenvolvimento 4', 'Review 1', 'Testes 0', 'Concluído 0'])
+    expect(chips[2].attributes('style')).toContain('--tone: #f59e0b')
+    expect(chips.every((c) => c.attributes('aria-pressed') === 'false')).toBe(true)
+  })
+
+  it('clicar liga a etapa junto das que já estavam; clicar de novo desliga', async () => {
+    const wrapper = mountChips(['review'])
+    const [, dev, review] = wrapper.findAll('.stages__chip')
+    expect(review.attributes('aria-pressed')).toBe('true')
+
+    await dev.trigger('click')
+    await review.trigger('click')
+
+    expect(wrapper.emitted('update:modelValue')).toEqual([[['review', 'desenvolvimento']], [[]]])
+  })
+
+  it('o X só aparece com etapa ligada, e desliga todas', async () => {
+    expect(mountChips().find('.stages__clear').exists()).toBe(false)
+
+    const wrapper = mountChips(['review', 'testes'])
+    await wrapper.find('.stages__clear').trigger('click')
+
+    expect(wrapper.emitted('update:modelValue')).toEqual([[[]]])
   })
 })
 
@@ -1039,5 +1139,111 @@ describe('busca no canvas e destaque de status', () => {
     await flushPromises()
     await wrapper.find('[aria-label="Limpar destaque"]').trigger('click')
     expect(canvas(wrapper).props('highlightStatus')).toBeNull()
+  })
+})
+
+describe('SprintView: filtro por etapa', () => {
+  const SPRINTS = [
+    { id: 4031, name: 'Sprint 76 - Growth', state: 'active', start_date: '2026-09-28T11:00:00Z', issue_count: 9, mine_count: 9, done_count: 2 },
+    { id: 3995, name: 'Sprint 73 - Growth', state: 'closed', start_date: '2026-09-09T11:00:00Z', issue_count: 7, mine_count: 7, done_count: 1 },
+  ]
+
+  function json(body) {
+    return { ok: true, status: 200, headers: new Headers({ 'content-type': 'application/json' }), json: async () => body }
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url) => {
+        if (url === '/api/sprints') return json(SPRINTS)
+        if (url.startsWith('/api/sprints/')) return json(sprintDoPlanoGratuito())
+        if (url === '/api/progress/stages') return json({ stages: ETAPAS, statuses: [] })
+        if (url === '/api/sync/scope') return json({ jira: { assignee_scope: 'mine' }, bitbucket: {} })
+        throw new Error(`não mockado: ${url}`)
+      }),
+    )
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  async function mountView() {
+    const router = createRouter({ history: createMemoryHistory(), routes })
+    router.push('/sprints')
+    await router.isReady()
+    const wrapper = mount(SprintView, {
+      global: {
+        plugins: [router],
+        stubs: { SprintCanvas: { name: 'SprintCanvas', props: ['tree', 'selectedKey', 'matchKeys', 'focusKey', 'highlightStatus'], emits: ['select', 'highlight'], template: '<div class="canvas-stub" />' } },
+      },
+    })
+    await flushPromises()
+    return { wrapper, router }
+  }
+
+  const canvasKeys = (wrapper) => wrapper.findComponent({ name: 'SprintCanvas' }).props('tree').nodes.map((n) => n.key).sort()
+  const chip = (wrapper, label) => wrapper.findAll('.stages__chip').find((c) => c.text().startsWith(label))
+
+  it('os chips ficam na linha abaixo do seletor da sprint, com a contagem de cada etapa', async () => {
+    const { wrapper } = await mountView()
+
+    const painel = wrapper.find('.sprint__panel')
+    expect(painel.find('.sprint__top + .stages').exists()).toBe(true)
+    expect(painel.findAll('.stages__chip').map((c) => c.text())).toEqual(['Análise 2', 'Desenvolvimento 4', 'Review 1', 'Testes 0', 'Concluído 2'])
+    // Sem etapa ligada, o canvas recebe a sprint inteira.
+    expect(canvasKeys(wrapper)).toHaveLength(12)
+  })
+
+  it('ligar uma etapa manda para o canvas só ela e a hierarquia acima, e publica só o que ficou visível', async () => {
+    const { wrapper } = await mountView()
+
+    await chip(wrapper, 'Desenvolvimento').trigger('click')
+    await flushPromises()
+
+    expect(canvasKeys(wrapper)).toEqual(['WAI-7326', 'WAI-8677', 'WAI-8790', 'WAI-8791', 'WAI-8792', 'WAI-8793'])
+    expect(useScreenContextStore().visibleIssueKeys.sort()).toEqual(['WAI-8790', 'WAI-8791', 'WAI-8792', 'WAI-8793'])
+
+    await chip(wrapper, 'Review').trigger('click')
+    await flushPromises()
+    expect(canvasKeys(wrapper)).toContain('WAI-6797')
+  })
+
+  it('etapa sem tarefa na sprint avisa no lugar do canvas, e dá para limpar dali', async () => {
+    const { wrapper } = await mountView()
+
+    await chip(wrapper, 'Testes').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.canvas-stub').exists()).toBe(false)
+    expect(wrapper.find('.sprint__canvas').text()).toContain('Nenhuma tarefa da sprint em Testes.')
+
+    await wrapper.findAll('.sprint__canvas button').find((b) => b.text() === 'Limpar filtro de etapas').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.canvas-stub').exists()).toBe(true)
+    expect(useSprintBoardStore().stageFilter).toEqual([])
+  })
+
+  it('a busca só acha o que o filtro deixou no canvas', async () => {
+    const { wrapper } = await mountView()
+    await chip(wrapper, 'Review').trigger('click')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, cancelable: true }))
+    await flushPromises()
+
+    await wrapper.find('.find__input').setValue('WAI-')
+    await flushPromises()
+
+    // Sem o filtro, "WAI-" acharia os 12 cards.
+    expect(wrapper.findComponent({ name: 'SprintCanvas' }).props('matchKeys')).toEqual(['WAI-6797'])
+  })
+
+  it('o filtro continua ligado na troca de sprint', async () => {
+    const { wrapper, router } = await mountView()
+    await chip(wrapper, 'Review').trigger('click')
+
+    await router.replace({ query: { sprint: '3995' } })
+    await flushPromises()
+
+    expect(chip(wrapper, 'Review').attributes('aria-pressed')).toBe('true')
+    expect(canvasKeys(wrapper)).toEqual(['WAI-6797'])
   })
 })

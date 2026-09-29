@@ -267,6 +267,8 @@ export function layoutTree(tree, { selectedKey = null } = {}) {
     data: {
       title: null,
       count: tree.nodes.filter((n) => n.in_sprint).length,
+      // Só vem na árvore recortada pelos chips de etapa (`filterTreeByStages`).
+      total: tree.total_tasks ?? null,
       width: layout.width + 2 * GROUP_PADDING,
       height: layout.height + 2 * GROUP_PADDING + GROUP_HEADER,
     },

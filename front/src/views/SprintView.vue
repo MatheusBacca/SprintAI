@@ -7,8 +7,11 @@ import { CalendarRange, ChevronLeft, ChevronRight, RefreshCw, X } from 'lucide-v
 import IssueDrawer from '@/components/issue/IssueDrawer.vue'
 import SprintCanvas from '@/components/sprint/SprintCanvas.vue'
 import SprintSearch from '@/components/sprint/SprintSearch.vue'
+import StageFilter from '@/components/sprint/StageFilter.vue'
 import { useIssueDetailStore } from '@/stores/issueDetail'
 import { useNotesStore } from '@/stores/notes'
+import { useProgressStore } from '@/stores/progress'
+import { countByStage, filterTreeByStages } from '@/utils/stageFilter'
 import { useScreenContextStore } from '@/stores/screenContext'
 import { useSprintBoardStore } from '@/stores/sprintBoard'
 import { useRefreshStore } from '@/stores/refresh'
@@ -22,6 +25,7 @@ const sync = useSyncStore()
 const screen = useScreenContextStore()
 const issueDetail = useIssueDetailStore()
 const notes = useNotesStore()
+const progress = useProgressStore()
 
 const STATE_LABEL = { active: 'Ativas', future: 'Futuras', closed: 'Fechadas' }
 
@@ -29,6 +33,19 @@ const sprintId = computed(() => Number(route.query.sprint) || board.defaultSprin
 const selectedKey = computed(() => route.query.tarefa ?? null)
 const sprint = computed(() => board.tree?.sprint ?? board.sprints.find((s) => s.id === sprintId.value))
 const counters = computed(() => board.tree?.counters ?? null)
+
+// --- Filtro por etapa ---------------------------------------------------------
+
+// Etapa apagada em Configurações não tem chip para desligar: se ficasse ligada, o
+// canvas mostraria "nenhuma tarefa" sem ter onde clicar para sair. Antes das etapas
+// chegarem não dá para saber, e o filtro vale como está.
+const activeStages = computed(() =>
+  progress.stages.length ? board.stageFilter.filter((id) => progress.stageById[id]) : board.stageFilter,
+)
+const stageCounts = computed(() => countByStage(board.tree))
+/** A árvore que o canvas desenha: a da sprint, recortada pelas etapas ligadas. */
+const visibleTree = computed(() => filterTreeByStages(board.tree, activeStages.value))
+const activeStageLabels = computed(() => activeStages.value.map((id) => progress.stageById[id]?.label ?? id).join(', '))
 // Com o escopo "só as minhas" o espelho já só tem tarefas suas: o filtro não faz sentido.
 const showMineFilter = computed(() => sync.scope?.jira?.assignee_scope === 'all')
 
@@ -62,6 +79,7 @@ screen.enter('sprint')
 
 onMounted(async () => {
   sync.loadScope().catch(() => {})
+  if (!progress.stages.length) progress.load()
   window.addEventListener('keydown', onFindShortcut)
   await board.loadSprints()
 })
@@ -109,12 +127,10 @@ watch(
   { immediate: true },
 )
 
-watch(
-  () => board.tree,
-  (tree) => {
-    screen.$patch({ visibleIssueKeys: tree ? tree.nodes.filter((n) => n.in_sprint).map((n) => n.key) : [] })
-  },
-)
+// "Visível" é o que está no canvas: com o filtro de etapa, só o recorte.
+watch(visibleTree, (tree) => {
+  screen.$patch({ visibleIssueKeys: tree ? tree.nodes.filter((n) => n.in_sprint).map((n) => n.key) : [] })
+})
 
 watch(selectedKey, (key) => screen.focusIssue(key), { immediate: true })
 
@@ -139,8 +155,9 @@ const matchIndex = ref(0)
  */
 const matches = computed(() => {
   const needle = normalize(term.value.trim())
-  if (needle.length < 2 || !board.tree) return []
-  return board.tree.nodes
+  // Só o que está desenhado: achar um card escondido pelo filtro deixaria a câmera sem onde pousar.
+  if (needle.length < 2 || !visibleTree.value) return []
+  return visibleTree.value.nodes
     .filter((n) => normalize(`${n.key} ${n.summary ?? ''}`).includes(needle))
     .map((n) => n.key)
 })
@@ -259,9 +276,13 @@ function selectIssue(key) {
       <div v-else-if="board.tree && !board.tree.nodes.length" class="sprint__empty">
         <p>Nenhuma tarefa nesta sprint{{ board.onlyMine ? ' atribuída a você' : '' }}.</p>
       </div>
+      <div v-else-if="visibleTree && !visibleTree.nodes.length" class="sprint__empty">
+        <p>Nenhuma tarefa da sprint em {{ activeStageLabels }}.</p>
+        <button type="button" class="btn btn--secondary" @click="board.stageFilter = []">Limpar filtro de etapas</button>
+      </div>
       <SprintCanvas
-        v-else-if="board.tree"
-        :tree="board.tree"
+        v-else-if="visibleTree"
+        :tree="visibleTree"
         :selected-key="selectedKey"
         :match-keys="matches"
         :focus-key="focusKey"
@@ -338,6 +359,14 @@ function selectIssue(key) {
             <RefreshCw :size="14" :class="{ spin: board.treeLoading }" />
           </button>
         </div>
+
+        <StageFilter
+          v-if="progress.stages.length"
+          :model-value="activeStages"
+          :stages="progress.stages"
+          :counts="stageCounts"
+          @update:model-value="board.stageFilter = $event"
+        />
 
         <p v-if="sprint?.goal" class="sprint__goal" :title="sprint.goal">{{ sprint.goal }}</p>
 

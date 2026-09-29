@@ -10,6 +10,9 @@ export const useSprintBoardStore = defineStore('sprintBoard', {
     treeLoading: false,
     treeError: null,
     onlyMine: false,
+    // Etapas ligadas nos chips. Fica na troca de sprint, ao contrário do destaque de
+    // status: etapa é a mesma em toda sprint, status do Alt + clique é daquele card.
+    stageFilter: [],
     _requestId: 0,
   }),
   getters: {

@@ -75,7 +75,11 @@ use `;` dentro de comentário SQL**. Toda tabela nova entra em `MIRROR_TABLES`
 
 **Canvas da sprint** — `layoutTree` é só geometria. Marca de tela (busca, filtro da
 legenda) desce por `provide`/`inject` (`components/sprint/canvasMarks.js`): remontar o array
-de nós a cada tecla faz o Vue Flow recriar e remedir cada card. A câmera vem da instância do
+de nós a cada tecla faz o Vue Flow recriar e remedir cada card. O filtro por etapa (os chips
+abaixo da sprint) é o contrário, de propósito: ele tira card do desenho, então recorta a
+árvore antes do layout (`utils/stageFilter.js`) e as ondas se refazem — é um clique, não
+uma tecla. Fica a tarefa da etapa e a hierarquia acima dela (pai e co-pai); bloqueador de
+outra etapa sai, e a tarefa sobe de onda. A câmera vem da instância do
 evento `pane-ready`, não de `useVueFlow(id)` — é o que deixa o foco testável, já que o Vue
 Flow não inicializa em jsdom. `layoutSprint` desenha a sprint **numa moldura só**: os épicos
 numa fileira em cima, cada um centralizado sobre as suas tarefas, e todo o resto — inclusive
