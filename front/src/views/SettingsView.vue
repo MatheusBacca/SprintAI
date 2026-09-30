@@ -3,6 +3,7 @@ import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ShieldCheck } from 'lucide-vue-next'
 import BitbucketConnectionForm from '@/components/settings/BitbucketConnectionForm.vue'
+import CardColorsPanel from '@/components/settings/CardColorsPanel.vue'
 import ConnectionCard from '@/components/settings/ConnectionCard.vue'
 import JiraConnectionForm from '@/components/settings/JiraConnectionForm.vue'
 import PrApprovalPanel from '@/components/settings/PrApprovalPanel.vue'
@@ -20,6 +21,7 @@ const tabs = [
   { id: 'sincronizacao', label: 'Sincronização' },
   { id: 'progresso', label: 'Progresso' },
   { id: 'pull-requests', label: 'Pull requests' },
+  { id: 'cores', label: 'Cores dos cards' },
   { id: 'atalhos', label: 'Atalhos' },
 ]
 
@@ -60,6 +62,7 @@ onMounted(() => store.load())
     <SyncSettingsPanel v-if="activeTab === 'sincronizacao'" />
     <ProgressStagesPanel v-else-if="activeTab === 'progresso'" />
     <PrApprovalPanel v-else-if="activeTab === 'pull-requests'" />
+    <CardColorsPanel v-else-if="activeTab === 'cores'" />
     <ShortcutsPanel v-else-if="activeTab === 'atalhos'" />
 
     <template v-else>

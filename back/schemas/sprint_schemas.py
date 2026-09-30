@@ -24,6 +24,14 @@ class SprintSummaryOut(BaseModel):
     done_count: int = 0
 
 
+class CardTintOut(BaseModel):
+    """Fundo esfumaçado do card: pelo tipo (pais) ou pelo `[repo]` do título."""
+
+    color: str
+    source: Literal["tipo", "repositorio"]
+    label: str
+
+
 class TreeNodeOut(BaseModel):
     key: str
     summary: str
@@ -58,6 +66,7 @@ class TreeNodeOut(BaseModel):
     url: str | None
     pr: PrStatusBadgeOut | None
     stage: StageRefOut | None = None
+    tint: CardTintOut | None = None
     # Campos que mudaram desde o último clique no card (status, pr, story_points, assignee).
     unseen_changes: list[str] = []
     # Lembretes não arquivados vinculados à tarefa (ícone do rodapé do card).

@@ -292,3 +292,22 @@ async def test_card_conta_so_lembretes_nao_arquivados(db_app, client, seeded):
     nodes = {n["key"]: n for n in (await client.get("/api/sprints/3995/tree")).json()["nodes"]}
     assert nodes["WAI-7001"]["note_count"] == 2
     assert nodes["WAI-7003"]["note_count"] == 0
+
+
+async def test_card_tem_fundo_pelo_tipo_e_pelo_repositorio_do_titulo(
+    db_app, client, db_pool, seeded
+):
+    await db_pool.execute(
+        "UPDATE jira_issue SET summary = '[Monitoria] Enviar a coleta' WHERE key = 'WAI-7001'"
+    )
+    await client.put("/api/preferences/card-colors", json={"repos": {"monitoria": "#2f7cf6"}})
+
+    nodes = {n["key"]: n for n in (await client.get("/api/sprints/3995/tree")).json()["nodes"]}
+
+    assert nodes["WAI-6900"]["tint"] == {"color": "#7c3aed", "source": "tipo", "label": "Épico"}
+    assert nodes["WAI-7001"]["tint"] == {
+        "color": "#2f7cf6",
+        "source": "repositorio",
+        "label": "monitoria",
+    }
+    assert nodes["WAI-7003"]["tint"] is None

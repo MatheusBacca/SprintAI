@@ -93,6 +93,33 @@ describe('marcador de PR no canto do card', () => {
   })
 })
 
+// --- fundo esfumaçado (Configurações › Cores dos cards) ----------------------------
+
+describe('fundo do card pelo tipo ou pelo repositório', () => {
+  function mountNode(extra = {}) {
+    return mount(IssueNode, {
+      props: { data: { issue: { ...issue('WAI-9'), ...extra }, selected: false } },
+      global: { stubs: { Handle: true } },
+    })
+  }
+
+  it('card com tint ganha o esfumaçado na cor que veio do back', () => {
+    const wrapper = mountNode({ tint: { color: '#2f7cf6', source: 'repositorio', label: 'monitoria' } })
+
+    expect(wrapper.classes()).toContain('node--tinted')
+    expect(wrapper.attributes('style')).toContain('--tint: #2f7cf6')
+    expect(wrapper.attributes('data-tint')).toBe('monitoria')
+  })
+
+  it('card sem tint fica como sempre foi', () => {
+    const wrapper = mountNode({ tint: null })
+
+    expect(wrapper.classes()).not.toContain('node--tinted')
+    expect(wrapper.attributes('style')).not.toContain('--tint')
+    expect(wrapper.attributes('data-tint')).toBeUndefined()
+  })
+})
+
 // --- legenda clicável --------------------------------------------------------------
 
 // --- caixa de busca ----------------------------------------------------------------

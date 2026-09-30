@@ -6,10 +6,19 @@ from fastapi import APIRouter, Depends
 from database.pool import get_pool
 from repositories import settings_repo
 from schemas.pr_status_schemas import ApprovalRuleSettings
-from schemas.preference_schemas import ShortcutsOut, ShortcutsPreferences
-from services import pr_status_service
+from schemas.preference_schemas import (
+    CardColorsIn,
+    CardColorsOut,
+    CardTypeColorOut,
+    RepoColorOut,
+    ShortcutsOut,
+    ShortcutsPreferences,
+)
+from services import card_colors, pr_status_service
+from services.card_colors import CARD_TYPES, SUGGESTED_COLORS, CardColors
 from services.pr_status import ApprovalRule
 from services.shortcuts import merge_with_defaults
+from services.sync.engine import load_scope
 
 router = APIRouter(prefix="/preferences", tags=["preferences"])
 
@@ -41,3 +50,34 @@ async def put_pr_approval(pool: Pool, payload: ApprovalRuleSettings):
     """Quanto dos revisores precisa aprovar para o PR contar como "Aprovada"."""
     rule = await pr_status_service.save_rule(pool, ApprovalRule(min_percent=payload.min_percent))
     return ApprovalRuleSettings(min_percent=rule.min_percent)
+
+
+async def _card_colors_out(pool: asyncpg.Pool, colors: CardColors) -> CardColorsOut:
+    """Os repositórios são os escolhidos em Sincronização, mais os que saíram de lá com cor —
+    sem eles na lista, a cor ficaria gravada sem ter por onde tirar."""
+    synced = set((await load_scope(pool)).bitbucket.repo_slugs)
+    return CardColorsOut(
+        types=[
+            CardTypeColorOut(
+                id=t.id, label=t.label, color=colors.types.get(t.id), default_color=t.default_color
+            )
+            for t in CARD_TYPES
+        ],
+        repos=[
+            RepoColorOut(slug=slug, color=colors.repos.get(slug), synced=slug in synced)
+            for slug in sorted(synced | set(colors.repos))
+        ],
+        suggestions=list(SUGGESTED_COLORS),
+    )
+
+
+@router.get("/card-colors", response_model=CardColorsOut)
+async def get_card_colors(pool: Pool):
+    return await _card_colors_out(pool, await card_colors.load_colors(pool))
+
+
+@router.put("/card-colors", response_model=CardColorsOut)
+async def put_card_colors(pool: Pool, payload: CardColorsIn):
+    """Cor do fundo dos cards do canvas: pelo tipo (pais) e pelo `[repo]` do título."""
+    colors = CardColors.from_setting(payload.model_dump())
+    return await _card_colors_out(pool, await card_colors.save_colors(pool, colors))

@@ -2,6 +2,7 @@ import asyncpg
 
 from repositories import notes_repo, sprint_repo
 from schemas.sprint_schemas import (
+    CardTintOut,
     SprintSummaryOut,
     SprintTreeOut,
     TreeEdgeOut,
@@ -9,7 +10,7 @@ from schemas.sprint_schemas import (
     TreeNodeOut,
 )
 from security.credential_store import CredentialStore
-from services import card_updates, pr_status_service
+from services import card_colors, card_updates, pr_status_service
 from services.blocking import blockers_without_pr
 from services.hierarchy import is_hierarchy_link
 from services.progress.service import load_stages, stage_ref
@@ -31,6 +32,10 @@ def jira_identity(store: CredentialStore) -> tuple[str | None, str | None]:
 async def list_sprints(pool: asyncpg.Pool, store: CredentialStore) -> list[SprintSummaryOut]:
     account_id, _ = jira_identity(store)
     return [SprintSummaryOut(**row) for row in await sprint_repo.scope_sprints(pool, account_id)]
+
+
+def _tint_out(tint: card_colors.Tint | None) -> CardTintOut | None:
+    return CardTintOut(**vars(tint)) if tint else None
 
 
 async def sprint_tree(
@@ -87,6 +92,7 @@ async def sprint_tree(
     }
     base_url = f"{site_url.rstrip('/')}/browse/" if site_url else None
     stages = await load_stages(pool)
+    colors = await card_colors.load_colors(pool)
 
     # Card parcial é só o resumo de um link: não tem o que comparar.
     changes = await card_updates.unseen_changes(
@@ -146,6 +152,7 @@ async def sprint_tree(
                 url=f"{base_url}{n.key}" if base_url else None,
                 pr=pr_status_service.to_badge(summaries[n.key]) if n.key in summaries else None,
                 stage=stage_ref(stages.stage_of(n.status)),
+                tint=_tint_out(colors.tint_for(n.issue_type, n.summary)),
                 unseen_changes=changes.get(n.key, []),
                 note_count=note_counts.get(n.key, 0),
             )

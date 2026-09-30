@@ -232,6 +232,16 @@ com todo o histórico de PRs de uma vez. Rodar o sync de novo não duplica nada.
   contar como bloqueado, mas continua na onda de baixo. "Relates" entre tarefas não tem
   direção e não mexe nas ondas. Como a sprint é um desenho só, vínculo entre épicos
   diferentes também conta. Sprint sem vínculo nenhum continua em linha única, sem faixa.
+- **Cor do fundo do card** (Configurações › Cores dos cards, `GET/PUT /api/preferences/card-colors`):
+  um esfumaçado leve saindo do canto de cima, com o ícone, o tipo, a chave (`WAI-XXXX`) e o
+  chip de SP / "N filhas" na mesma cor. Os pais vão pelo tipo — Épico roxo, Enhancements dourado e Feature
+  verde-escuro por padrão, cada um trocável ou sem cor —, e as outras tarefas pelo
+  repositório entre colchetes no começo do título (`[monitoria] Enviar a coleta…`), com a
+  cor que o dev escolheu para cada repositório de Sincronização. A grafia do título não
+  importa (`[MonitorIA]`, `[Supervisor-Web]`); colchete com mais de um repositório fica com
+  o primeiro que tem cor. Card sem tipo nem repositório com cor fica como era, e a cor da
+  etapa continua na borda e no selo de status. A regra é do back
+  (`services/card_colors.py`), que manda o `tint` de cada nó da árvore.
 - **Marcador no canto superior direito do card**, para varrer o canvas sem ler o rodapé de
   cada um: check verde em **Aprovada**, check roxo em **Mergeada** e o ícone laranja em
   **Ajustes requisitados**. Os outros status continuam só na cor da borda e no badge.

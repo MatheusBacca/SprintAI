@@ -27,6 +27,13 @@ const marks = computed(() => nodeMarks(issue.value, canvasMarks?.value))
 const tone = computed(() => issue.value.stage?.color ?? 'var(--color-border-strong)')
 
 /**
+ * Fundo esfumaçado pelo tipo (pais) ou pelo `[repo]` do título — Configurações › Cores
+ * dos cards, com a regra no back. É só um tingido saindo do canto: o estado continua
+ * dito pela cor da etapa, na borda e no selo de status. Sem `tint`, o card fica como era.
+ */
+const tint = computed(() => issue.value.tint?.color ?? null)
+
+/**
  * Ícone de bloqueio só enquanto algum bloqueador não abriu PR: com a PR aberta já há
  * código de onde partir, e o card volta ao ícone do tipo e perde o "bloqueada por",
  * que lista só quem ainda falta abrir PR. A seta continua até o bloqueador concluir.
@@ -127,9 +134,11 @@ const updates = computed(() => {
       'node--muted': marks.muted,
       'node--emphasized': marks.emphasized,
       'node--pulse': pulse,
+      'node--tinted': tint,
     }"
-    :style="{ '--tone': tone, '--pulse': pulse?.color }"
+    :style="{ '--tone': tone, '--pulse': pulse?.color, '--tint': tint }"
     :data-key="issue.key"
+    :data-tint="issue.tint?.label"
     :data-corner="corner?.status"
     :data-pulse="pulse?.kind"
     :title="`${issue.partial ? 'Fora do espelho local: dados do link' : issue.summary}\nAlt + clique: destacar os cards em ${issue.status}`"
@@ -236,6 +245,21 @@ const updates = computed(() => {
 
 .node--parent {
   background: color-mix(in srgb, var(--tone) 5%, var(--color-surface));
+}
+
+/* Esfumaçado a partir do canto de cima, apagado antes do meio do card: o título continua
+   sobre a superfície de sempre. Depois do `.node--parent`, que ele substitui. A força
+   muda com o tema (`--card-tint-mix`). */
+.node--tinted {
+  --tint-ink: color-mix(in srgb, var(--tint) var(--card-tint-ink), var(--color-text));
+
+  background:
+    radial-gradient(
+      130% 150% at 0% 0%,
+      color-mix(in srgb, var(--tint) var(--card-tint-mix), transparent),
+      transparent 65%
+    ),
+    var(--color-surface);
 }
 
 .node--outside {
@@ -390,6 +414,26 @@ a.node__key:hover {
   background: var(--color-surface-muted);
   font-size: inherit;
   color: inherit;
+}
+
+/* Card pintado: ícone, tipo, chave e o chip de SP / filhas vão na cor dele, em vez da
+   cor da etapa. O texto puxa um pouco para a cor de texto do tema (`--card-tint-ink`),
+   senão o dourado some no branco e o roxo no fundo escuro (`--tint-ink`, no
+   `.node--tinted`). O ícone de bloqueio segue vermelho, e a chave continua sublinhando
+   no hover — só não troca para a cor primária. */
+.node--tinted .node__icon:not(.node__icon--blocked) {
+  background: color-mix(in srgb, var(--tint) 16%, transparent);
+  color: var(--tint-ink);
+}
+
+.node--tinted .node__type,
+.node--tinted .node__key {
+  color: var(--tint-ink);
+}
+
+.node--tinted .node__points {
+  background: color-mix(in srgb, var(--tint) 14%, transparent);
+  color: var(--tint-ink);
 }
 
 /* Status do Jira sentado no contorno, no canto oposto ao marcador de PR. O fundo é
