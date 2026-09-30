@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { Palette, Plus, RotateCcw, X } from 'lucide-vue-next'
+import ChipsInput from '@/components/notes/ChipsInput.vue'
 import { useCardColorsStore } from '@/stores/cardColors'
 
 /**
@@ -18,6 +19,7 @@ function reset() {
   draft.value = {
     types: Object.fromEntries(store.types.map((t) => [t.id, t.color])),
     repos: Object.fromEntries(store.repos.map((r) => [r.slug, r.color])),
+    aliases: Object.fromEntries(store.repos.map((r) => [r.slug, [...r.aliases]])),
   }
 }
 
@@ -31,9 +33,58 @@ const dirty = computed(() => {
   if (!draft.value) return false
   return (
     store.types.some((t) => draft.value.types[t.id] !== t.color) ||
-    store.repos.some((r) => draft.value.repos[r.slug] !== r.color)
+    store.repos.some((r) => draft.value.repos[r.slug] !== r.color) ||
+    store.repos.some((r) => draft.value.aliases[r.slug].join('\n') !== r.aliases.join('\n'))
   )
 })
+
+const MAX_ALIAS_LENGTH = 60
+
+function normalizeAlias(text) {
+  const alias = text.trim()
+  return alias && alias.length <= MAX_ALIAS_LENGTH ? alias : null
+}
+
+// A mesma comparação do `repo_key` do back: sem caixa, acento, hífen ou espaço.
+function nameKey(name) {
+  return name
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+}
+
+/**
+ * Apelido que já é o slug de outro repositório, ou apelido de outro também. O back recusa
+ * sem dizer qual (não repete o que foi digitado); aqui a linha diz qual é e de quem.
+ */
+const conflicts = computed(() => {
+  if (!draft.value) return {}
+  const slugs = new Map(store.repos.map((r) => [nameKey(r.slug), r.slug]))
+  const users = new Map()
+  for (const [slug, names] of Object.entries(draft.value.aliases)) {
+    for (const name of names) {
+      const key = nameKey(name)
+      users.set(key, [...(users.get(key) ?? []), slug])
+    }
+  }
+  // As duas linhas avisam: quem tinha o apelido e quem acabou de pôr.
+  const found = {}
+  for (const [slug, names] of Object.entries(draft.value.aliases)) {
+    for (const name of names) {
+      const key = nameKey(name)
+      const owner = slugs.get(key)
+      const others = (users.get(key) ?? []).filter((s) => s !== slug)
+      let text = null
+      if (owner && owner !== slug) text = `"${name}" já é o ${owner}`
+      else if (others.length) text = `"${name}" também é apelido do ${others.join(', ')}`
+      if (text) (found[slug] ??= []).push({ name, text })
+    }
+  }
+  return found
+})
+
+const blocked = computed(() => Object.keys(conflicts.value).length > 0)
 
 // Primeira sugestão que nenhum repositório está usando: três cliques em "Definir cor"
 // dão três cores diferentes. Esgotadas, volta a repetir da primeira.
@@ -50,6 +101,10 @@ function setRepo(slug, color) {
   draft.value.repos[slug] = color
 }
 
+function setAliases(slug, names) {
+  draft.value.aliases[slug] = names
+}
+
 async function save() {
   await store.save(draft.value)
 }
@@ -64,9 +119,13 @@ async function save() {
         <p class="colors__desc">
           O canvas da sprint pinta o fundo do card com um esfumaçado leve, a partir do canto de cima. Os pais
           ganham a cor do tipo; as tarefas, a do repositório entre colchetes no começo do título —
-          <code>[monitoria] Enviar a coleta…</code>. A grafia não importa (<code>[MonitorIA]</code> vale
-          para <code>monitoria</code>). Card sem tipo nem repositório com cor fica como sempre foi, e a
-          cor da etapa continua na borda e no selo de status.
+          <code>[monitoria] Enviar a coleta…</code>, com o nome de dentro do colchete na cor do
+          repositório. A grafia não importa (<code>[MonitorIA]</code> vale para <code>monitoria</code>), o
+          começo do nome até um hífen também vale quando só um repositório começa assim
+          (<code>[weaction]</code> para <code>weaction-api</code>), e outros apelidos vão no campo de cada
+          repositório. Com mais de um no colchete (<code>[supervisor/qualificai]</code>), cada cor
+          entra no fundo na ordem do título, da esquerda para a direita. Card sem tipo nem repositório
+          com cor fica como sempre foi, e a cor da etapa continua na borda e no selo de status.
         </p>
       </div>
     </header>
@@ -143,8 +202,28 @@ async function save() {
           <li v-for="repo in store.repos" :key="repo.slug" class="row" :data-repo="repo.slug">
             <div class="row__name">
               <strong>{{ repo.slug }}</strong>
-              <small v-if="!repo.synced" title="Saiu de Configurações › Sincronização, mas ainda tem cor">
+              <small
+                v-if="!repo.synced"
+                class="row__warning"
+                title="Saiu de Configurações › Sincronização, mas ainda tem cor ou apelido"
+              >
                 fora da sincronização
+              </small>
+              <label class="row__sr" :for="`apelidos-${repo.slug}`">Apelidos do {{ repo.slug }}</label>
+              <ChipsInput
+                class="row__aliases"
+                :model-value="draft.aliases[repo.slug]"
+                :normalize="normalizeAlias"
+                :input-id="`apelidos-${repo.slug}`"
+                invalid-message="Apelido com mais de 60 caracteres"
+                placeholder="apelidos (Enter ou vírgula)"
+                @update:model-value="setAliases(repo.slug, $event)"
+              />
+              <small v-if="repo.automatic_aliases.length" class="row__hint">
+                Também vale: {{ repo.automatic_aliases.map((name) => `[${name}]`).join(', ') }}
+              </small>
+              <small v-for="conflict in conflicts[repo.slug] ?? []" :key="conflict.name" class="row__conflict" role="alert">
+                {{ conflict.text }}
               </small>
             </div>
             <div
@@ -154,7 +233,7 @@ async function save() {
               aria-hidden="true"
             >
               <span class="preview__type">TAREFA</span>
-              <span class="preview__title">[{{ repo.slug }}] Título da tarefa</span>
+              <span class="preview__title">[<span class="preview__repo">{{ repo.slug }}</span>] Título da tarefa</span>
             </div>
             <div class="row__actions">
               <template v-if="draft.repos[repo.slug]">
@@ -195,7 +274,10 @@ async function save() {
         <button type="button" class="btn btn--secondary" :disabled="!dirty || store.saving" @click="reset">
           Descartar
         </button>
-        <button type="button" class="btn btn--primary" :disabled="!dirty || store.saving" @click="save">
+        <p v-if="blocked" class="colors__feedback" data-type="error" role="status">
+          Tem apelido valendo para dois repositórios — ajuste antes de salvar.
+        </p>
+        <button type="button" class="btn btn--primary" :disabled="!dirty || blocked || store.saving" @click="save">
           {{ store.saving ? 'Salvando…' : 'Salvar cores' }}
         </button>
       </footer>
@@ -297,7 +379,39 @@ async function save() {
 
 .row__name small {
   font-size: 11px;
+}
+
+.row__warning {
   color: var(--color-warning);
+}
+
+.row__hint {
+  margin-top: 3px;
+  color: var(--color-text-muted);
+}
+
+.row__conflict {
+  margin-top: 3px;
+  color: var(--color-error);
+}
+
+.row__aliases {
+  margin-top: 6px;
+}
+
+/* O campo de apelidos é baixo aqui: a linha é de uma cor, não um formulário. */
+.row__aliases :deep(.chips-input) {
+  min-height: 30px;
+  padding: 2px 6px;
+}
+
+.row__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .row__actions {
@@ -364,8 +478,9 @@ async function save() {
   color: var(--color-text-secondary);
 }
 
-/* E o tipo na cor do card, como no cabeçalho do IssueNode. */
-.preview--tinted .preview__type {
+/* E o tipo e o nome do colchete na cor do card, como no IssueNode. */
+.preview--tinted .preview__type,
+.preview--tinted .preview__repo {
   color: color-mix(in srgb, var(--tint) var(--card-tint-ink), var(--color-text));
 }
 

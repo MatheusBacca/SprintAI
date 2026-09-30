@@ -104,19 +104,55 @@ describe('fundo do card pelo tipo ou pelo repositório', () => {
   }
 
   it('card com tint ganha o esfumaçado na cor que veio do back', () => {
-    const wrapper = mountNode({ tint: { color: '#2f7cf6', source: 'repositorio', label: 'monitoria' } })
+    const wrapper = mountNode({ tint: { colors: ['#2f7cf6'], source: 'repositorio', label: 'monitoria' } })
 
     expect(wrapper.classes()).toContain('node--tinted')
     expect(wrapper.attributes('style')).toContain('--tint: #2f7cf6')
+    expect(wrapper.attributes('style')).not.toContain('--tint-2')
     expect(wrapper.attributes('data-tint')).toBe('monitoria')
+    expect(wrapper.attributes('data-tints')).toBe('1')
+  })
+
+  it('colchete com vários repositórios leva uma cor por repositório, na ordem do título', () => {
+    const wrapper = mountNode({
+      tint: { colors: ['#0d9488', '#db2777'], source: 'repositorio', label: 'supervisor-web, qualificai' },
+    })
+    const style = wrapper.attributes('style')
+
+    expect(style).toContain('--tint: #0d9488')
+    expect(style).toContain('--tint-2: #db2777')
+    expect(wrapper.attributes('data-tints')).toBe('2')
+  })
+
+  it('pinta só os nomes de dentro do colchete, cada um na cor do seu repositório', () => {
+    const wrapper = mountNode({
+      summary: '[supervisor/qualificai] Status no painel',
+      title_parts: [
+        { text: '[', color: null },
+        { text: 'supervisor', color: '#0d9488' },
+        { text: '/', color: null },
+        { text: 'qualificai', color: '#db2777' },
+        { text: '] Status no painel', color: null },
+      ],
+    })
+    const title = wrapper.find('.node__title')
+
+    expect(title.text()).toBe('[supervisor/qualificai] Status no painel')
+    expect(title.findAll('.node__repo').map((s) => [s.text(), s.attributes('style')])).toEqual([
+      ['supervisor', '--repo: #0d9488;'],
+      ['qualificai', '--repo: #db2777;'],
+    ])
   })
 
   it('card sem tint fica como sempre foi', () => {
-    const wrapper = mountNode({ tint: null })
+    const wrapper = mountNode({ tint: null, title_parts: [] })
 
     expect(wrapper.classes()).not.toContain('node--tinted')
     expect(wrapper.attributes('style')).not.toContain('--tint')
     expect(wrapper.attributes('data-tint')).toBeUndefined()
+    expect(wrapper.attributes('data-tints')).toBeUndefined()
+    expect(wrapper.find('.node__title').text()).toBe('Resumo WAI-9')
+    expect(wrapper.find('.node__repo').exists()).toBe(false)
   })
 })
 

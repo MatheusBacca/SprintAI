@@ -27,9 +27,16 @@ class SprintSummaryOut(BaseModel):
 class CardTintOut(BaseModel):
     """Fundo esfumaçado do card: pelo tipo (pais) ou pelo `[repo]` do título."""
 
-    color: str
+    # Na ordem do título; a primeira vai no canto de cima à esquerda e pinta o cabeçalho.
+    colors: list[str]
     source: Literal["tipo", "repositorio"]
     label: str
+
+
+class TitlePartOut(BaseModel):
+    text: str
+    # Cor do repositório quando o pedaço é um nome do colchete; None no resto do título.
+    color: str | None = None
 
 
 class TreeNodeOut(BaseModel):
@@ -67,6 +74,9 @@ class TreeNodeOut(BaseModel):
     pr: PrStatusBadgeOut | None
     stage: StageRefOut | None = None
     tint: CardTintOut | None = None
+    # Título em pedaços, com os nomes do colchete na cor do repositório. Vazio quando
+    # nenhum tem cor: o card mostra o `summary`.
+    title_parts: list[TitlePartOut] = []
     # Campos que mudaram desde o último clique no card (status, pr, story_points, assignee).
     unseen_changes: list[str] = []
     # Lembretes não arquivados vinculados à tarefa (ícone do rodapé do card).

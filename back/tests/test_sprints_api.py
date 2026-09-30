@@ -304,10 +304,16 @@ async def test_card_tem_fundo_pelo_tipo_e_pelo_repositorio_do_titulo(
 
     nodes = {n["key"]: n for n in (await client.get("/api/sprints/3995/tree")).json()["nodes"]}
 
-    assert nodes["WAI-6900"]["tint"] == {"color": "#7c3aed", "source": "tipo", "label": "Épico"}
+    assert nodes["WAI-6900"]["tint"] == {"colors": ["#7c3aed"], "source": "tipo", "label": "Épico"}
     assert nodes["WAI-7001"]["tint"] == {
-        "color": "#2f7cf6",
+        "colors": ["#2f7cf6"],
         "source": "repositorio",
         "label": "monitoria",
     }
+    assert nodes["WAI-7001"]["title_parts"] == [
+        {"text": "[", "color": None},
+        {"text": "Monitoria", "color": "#2f7cf6"},
+        {"text": "] Enviar a coleta", "color": None},
+    ]
     assert nodes["WAI-7003"]["tint"] is None
+    assert nodes["WAI-7003"]["title_parts"] == []

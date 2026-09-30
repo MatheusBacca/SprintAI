@@ -24,9 +24,9 @@ describe('CardColorsPanel', () => {
     stored = {
       types: TYPES,
       repos: [
-        { slug: 'monitoria', color: null, synced: true },
-        { slug: 'node-red4', color: '#0d9488', synced: false },
-        { slug: 'qualificai', color: null, synced: true },
+        { slug: 'monitoria', color: null, synced: true, aliases: [], automatic_aliases: [] },
+        { slug: 'node-red4', color: '#0d9488', synced: false, aliases: [], automatic_aliases: ['node'] },
+        { slug: 'qualificai', color: null, synced: true, aliases: ['QLFAI'], automatic_aliases: [] },
       ],
       suggestions: ['#2f7cf6', '#0d9488', '#ea580c'],
     }
@@ -39,7 +39,7 @@ describe('CardColorsPanel', () => {
           stored = {
             ...stored,
             types: stored.types.map((t) => ({ ...t, color: body.types[t.id] })),
-            repos: stored.repos.map((r) => ({ ...r, color: body.repos[r.slug] })),
+            repos: stored.repos.map((r) => ({ ...r, color: body.repos[r.slug], aliases: body.aliases[r.slug] })),
           }
         }
         return json(200, stored)
@@ -84,6 +84,7 @@ describe('CardColorsPanel', () => {
     expect(put.body).toEqual({
       types: { epico: '#7c3aed', enhancements: '#c9a227', feature: null },
       repos: { monitoria: '#2f7cf6', 'node-red4': '#0d9488', qualificai: '#ea580c' },
+      aliases: { monitoria: [], 'node-red4': [], qualificai: ['QLFAI'] },
     })
     expect(row(wrapper, 'data-type', 'feature').find('.row__define').exists()).toBe(true)
     expect(wrapper.find('.colors__feedback').attributes('data-type')).toBe('success')
@@ -104,6 +105,44 @@ describe('CardColorsPanel', () => {
     expect(wrapper.find('.btn--primary').attributes('disabled')).toBeUndefined()
     await wrapper.find('.colors__footer .btn--secondary').trigger('click')
     expect(row(wrapper, 'data-repo', 'node-red4').find('input[type="color"]').element.value).toBe('#0d9488')
+    expect(calls.some((c) => c.method === 'PUT')).toBe(false)
+  })
+
+  it('apelido digitado entra no salvar e o começo do slug aparece como "também vale"', async () => {
+    const wrapper = await mountPanel()
+    const input = row(wrapper, 'data-repo', 'monitoria').find('.chips-input__field')
+
+    expect(row(wrapper, 'data-repo', 'node-red4').find('.row__hint').text()).toBe('Também vale: [node]')
+    expect(row(wrapper, 'data-repo', 'qualificai').findAll('.chips-input__chip').map((c) => c.text())).toEqual(['QLFAI'])
+
+    await input.setValue('MonitorIA Voz')
+    await input.trigger('keydown', { key: 'Enter' })
+    await wrapper.find('.btn--primary').trigger('click')
+    await flushPromises()
+
+    const put = calls.find((c) => c.method === 'PUT')
+    expect(put.body.aliases).toEqual({ monitoria: ['MonitorIA Voz'], 'node-red4': [], qualificai: ['QLFAI'] })
+  })
+
+  it('apelido de outro repositório avisa de quem é e segura o salvar', async () => {
+    const wrapper = await mountPanel()
+    const add = async (slug, name) => {
+      const input = row(wrapper, 'data-repo', slug).find('.chips-input__field')
+      await input.setValue(name)
+      await input.trigger('keydown', { key: 'Enter' })
+    }
+
+    await add('monitoria', 'qlfai')
+    expect(row(wrapper, 'data-repo', 'monitoria').find('.row__conflict').text()).toBe('"qlfai" também é apelido do qualificai')
+    expect(row(wrapper, 'data-repo', 'qualificai').find('.row__conflict').text()).toBe('"QLFAI" também é apelido do monitoria')
+    expect(wrapper.find('.btn--primary').attributes('disabled')).toBeDefined()
+
+    await add('node-red4', 'Monitoria')
+    expect(row(wrapper, 'data-repo', 'node-red4').find('.row__conflict').text()).toBe('"Monitoria" já é o monitoria')
+
+    await row(wrapper, 'data-repo', 'monitoria').find('.chips-input__chip button').trigger('click')
+    await row(wrapper, 'data-repo', 'node-red4').find('.chips-input__chip button').trigger('click')
+    expect(wrapper.find('.row__conflict').exists()).toBe(false)
     expect(calls.some((c) => c.method === 'PUT')).toBe(false)
   })
 

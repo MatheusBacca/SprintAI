@@ -30,8 +30,19 @@ const tone = computed(() => issue.value.stage?.color ?? 'var(--color-border-stro
  * Fundo esfumaçado pelo tipo (pais) ou pelo `[repo]` do título — Configurações › Cores
  * dos cards, com a regra no back. É só um tingido saindo do canto: o estado continua
  * dito pela cor da etapa, na borda e no selo de status. Sem `tint`, o card fica como era.
+ *
+ * Colchete com vários repositórios traz uma cor por repositório, na ordem do título: a
+ * primeira no canto de cima à esquerda (e no cabeçalho), as outras seguindo para a
+ * direita. O back manda no máximo três — o CSS tem a posição de cada uma.
  */
-const tint = computed(() => issue.value.tint?.color ?? null)
+const tints = computed(() => issue.value.tint?.colors ?? [])
+const tintStyle = computed(() => {
+  const [first, second, third] = tints.value
+  return { '--tint': first, '--tint-2': second, '--tint-3': third }
+})
+
+// Título com os nomes do colchete na cor de cada repositório — só o nome, não o colchete.
+const titleParts = computed(() => issue.value.title_parts ?? [])
 
 /**
  * Ícone de bloqueio só enquanto algum bloqueador não abriu PR: com a PR aberta já há
@@ -134,11 +145,12 @@ const updates = computed(() => {
       'node--muted': marks.muted,
       'node--emphasized': marks.emphasized,
       'node--pulse': pulse,
-      'node--tinted': tint,
+      'node--tinted': tints.length,
     }"
-    :style="{ '--tone': tone, '--pulse': pulse?.color, '--tint': tint }"
+    :style="{ '--tone': tone, '--pulse': pulse?.color, ...tintStyle }"
     :data-key="issue.key"
     :data-tint="issue.tint?.label"
+    :data-tints="tints.length || undefined"
     :data-corner="corner?.status"
     :data-pulse="pulse?.kind"
     :title="`${issue.partial ? 'Fora do espelho local: dados do link' : issue.summary}\nAlt + clique: destacar os cards em ${issue.status}`"
@@ -184,7 +196,15 @@ const updates = computed(() => {
       <span v-if="updates" class="node__updated" role="status" :title="updates" :aria-label="updates" />
     </header>
 
-    <h3 class="node__title">{{ issue.summary || issue.key }}</h3>
+    <h3 v-if="titleParts.length" class="node__title">
+      <span
+        v-for="(part, index) in titleParts"
+        :key="index"
+        :class="{ node__repo: part.color }"
+        :style="part.color ? { '--repo': part.color } : undefined"
+      >{{ part.text }}</span>
+    </h3>
+    <h3 v-else class="node__title">{{ issue.summary || issue.key }}</h3>
 
     <footer class="node__footer">
       <template v-if="issue.in_sprint && issue.pr">
@@ -257,6 +277,44 @@ const updates = computed(() => {
     radial-gradient(
       130% 150% at 0% 0%,
       color-mix(in srgb, var(--tint) var(--card-tint-mix), transparent),
+      transparent 65%
+    ),
+    var(--color-surface);
+}
+
+/* Vários repositórios no colchete: um esfumaçado por cor ao longo da borda de cima, na
+   ordem do título — o primeiro no canto esquerdo, o segundo já perto do centro, o
+   terceiro no canto direito. Cada um é menor que o de uma cor só, senão viram um borrão. */
+.node--tinted[data-tints='2'] {
+  background:
+    radial-gradient(
+      85% 150% at 0% 0%,
+      color-mix(in srgb, var(--tint) var(--card-tint-mix), transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      85% 150% at 60% 0%,
+      color-mix(in srgb, var(--tint-2) var(--card-tint-mix), transparent),
+      transparent 65%
+    ),
+    var(--color-surface);
+}
+
+.node--tinted[data-tints='3'] {
+  background:
+    radial-gradient(
+      70% 150% at 0% 0%,
+      color-mix(in srgb, var(--tint) var(--card-tint-mix), transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      70% 150% at 50% 0%,
+      color-mix(in srgb, var(--tint-2) var(--card-tint-mix), transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      70% 150% at 100% 0%,
+      color-mix(in srgb, var(--tint-3) var(--card-tint-mix), transparent),
       transparent 65%
     ),
     var(--color-surface);
@@ -383,6 +441,12 @@ const updates = computed(() => {
 
 .node--done .node__title {
   color: var(--color-text-secondary);
+}
+
+/* Nome do repositório dentro do colchete, na cor dele — com a mesma puxada para a cor
+   de texto do cabeçalho pintado, para continuar legível nos dois temas. */
+.node__repo {
+  color: color-mix(in srgb, var(--repo) var(--card-tint-ink), var(--color-text));
 }
 
 .node__divider {

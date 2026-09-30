@@ -5,6 +5,7 @@ from schemas.sprint_schemas import (
     CardTintOut,
     SprintSummaryOut,
     SprintTreeOut,
+    TitlePartOut,
     TreeEdgeOut,
     TreeGroupOut,
     TreeNodeOut,
@@ -35,7 +36,9 @@ async def list_sprints(pool: asyncpg.Pool, store: CredentialStore) -> list[Sprin
 
 
 def _tint_out(tint: card_colors.Tint | None) -> CardTintOut | None:
-    return CardTintOut(**vars(tint)) if tint else None
+    if tint is None:
+        return None
+    return CardTintOut(colors=list(tint.colors), source=tint.source, label=tint.label)
 
 
 async def sprint_tree(
@@ -93,6 +96,7 @@ async def sprint_tree(
     base_url = f"{site_url.rstrip('/')}/browse/" if site_url else None
     stages = await load_stages(pool)
     colors = await card_colors.load_colors(pool)
+    paints = {n.key: colors.paint(n.issue_type, n.summary) for n in tree.nodes.values()}
 
     # Card parcial é só o resumo de um link: não tem o que comparar.
     changes = await card_updates.unseen_changes(
@@ -152,7 +156,8 @@ async def sprint_tree(
                 url=f"{base_url}{n.key}" if base_url else None,
                 pr=pr_status_service.to_badge(summaries[n.key]) if n.key in summaries else None,
                 stage=stage_ref(stages.stage_of(n.status)),
-                tint=_tint_out(colors.tint_for(n.issue_type, n.summary)),
+                tint=_tint_out(paints[n.key].tint),
+                title_parts=[TitlePartOut(**vars(p)) for p in paints[n.key].title],
                 unseen_changes=changes.get(n.key, []),
                 note_count=note_counts.get(n.key, 0),
             )

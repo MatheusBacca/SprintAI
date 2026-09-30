@@ -37,12 +37,12 @@ export const useCardColorsStore = defineStore('cardColors', {
       }
     },
 
-    /** `types` e `repos` são mapas id/slug → cor (`null` tira a cor). */
-    async save({ types, repos }) {
+    /** `types` e `repos` são mapas id/slug → cor (`null` tira a cor); `aliases`, slug → apelidos. */
+    async save({ types, repos, aliases }) {
       this.saving = true
       this.feedback = null
       try {
-        this.apply(await api.put('/preferences/card-colors', { types, repos }))
+        this.apply(await api.put('/preferences/card-colors', { types, repos, aliases }))
         this.feedback = { type: 'success', text: 'Cores salvas. O canvas da sprint já abre com elas.' }
         return true
       } catch (error) {

@@ -237,11 +237,17 @@ com todo o histórico de PRs de uma vez. Rodar o sync de novo não duplica nada.
   chip de SP / "N filhas" na mesma cor. Os pais vão pelo tipo — Épico roxo, Enhancements dourado e Feature
   verde-escuro por padrão, cada um trocável ou sem cor —, e as outras tarefas pelo
   repositório entre colchetes no começo do título (`[monitoria] Enviar a coleta…`), com a
-  cor que o dev escolheu para cada repositório de Sincronização. A grafia do título não
-  importa (`[MonitorIA]`, `[Supervisor-Web]`); colchete com mais de um repositório fica com
-  o primeiro que tem cor. Card sem tipo nem repositório com cor fica como era, e a cor da
-  etapa continua na borda e no selo de status. A regra é do back
-  (`services/card_colors.py`), que manda o `tint` de cada nó da árvore.
+  cor que o dev escolheu para cada repositório de Sincronização — e o nome de dentro do
+  colchete sai na cor do repositório. A grafia do título não importa (`[MonitorIA]`,
+  `[Supervisor-Web]`), o começo do slug até um hífen vale quando só um repositório começa
+  assim (`[weaction]` para weaction-api, `[supervisor]` para supervisor-web; `[api]` não é
+  de ninguém), e outros apelidos se cadastram em cada repositório (`[Internal]` para
+  organia-configs). Colchete com mais de um repositório (`[supervisor/qualificai]`) leva um
+  esfumaçado por repositório com cor, na ordem do título: o primeiro no canto esquerdo e os
+  outros seguindo para a direita, até três. Card sem tipo nem repositório com cor fica como
+  era, e a cor da etapa continua na borda e no selo de status. A regra é do back
+  (`services/card_colors.py`), que manda o `tint` e o título em pedaços (`title_parts`) de
+  cada nó da árvore.
 - **Marcador no canto superior direito do card**, para varrer o canvas sem ler o rodapé de
   cada um: check verde em **Aprovada**, check roxo em **Mergeada** e o ícone laranja em
   **Ajustes requisitados**. Os outros status continuam só na cor da borda e no badge.
