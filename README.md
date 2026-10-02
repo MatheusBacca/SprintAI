@@ -336,6 +336,9 @@ sem tarefa — só os repositórios escolhidos, para ter terminal à mão.
   dev pelo `parent` não aparece: o espelho só guarda as suas.
 - **Aba Tarefas:** o mesmo canvas da Sprint, com a moldura "N tarefa(s) na feature". Clique
   abre o painel da tarefa.
+- **Lado a lado:** Tarefas e Linha do tempo juntas, separadas por uma divisão que se arrasta
+  na horizontal (setas do teclado também ajustam; duplo clique volta ao meio). A proporção fica
+  salva neste navegador, e trocar de repo na coluna não tira o canvas da tela.
 - **Repositórios envolvidos** (coluna da esquerda), cada um dizendo de onde veio: branch local
   com a chave, PR ou branch no espelho do Bitbucket, `[repo]` do título, ou fixado por você.
   Dá para esconder um repo e adicionar outro de `C:\projects`. Cada linha abre a pasta no
@@ -343,8 +346,15 @@ sem tarefa — só os repositórios escolhidos, para ter terminal à mão.
 - **Aba Linha do tempo:** o grafo de commits do repo, como o `gitk --all`/GitLens — pistas
   coloridas, etiquetas de branch local (cheia), `origin/` (tracejada), tag e HEAD, a local e
   a `origin/` no mesmo commit viram uma etiqueta só (nuvem), à frente/atrás do upstream, a
-  marca de worktree e o selo do PR do espelho; tag em amarelo. **Só da feature** mostra a base
-  e as branches com a chave das tarefas; **Todas** é o `--all` (sem o stash). Em cima, a linha
+  marca de worktree e o selo do PR do espelho; tag em amarelo. **Só da feature** mostra só o
+  que as branches com a chave carregam, desde a base — e não o histórico inteiro:
+  - branch ainda não mergeada: os commits que só ela tem e o ponto da base de onde saiu;
+  - mergeada: o merge que a levou para a base e o que ela trouxe;
+  - recém-criada: só o commit em que ela está;
+  - apagada depois do merge (o normal no Bitbucket): os commits que citam a chave na mensagem.
+
+  O ponto da base aparece com o nó vazado e a marca "base", e a pista termina nele.
+  **Todas** é o `--all` (sem o stash). Em cima, a linha
   de "Alterações não commitadas" de cada worktree e as worktrees de fora de `C:\projects`
   (as da pasta temporária do Claude), marcadas. A chave `WAI-XXXX` de cada commit vem na cor do
   status de PR da tarefa (Mergeada roxo, Aprovada verde…), a mesma do selo do card; clique abre
@@ -367,7 +377,11 @@ sem tarefa — só os repositórios escolhidos, para ter terminal à mão.
   histórico inteiro do repo — mensagem, autor e começo de hash, texto literal. Os commits
   achados aparecem no painel e ficam marcados no grafo.
 - **Terminais** embaixo, um PowerShell por repo, aberto na pasta (o `powershell.exe` de
-  verdade, com o seu perfil). Até três lado a lado; mais que isso, abas. A altura se ajusta
+  verdade, com o seu perfil). **Abrem sozinhos**: cada repo das tarefas do workspace ganha o
+  seu (até seis), e o terminal que já existe para o repo — aberto noutro workspace — é o mesmo
+  shell, não abre outro. Fechar um à mão vale para aquele workspace: ele não volta sozinho, e o
+  "+" do cabeçalho reabre. Abrir uma tarefa no painel traz o terminal do repo dela para a
+  frente. Até três lado a lado; mais que isso, abas. A altura se ajusta
   arrastando a borda e fica salva neste navegador. Recarregar a página reata os shells vivos
   com o que já tinha passado neles. Colar várias linhas pede confirmação; Ctrl+C com texto
   selecionado copia, sem seleção interrompe; os atalhos globais (Ctrl+K…) ficam com o shell

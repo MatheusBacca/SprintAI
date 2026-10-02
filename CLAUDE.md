@@ -200,6 +200,11 @@ conta a decisão ou o caso real que levou àquilo.
   `extract_issue_keys` entende todas. Worktree mora em três lugares: `<repo>\.claude\worktrees\`,
   `C:\projects\.worktrees\<repo>-WAI-XXXX` e a pasta temp das sessões do Claude (fora das
   raízes, em HEAD destacado — aparece no grafo, sem terminal).
+- **A branch da feature some depois do merge.** O merge pelo Bitbucket apaga a branch no
+  origin, e o dev costuma apagar a local. Por isso o "Só da feature" da linha do tempo, sem
+  branch com a chave, cai nos commits que citam a chave na mensagem — a convenção do time é
+  `feat(WAI-8790): …` e "Merged in WAI-8790-… (pull request #N)", com a base como primeiro
+  pai do merge.
 - **O espelho do Bitbucket não é lista de branches.** Só guarda branch com `WAI-`, dos repos
   escolhidos e "minhas". A linha do tempo lê o git local; o espelho só põe o selo do PR.
 - **Terminal é WinPTY, não ConPTY.** O ConPTY do pywinpty cria o processo com o Ctrl+C
