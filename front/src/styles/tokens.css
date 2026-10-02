@@ -100,6 +100,50 @@
   --pr-declined: #e53935;
 
   /*
+   * Pistas da linha do tempo das branches (Workspace). Oito, como o gitk: a pista N usa a
+   * cor N mod 8. Tons de mesma força para nenhuma branch parecer mais importante.
+   */
+  --lane-1: #8a4fff;
+  --lane-2: #2f7cf6;
+  --lane-3: #10b981;
+  --lane-4: #f59e0b;
+  --lane-5: #e5487f;
+  --lane-6: #0d9488;
+  --lane-7: #ea580c;
+  --lane-8: #64748b;
+
+  /*
+   * Terminais do Workspace (xterm.js). O xterm não lê CSS: o painel lê estes tokens com
+   * getComputedStyle e reaplica quando o tema troca. As 16 cores ANSI seguem a ordem do
+   * xterm (black … brightWhite).
+   */
+  --term-bg: #fbfbfd;
+  --term-fg: #1f2330;
+  --term-cursor: #6528d9;
+  --term-selection: rgba(138, 79, 255, 0.22);
+  --term-black: #1f2330;
+  --term-red: #c62828;
+  --term-green: #2e7d32;
+  --term-yellow: #a16207;
+  --term-blue: #1d4ed8;
+  --term-magenta: #7c3aed;
+  --term-cyan: #0e7490;
+  --term-white: #5c6370;
+  --term-bright-black: #868e96;
+  --term-bright-red: #e53935;
+  --term-bright-green: #43a047;
+  --term-bright-yellow: #ca8a04;
+  --term-bright-blue: #2f7cf6;
+  --term-bright-magenta: #8a4fff;
+  --term-bright-cyan: #0891b2;
+  --term-bright-white: #1a1d21;
+
+  /* Tag do git na linha do tempo: amarelo, para não se confundir com branch nem com PR. */
+  --git-tag-bg: #fff4c2;
+  --git-tag-border: #e6c229;
+  --git-tag-text: #7a5d00;
+
+  /*
    * Post-its. O papel colorido é do tema claro; no escuro ele vira um tingido
    * escuro da mesma família, senão o quadro de lembretes queima a tela.
    * O texto herda --color-text; --note-inset são as caixinhas internas (chip
@@ -257,6 +301,40 @@
   --pr-approved: #5cd396;
   --pr-merged: #a074ff;
   --pr-declined: #ff7b74;
+
+  --lane-1: #a074ff;
+  --lane-2: #62a0ff;
+  --lane-3: #5cd396;
+  --lane-4: #ffb45c;
+  --lane-5: #ff7aa8;
+  --lane-6: #3ec7b8;
+  --lane-7: #ff8f52;
+  --lane-8: #9aa3b8;
+
+  --term-bg: #100f22;
+  --term-fg: #dcdaf0;
+  --term-cursor: #b490ff;
+  --term-selection: rgba(160, 116, 255, 0.32);
+  --term-black: #24233f;
+  --term-red: #ff7b74;
+  --term-green: #5cd396;
+  --term-yellow: #ffb45c;
+  --term-blue: #62a0ff;
+  --term-magenta: #b795ff;
+  --term-cyan: #3ec7b8;
+  --term-white: #c9c6e0;
+  --term-bright-black: #6f6b8f;
+  --term-bright-red: #ff9b95;
+  --term-bright-green: #7fe0ae;
+  --term-bright-yellow: #ffc98a;
+  --term-bright-blue: #8fbcff;
+  --term-bright-magenta: #cdb5ff;
+  --term-bright-cyan: #6fdccf;
+  --term-bright-white: #ffffff;
+
+  --git-tag-bg: rgba(250, 204, 21, 0.16);
+  --git-tag-border: #d4b02a;
+  --git-tag-text: #f5d565;
 
   --note-inset: rgba(255, 255, 255, 0.08);
   --note-inset-strong: rgba(255, 255, 255, 0.12);
