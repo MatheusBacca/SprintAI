@@ -149,6 +149,7 @@ describe('stores/terminals', () => {
 describe('TerminalDock', () => {
   let calls
   let health
+  let hello
 
   const repos = [
     { slug: 'monitoria', path: 'C:\\projects\\monitoria' },
@@ -159,6 +160,8 @@ describe('TerminalDock', () => {
   beforeEach(() => {
     calls = []
     health = true
+    hello = []
+    localStorage.clear()
     let created = 0
     vi.stubGlobal(
       'fetch',
@@ -167,7 +170,7 @@ describe('TerminalDock', () => {
         const body = init.body ? JSON.parse(init.body) : undefined
         calls.push({ method, url, body })
         if (url === '/api/terminal/health') return health ? json({ ok: true, sessions: 0 }) : json({ detail: 'fora' }, 502)
-        if (url.startsWith('/api/terminal/stream')) return streamOf([sse({ type: 'hello', sessions: [] })])
+        if (url.startsWith('/api/terminal/stream')) return streamOf([sse({ type: 'hello', sessions: hello })])
         if (url === '/api/terminal/sessions' && method === 'POST') {
           created += 1
           return json(session(String(created).repeat(16).slice(0, 16), body.cwd, { label: body.label }), 201)
@@ -222,6 +225,53 @@ describe('TerminalDock', () => {
     await flushPromises()
     expect(wrapper.emitted('pin-repo')).toEqual([['supervisor-web']])
     expect(calls.find((c) => c.method === 'POST').body.cwd).toBe('C:\\projects\\supervisor-web')
+  })
+
+  it('abre sozinho um terminal para cada repo do workspace que ainda não tem', async () => {
+    hello = [session(A, 'C:\\projects\\monitoria')]
+    const wrapper = await mountDock({ workspaceId: 7 })
+    await flushPromises()
+
+    const opened = calls.filter((c) => c.method === 'POST' && c.url === '/api/terminal/sessions')
+    expect(opened.map((c) => c.body.cwd)).toEqual(['C:\\projects\\qualificai'])
+    expect(wrapper.findAll('.term').map((t) => t.find('.term__label').text())).toEqual(['monitoria', 'qualificai'])
+  })
+
+  it('terminal fechado à mão não volta sozinho naquele workspace, e o + reabre', async () => {
+    const wrapper = await mountDock({ workspaceId: 7 })
+    await flushPromises()
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(2)
+
+    const qualificai = wrapper.findAll('.term').find((t) => t.find('.term__label').text() === 'qualificai')
+    await qualificai.find('.term__action[aria-label="Fechar terminal"]').trigger('click')
+    await flushPromises()
+    wrapper.unmount()
+
+    calls = []
+    hello = useTerminalsStore().sessions
+    const again = await mountDock({ workspaceId: 7 })
+    await flushPromises()
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0)
+
+    // Outro workspace com o mesmo repo: lá ele abre.
+    again.unmount()
+    calls = []
+    await mountDock({ workspaceId: 8 })
+    await flushPromises()
+    expect(calls.filter((c) => c.method === 'POST').map((c) => c.body.cwd)).toEqual(['C:\\projects\\qualificai'])
+  })
+
+  it('a tarefa aberta no painel traz o terminal do repo dela para a frente', async () => {
+    const wrapper = await mountDock()
+    const store = useTerminalsStore()
+    for (const [i, slug] of ['monitoria', 'monitoria', 'monitoria', 'qualificai'].entries()) {
+      store._handle({ type: 'opened', session: session(String(i).repeat(16), `C:\\projects\\${slug}`) })
+    }
+    await flushPromises()
+    await wrapper.setProps({ focusRepos: ['qualificai'] })
+    const active = wrapper.find('.term--active')
+    expect(active.find('.term__label').text()).toBe('qualificai')
+    expect(active.classes()).toContain('term--focus')
   })
 
   it('mais de três terminais viram abas', async () => {

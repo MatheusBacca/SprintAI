@@ -50,6 +50,8 @@ export const useTerminalsStore = defineStore('terminals', {
     /** `null` = ainda não perguntou; `false` = terminal host fora do ar. */
     available: null,
     connected: false,
+    /** A lista de sessões do terminal host já chegou (`hello`): dá para saber o que falta abrir. */
+    synced: false,
     error: null,
     opening: false,
     _users: 0,
@@ -82,6 +84,7 @@ export const useTerminalsStore = defineStore('terminals', {
         this._controller?.abort()
         this._controller = null
         this.connected = false
+        this.synced = false
       }
     },
 
@@ -251,6 +254,7 @@ export const useTerminalsStore = defineStore('terminals', {
           const alive = new Set(frame.sessions.map((s) => s.id))
           for (const id of [...offsets.keys()]) if (!alive.has(id)) this._forget(id)
           this.sessions = frame.sessions
+          this.synced = true
           break
         }
         case 'opened':

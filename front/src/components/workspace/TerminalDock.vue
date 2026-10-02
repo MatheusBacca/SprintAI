@@ -1,7 +1,7 @@
 <script setup>
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ChevronDown, ChevronUp, Plus, RotateCcw, SquareTerminal, X } from 'lucide-vue-next'
-import { useTerminalsStore } from '@/stores/terminals'
+import { isInside, useTerminalsStore } from '@/stores/terminals'
 
 // O xterm é o pedaço pesado do Workspace: só carrega quando um terminal aparece.
 const TerminalPane = defineAsyncComponent(() => import('./TerminalPane.vue'))
@@ -12,6 +12,10 @@ const TerminalPane = defineAsyncComponent(() => import('./TerminalPane.vue'))
  * monitoria aberto noutro workspace aparece aqui também, é o mesmo shell.
  *
  * Até três ficam lado a lado; passando disso, viram abas.
+ *
+ * **Abre sozinho** um terminal para cada repo do workspace que ainda não tem um — é o que o
+ * dev quer ao abrir as tarefas. Fechar um terminal à mão vale para aquele workspace: ele não
+ * volta sozinho (fica salvo neste navegador), e o "+" do cabeçalho reabre.
  */
 const props = defineProps({
   /** Repos com clone local: `{ slug, path }`. */
@@ -20,6 +24,10 @@ const props = defineProps({
   allRepos: { type: Array, default: () => [] },
   selectedRepo: { type: String, default: null },
   collapsed: { type: Boolean, default: false },
+  /** Workspace aberto: a lista de terminais fechados à mão é por workspace. */
+  workspaceId: { type: Number, default: null },
+  /** Repos da tarefa aberta no painel: o terminal deles vem para a frente. */
+  focusRepos: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['toggle', 'pin-repo', 'open-folder'])
 
@@ -37,7 +45,84 @@ const extraRepos = computed(() => {
 const adding = ref('')
 
 function repoOf(session) {
-  return props.repos.find((r) => session.cwd.toLowerCase().startsWith(r.path.toLowerCase())) ?? null
+  return props.repos.find((r) => isInside(session.cwd, r.path)) ?? null
+}
+
+// --- Abrir sozinho -------------------------------------------------------------------------
+
+const DISMISSED_KEY = 'sprintai.workspace.terminals.dismissed'
+// O terminal host aceita 12; seis abertos sozinhos deixam folga para os abertos à mão.
+const AUTO_LIMIT = 6
+
+function readDismissed() {
+  try {
+    return JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? '{}') ?? {}
+  } catch {
+    return {}
+  }
+}
+
+const dismissed = ref(readDismissed())
+
+function isDismissed(slug) {
+  return (dismissed.value[props.workspaceId] ?? []).includes(slug)
+}
+
+function setDismissed(slug, on) {
+  if (!props.workspaceId || !slug) return
+  const current = new Set(dismissed.value[props.workspaceId] ?? [])
+  if (on) current.add(slug)
+  else current.delete(slug)
+  dismissed.value = { ...dismissed.value, [props.workspaceId]: [...current] }
+  try {
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify(dismissed.value))
+  } catch {
+    // Sem localStorage: o terminal fechado volta na próxima vez.
+  }
+}
+
+const autoOpening = new Set()
+
+/**
+ * Um terminal por repo do workspace. Espera a lista de sessões do terminal host (`synced`):
+ * antes dela não dá para saber o que já existe, e abriria em dobro. Sessão encerrada também
+ * conta como existente — ela fica na tela com o "reabrir".
+ */
+async function autoOpen() {
+  if (!props.workspaceId || !store.synced || store.available === false) return
+  let budget = AUTO_LIMIT - sessions.value.filter((s) => s.alive).length
+  for (const repo of props.repos) {
+    if (budget <= 0) return
+    if (isDismissed(repo.slug) || autoOpening.has(repo.path)) continue
+    if (store.sessionsIn([repo.path]).length) continue
+    autoOpening.add(repo.path)
+    budget -= 1
+    try {
+      await store.open({ cwd: repo.path, label: repo.slug })
+    } finally {
+      autoOpening.delete(repo.path)
+    }
+  }
+}
+
+watch(
+  [() => store.synced, () => folders.value.join('|'), () => props.workspaceId],
+  () => autoOpen(),
+  { immediate: true },
+)
+
+// Tarefa aberta no painel: o terminal do repo dela vem para a frente.
+watch(
+  () => props.focusRepos.join('|'),
+  () => {
+    const session = sessions.value.find((s) => props.focusRepos.includes(repoOf(s)?.slug))
+    if (session) activeId.value = session.id
+  },
+)
+
+function closeSession(session) {
+  setDismissed(repoOf(session)?.slug, true)
+  store.close(session.id)
 }
 
 // O stream só é pedido com o terminal host no ar. Fora do ar, pergunta de novo de tempos
@@ -77,6 +162,7 @@ watch(sessions, (list) => {
 })
 
 async function openIn(repo) {
+  setDismissed(repo.slug, false)
   const session = await store.open({ cwd: repo.path, label: repo.slug })
   if (session) activeId.value = session.id
 }
@@ -167,7 +253,11 @@ const selected = computed(() => props.repos.find((r) => r.slug === props.selecte
             v-show="!tabbed || session.id === activeId"
             :key="session.id"
             class="term"
-            :class="{ 'term--active': session.id === activeId, 'term--dead': !session.alive }"
+            :class="{
+              'term--active': session.id === activeId,
+              'term--dead': !session.alive,
+              'term--focus': focusRepos.includes(repoOf(session)?.slug),
+            }"
             :data-session="session.id"
             @focusin="activeId = session.id"
           >
@@ -181,7 +271,7 @@ const selected = computed(() => props.repos.find((r) => r.slug === props.selecte
               <button type="button" class="term__action" title="Abrir a pasta no Windows Terminal" aria-label="Windows Terminal" @click="emit('open-folder', 'terminal', session.cwd)">
                 <SquareTerminal :size="13" />
               </button>
-              <button type="button" class="term__action" title="Fechar o terminal (encerra o shell e o que estiver rodando nele)" aria-label="Fechar terminal" @click="store.close(session.id)">
+              <button type="button" class="term__action" title="Fechar o terminal (encerra o shell e o que estiver rodando nele)" aria-label="Fechar terminal" @click="closeSession(session)">
                 <X :size="13" />
               </button>
             </header>
@@ -336,6 +426,10 @@ const selected = computed(() => props.repos.find((r) => r.slug === props.selecte
 
 .term--active {
   border-color: var(--color-primary);
+}
+
+.term--focus .term__bar {
+  background: var(--color-primary-soft);
 }
 
 .term__bar {

@@ -107,6 +107,10 @@ function startDockResize(event) {
 /** Chaves da feature: a linha do tempo destaca as branches delas (e as do card aberto). */
 const featureKeys = computed(() => store.detail?.keys ?? [])
 const highlightKeys = computed(() => (selectedKey.value ? [selectedKey.value] : []))
+/** Repos da tarefa aberta no painel — os terminais deles vêm para a frente. */
+const focusRepos = computed(() =>
+  selectedKey.value ? store.visibleRepos.filter((r) => r.issue_keys.includes(selectedKey.value)).map((r) => r.slug) : [],
+)
 
 screen.enter('workspace')
 
@@ -337,6 +341,8 @@ onBeforeUnmount(() => drawerObserver?.disconnect())
           :all-repos="allLocalRepos"
           :selected-repo="selectedRepo"
           :collapsed="dock.collapsed"
+          :workspace-id="workspaceId"
+          :focus-repos="focusRepos"
           @toggle="dock.collapsed = !dock.collapsed"
           @pin-repo="store.pin($event, 'add')"
           @open-folder="store.openFolder"
