@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Sobe o SprintAI inteiro: Docker Desktop -> Postgres -> migrations -> API -> front.
+    Sobe o SprintAI inteiro: Docker Desktop -> Postgres -> migrations -> API -> terminal -> front.
 
 .DESCRIPTION
     Orquestrador do uso diário. Cada etapa é idempotente: se o Docker já está de pé,
@@ -183,6 +183,8 @@ $apiPorta   = [int](Get-ValorEnv $valoresEnv 'API_PORT' '8765')
 $frontUrl   = (Get-ValorEnv $valoresEnv 'FRONT_ORIGIN' 'http://localhost:5273').TrimEnd('/')
 $frontPorta = [int]([uri]$frontUrl).Port
 $urlSaude   = 'http://{0}:{1}/api/health' -f $apiHost, $apiPorta
+$terminalPorta = [int](Get-ValorEnv $valoresEnv 'TERMINAL_PORT' '8766')
+$urlTerminal   = 'http://{0}:{1}/api/terminal/health' -f $apiHost, $terminalPorta
 
 # --- Docker Desktop ---------------------------------------------------------
 if (-not (Get-Command docker.exe -ErrorAction SilentlyContinue)) {
@@ -283,6 +285,15 @@ if (Test-PortaEmUso $apiHost $apiPorta) {
     $pids['back'] = (Start-Servico 'back' $uv @('run', 'python', 'main.py') $DirBack).Id
 }
 
+# Os terminais do Workspace moram num processo próprio, sem reload: a API sobe com
+# reload, e cada edição no back/ derrubaria os shells abertos.
+if (Test-PortaEmUso $apiHost $terminalPorta) {
+    Write-Log "Terminal já respondia na porta $terminalPorta; não subi outro."
+} else {
+    Write-Log 'Subindo o terminal...'
+    $pids['terminal'] = (Start-Servico 'terminal' $uv @('run', 'python', 'terminal_host.py') $DirBack).Id
+}
+
 if (Test-PortaEmUso '127.0.0.1' $frontPorta) {
     Write-Log "Front já respondia na porta $frontPorta; não subi outro."
 } else {
@@ -302,6 +313,13 @@ if ($apiOk) {
     Write-Log 'API no ar.' 'ok'
 } else {
     Write-Log 'API não respondeu — veja .logs\back.err.log' 'erro'
+}
+
+# Sem terminal o resto funciona — a tela avisa e oferece o Windows Terminal. Não é erro.
+if (Wait-Condicao { Test-ApiSaudavel $urlTerminal } 30 'terminal responder /api/terminal/health') {
+    Write-Log 'Terminal no ar.' 'ok'
+} else {
+    Write-Log 'Terminal não respondeu — veja .logs\terminal.err.log' 'aviso'
 }
 
 $frontOk = Wait-Condicao { Test-PortaEmUso '127.0.0.1' $frontPorta } 60 'front abrir a porta'

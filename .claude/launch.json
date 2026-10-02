@@ -8,6 +8,12 @@
       "port": 8765
     },
     {
+      "name": "terminal",
+      "runtimeExecutable": "back/.venv/Scripts/python.exe",
+      "runtimeArgs": ["back/terminal_host.py"],
+      "port": 8766
+    },
+    {
       "name": "front",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "front", "run", "dev"],

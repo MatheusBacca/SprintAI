@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Derruba a API e o front do SprintAI (e, se pedido, o container do banco).
+    Derruba a API, o terminal e o front do SprintAI (e, se pedido, o container do banco).
 
 .DESCRIPTION
     Mata por duas vias, nessa ordem: os PIDs que o launcher anotou em
@@ -83,6 +83,8 @@ if ($valoresEnv.ContainsKey('API_PORT') -and $valoresEnv['API_PORT']) { $apiPort
 $frontUrl   = 'http://localhost:5273'
 if ($valoresEnv.ContainsKey('FRONT_ORIGIN') -and $valoresEnv['FRONT_ORIGIN']) { $frontUrl = $valoresEnv['FRONT_ORIGIN'] }
 $frontPorta = [int]([uri]$frontUrl).Port
+$terminalPorta = 8766
+if ($valoresEnv.ContainsKey('TERMINAL_PORT') -and $valoresEnv['TERMINAL_PORT']) { $terminalPorta = [int]$valoresEnv['TERMINAL_PORT'] }
 
 if (Test-Path $ArqPids) {
     try {
@@ -98,6 +100,8 @@ if (Test-Path $ArqPids) {
 
 Stop-DonoDaPorta -Porta $apiPorta -Rotulo 'API'
 Stop-DonoDaPorta -Porta $frontPorta -Rotulo 'front'
+# Derrubar o terminal host derruba junto os shells abertos pela tela (árvore inteira).
+Stop-DonoDaPorta -Porta $terminalPorta -Rotulo 'terminal'
 
 if ($PararBanco) {
     Push-Location $Raiz
