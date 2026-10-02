@@ -149,6 +149,32 @@ describe('IssueDrawer', () => {
     return wrapper
   }
 
+  it('com router, o botão de pasta abre o Workspace da tarefa', async () => {
+    const posts = []
+    vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
+      if (init.method === 'POST' && url === '/api/workspaces') {
+        posts.push(JSON.parse(init.body))
+        return json(201, { id: 9, kind: 'issue', root_issue_key: 'WAI-124', title: 'x', is_open: true, tab_order: 0 })
+      }
+      if (url === '/api/workspaces') return json(200, [])
+      if (url === '/api/issues/WAI-124') return json(200, ISSUE)
+      throw new Error(`não mockado: ${url}`)
+    }))
+    const router = createRouter({ history: createMemoryHistory(), routes })
+    router.push('/sprints')
+    await router.isReady()
+    const wrapper = mount(IssueDrawer, { props: { issueKey: 'WAI-124' }, global: { plugins: [router] }, attachTo: document.body })
+    await flushPromises()
+
+    await wrapper.find('button[aria-label="Abrir no Workspace"]').trigger('click')
+    await flushPromises()
+    expect(posts).toEqual([{ root_issue_key: 'WAI-124' }])
+    // A rota do Workspace carrega a tela sob demanda: a navegação termina depois do import.
+    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('workspace'))
+    expect(router.currentRoute.value.query.ws).toBe('9')
+    wrapper.unmount()
+  })
+
   it('cabeçalho e aba Detalhes como no print', async () => {
     const wrapper = await mountDrawer()
 

@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import {
   BookOpenText,
   CalendarDays,
+  FolderGit2,
   House,
   Moon,
   PanelLeftClose,
@@ -17,7 +18,7 @@ import { navItems } from '@/router/routes'
 import { useUiStore } from '@/stores/ui'
 
 // Import explícito: `import *` levaria o pacote inteiro de ícones para o bundle.
-const icons = { BookOpenText, CalendarDays, House, Settings, StickyNote, Workflow }
+const icons = { BookOpenText, CalendarDays, FolderGit2, House, Settings, StickyNote, Workflow }
 
 const ui = useUiStore()
 

@@ -16,6 +16,12 @@ export const routes = [
     meta: { title: 'Sprints', icon: 'Workflow', nav: true, fullHeight: true, issueDrawer: true },
   },
   {
+    path: '/workspace',
+    name: 'workspace',
+    component: () => import('@/views/WorkspaceView.vue'),
+    meta: { title: 'Workspace', icon: 'FolderGit2', nav: true, fullHeight: true, issueDrawer: true },
+  },
+  {
     path: '/semana',
     name: 'week',
     component: () => import('@/views/WeekView.vue'),

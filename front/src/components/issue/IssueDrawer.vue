@@ -1,6 +1,7 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Ban, Layers, SquareCheck, StickyNote, X } from 'lucide-vue-next'
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { routerKey } from 'vue-router'
+import { Ban, FolderGit2, Layers, SquareCheck, StickyNote, X } from 'lucide-vue-next'
 import IssueContextsTab from './IssueContextsTab.vue'
 import IssueDependenciesTab from './IssueDependenciesTab.vue'
 import IssueDetailsTab from './IssueDetailsTab.vue'
@@ -15,6 +16,7 @@ import { useIssueDetailStore } from '@/stores/issueDetail'
 import { useNotesStore } from '@/stores/notes'
 import { useRefreshStore } from '@/stores/refresh'
 import { useUiStore } from '@/stores/ui'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { safeUrl } from '@/utils/safeUrl'
 
 const props = defineProps({
@@ -109,6 +111,22 @@ const tabs = computed(() => {
   ]
 })
 
+/**
+ * Abre (ou reabre) o Workspace desta tarefa. O router vem por `inject` com padrão: o painel
+ * também é montado sem router (testes), e ali o botão só não aparece.
+ */
+const router = inject(routerKey, null)
+const openingWorkspace = ref(false)
+async function openWorkspace() {
+  openingWorkspace.value = true
+  try {
+    const workspace = await useWorkspaceStore().openIssue(props.issueKey)
+    if (workspace) router.push({ name: 'workspace', query: { ws: String(workspace.id) } })
+  } finally {
+    openingWorkspace.value = false
+  }
+}
+
 function onKeydown(event) {
   if (event.key === 'Escape') emit('close')
 }
@@ -147,9 +165,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           />
         </template>
         <button
+          v-if="router"
           type="button"
-          class="drawer__action drawer__action--first drawer__notes"
-          :class="{ 'drawer__action--active': notesOpen }"
+          class="drawer__action drawer__action--first"
+          title="Abrir no Workspace: cards da feature, linha do tempo e terminal de cada repo"
+          aria-label="Abrir no Workspace"
+          :disabled="openingWorkspace"
+          @click="openWorkspace"
+        >
+          <FolderGit2 :size="15" />
+        </button>
+        <button
+          type="button"
+          class="drawer__action drawer__notes"
+          :class="{ 'drawer__action--first': !router, 'drawer__action--active': notesOpen }"
           :title="notesOpen ? 'Voltar aos detalhes' : 'Lembretes desta tarefa'"
           aria-label="Lembretes"
           :aria-pressed="notesOpen"
