@@ -262,14 +262,18 @@ def review_progress(
 
 
 def pull_request_link(
-    issue_key: str, row: dict[str, Any], rule: ApprovalRule = DEFAULT_RULE
+    issue_key: str | None, row: dict[str, Any], rule: ApprovalRule = DEFAULT_RULE
 ) -> PullRequestLink:
+    """`issue_key` só decide o `match` (chave na branch ou citada no título). Sem tarefa —
+    o PR achado pela branch, na linha do tempo do Workspace —, o vínculo é a branch."""
     participants = row.get("participants") or []
     fix_pushed = fix_after_request(
         row.get("last_changes_requested_at"), row.get("last_commit_at")
     )
-    branch_keys = extract_issue_keys(
-        row.get("source_branch"), project_keys=[issue_key.split("-", 1)[0]]
+    branch_keys = (
+        extract_issue_keys(row.get("source_branch"), project_keys=[issue_key.split("-", 1)[0]])
+        if issue_key
+        else []
     )
     pr_state = {
         "state": row["state"],
@@ -303,7 +307,7 @@ def pull_request_link(
         ],
         build_status=row.get("build_status"),
         comment_count=row.get("comment_count"),
-        match="branch" if issue_key in branch_keys else "title",
+        match="title" if issue_key and issue_key not in branch_keys else "branch",
         fix_pushed=fix_pushed,
         review=review_progress(**pr_state),
     )

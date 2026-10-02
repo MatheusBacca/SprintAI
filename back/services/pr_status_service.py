@@ -18,6 +18,7 @@ from services.pr_status import (
     LABELS,
     ApprovalRule,
     IssuePrSummary,
+    PullRequestLink,
     ReviewProgress,
     summarize_issue,
 )
@@ -78,18 +79,19 @@ def badge_links(summary: IssuePrSummary) -> list[PrLinkOut]:
     """
     prs = [pr for repo in summary.repos for pr in repo.pull_requests if pr.url]
     live = [pr for pr in prs if pr.status not in CLOSED_WITHOUT_MERGE]
-    return [
-        PrLinkOut(
-            repo_slug=pr.repo_slug,
-            id=pr.id,
-            title=pr.title,
-            status=pr.status,
-            status_label=LABELS[pr.status],
-            url=pr.url,
-            review=review_out(pr.review),
-        )
-        for pr in live or prs
-    ]
+    return [link_out(pr) for pr in live or prs]
+
+
+def link_out(pr: PullRequestLink) -> PrLinkOut:
+    return PrLinkOut(
+        repo_slug=pr.repo_slug,
+        id=pr.id,
+        title=pr.title,
+        status=pr.status,
+        status_label=LABELS[pr.status],
+        url=pr.url,
+        review=review_out(pr.review),
+    )
 
 
 def to_badge(summary: IssuePrSummary) -> PrStatusBadgeOut:

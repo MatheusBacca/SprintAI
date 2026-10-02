@@ -177,6 +177,19 @@ class CardColors:
         """Slug do repositório que um nome do colchete quer dizer."""
         return self._resolve.get(repo_key(name))  # type: ignore[attr-defined]
 
+    def title_repos(self, summary: str | None) -> list[str]:
+        """Repositórios citados no colchete do título, tenham cor ou não. O `paint` só enxerga
+        quem tem cor; o Workspace quer saber onde a tarefa mexe."""
+        match = TITLE_TAG.match(summary or "")
+        if not match:
+            return []
+        found: list[str] = []
+        for token in TAG_SEPARATORS.split(match.group(1)):
+            slug = self.resolve(token.strip()) if token.strip() else None
+            if slug and slug not in found:
+                found.append(slug)
+        return found
+
     def automatic_aliases(self, slug: str) -> list[str]:
         """Começos do slug que valem sozinhos — a tela mostra como "também vale"."""
         return list(self._automatic.get(slug, []))  # type: ignore[attr-defined]
