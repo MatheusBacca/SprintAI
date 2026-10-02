@@ -141,3 +141,61 @@ conexão, quando o pedido com certeza não chegou. Um 5xx ou timeout de leitura 
 Só o **PROGRESS canônico**, em `<repo>\.claude-outputs\progress\`, com escrita atômica e
 hash otimista ([contrato](harness/progress-format.md)). Raízes permitidas: `C:\projects\` e
 `C:\Users\<dev>\.claude\`. Todo o resto do harness é somente leitura.
+
+## Workspace: disco, git e terminal
+
+O Workspace (`/workspace`) é a única parte do SprintAI que lê o disco e roda processo. Três
+peças, cada uma com o seu limite:
+
+```
+front/ ──► /api/workspace/*  (API :8765)
+              ├─ services/workspace/discovery.py   lê .git/config e .git/HEAD — sem git
+              ├─ services/workspace/git_local.py   git só leitura, lista branca
+              └─ services/workspace/launcher.py    Code.exe / wt.exe na pasta
+      └──► /api/terminal/*   (terminal host :8766, sem reload)
+              └─ terminal/sessions.py ──► winpty (WinPTY) ──► powershell.exe
+```
+
+**Guarda de caminho** (`security/paths.py`). Todo caminho vindo do front passa por ela antes
+de virar leitura, `cwd` de processo ou argumento do `code`/`wt`: só abaixo de `C:\projects\`
+(e `~\.claude\`), symlink e junção resolvidos antes da comparação, `..` recusado mesmo que
+resolva para dentro, caminho de rede recusado. A mensagem de erro não repete o caminho.
+
+**Git só leitura** (`services/workspace/git_local.py`). Subcomandos `for-each-ref`, `log`,
+`show`, `status` e `worktree` — nada mais passa. Sempre com `--no-optional-locks` (o
+`status` normal pega o `index.lock` e brigaria com o git do terminal), `core.fsmonitor=false`
+(o fsmonitor do `.git/config` é um comando que o `status` executaria) e, no `show`,
+`--no-ext-diff --no-textconv`. Roda por `subprocess.run` numa thread: com `reload=True` o
+uvicorn usa o `SelectorEventLoop` no Windows, onde `create_subprocess_exec` não existe. A
+tela pergunta a cada 5 s com a impressão digital do `.git` (mtime de HEAD, index, refs,
+packed-refs, FETCH_HEAD e worktrees); sem mudança, o git não roda. `fetch` nunca é automático.
+
+**Git de escrita local** (`services/workspace/git_actions.py`). Três ações, cada uma por
+clique do dev no painel de branches, serializadas por repo (`branch_service`, um lock por
+slug):
+
+| Ação | Comando | Recusa |
+|---|---|---|
+| Fetch | `git fetch origin --prune` | — (só traz; o ssh vai em `BatchMode`, sem pedir senha) |
+| Avançar | aberta numa worktree: `merge --ff-only <upstream>` lá dentro; fechada: `fetch . <upstream>:refs/heads/<branch>` | divergiu, alteração no caminho, sem upstream, worktree fora das raízes |
+| Apagar | `git branch -d` (`-D` só com `force`, a segunda confirmação) | a base, a aberta numa worktree |
+
+Escrita precisa do lock, então aqui não vai `--no-optional-locks`; o resto da proteção fica
+(`core.fsmonitor=false`, sem prompt, timeout, sem janela). O stderr do git não vai para a
+tela: os casos conhecidos viram mensagem pronta com um `code` (`unmerged`, `diverged`,
+`checked_out`, `auth`…), e é pelo `code` que a tela decide o que oferecer. Nada empurra nem
+apaga no Bitbucket.
+
+**Terminal host** (`terminal_host.py`, `terminal/`). Processo à parte, sem reload — cada
+edição no `back/` derrubaria os shells da API. Não abre banco nem Cofre. Sem WebSocket, para
+a guarda ficar inteira: a saída de todas as sessões vem num stream só
+(`GET /api/terminal/stream`, `fetch` + `ReadableStream`) e as teclas vão por POST com o
+`X-SprintAI`. A saída é numerada por sessão e guardada num buffer circular em memória; a
+reconexão manda `since=<id>:<offset>` e recebe só o que falta (ou um `reset` com o buffer).
+A API recebe **pasta e perfil** — nunca um comando — e o shell nasce com o ambiente do dev
+menos a configuração do SprintAI (`security/process_env.py`). A saída não vai para log,
+banco, busca nem contexto do agente.
+
+O backend é o **WinPTY**, não o ConPTY: o spike W0 mostrou que o ConPTY do pywinpty cria o
+processo com o Ctrl+C desligado para os filhos. Encerrar um terminal é `taskkill /T /F` no
+shell — a árvore inteira.

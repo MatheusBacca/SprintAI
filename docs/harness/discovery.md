@@ -1,7 +1,8 @@
 # Descoberta do harness
 
-> **Estado:** desenho fechado no P0 (M5); o indexador é a **B13** e o vínculo repo ↔ pasta é
-> a **B12**, ambos no M6.
+> **Estado:** o vínculo repo ↔ pasta (**B12**) está pronto — entrou com o Workspace
+> (`services/workspace/discovery.py`, tabela `workspace_repo`, Configurações › Workspace). O
+> indexador (**B13**) continua no M6.
 
 O "harness" é a estrutura que os agentes Claude já entendem e que hoje só existe como
 arquivo no disco: `CLAUDE.md`, `DOCS.md`, `PROGRESS.md`, skills, agents, plans, memory,
@@ -23,7 +24,7 @@ aviso.
 
 ## Vínculo repo ↔ pasta (B12)
 
-Não existe hoje. A descoberta é **só leitura** e sem nenhum comando git:
+A descoberta é **só leitura** e sem nenhum comando git (`services/workspace/discovery.py`):
 
 1. lista as pastas de `C:\projects\`;
 2. lê `.git/config` e casa o remote `git@bitbucket.org:weonrepo/<slug>.git` com o

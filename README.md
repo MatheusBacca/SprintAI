@@ -63,7 +63,7 @@ este repositório:
 | Atalho | O que faz |
 |---|---|
 | Área de Trabalho e Menu Iniciar → **SprintAI** | sobe tudo e abre a tela no navegador |
-| Menu Iniciar → **Parar SprintAI** | derruba API e front (o banco fica de pé) |
+| Menu Iniciar → **Parar SprintAI** | derruba API, terminal e front (o banco fica de pé) |
 | Inicialização do Windows | sobe tudo no logon com `-NoBrowser`, sem roubar o foco |
 
 O `scripts/sprintai.ps1` é o que todos chamam, e é idempotente: abre o Docker Desktop se
@@ -73,8 +73,10 @@ duas vezes não duplica nada — dá para clicar no atalho da Área de Trabalho 
 hora só para abrir a tela. Na primeira execução ele também cria o `.env` a partir do
 `.env.example` e roda `uv sync` / `npm install` se faltarem.
 
-API e front sobem como processos ocultos e escrevem em `.logs/` (`back.log`, `front.log`,
-`launcher.log` e os `.err.log` de cada um) — é lá que se olha quando algo não sobe.
+API, terminal host e front sobem como processos ocultos e escrevem em `.logs/` (`back.log`,
+`terminal.log`, `front.log`, `launcher.log` e os `.err.log` de cada um) — é lá que se olha
+quando algo não sobe. O terminal host (`back/terminal_host.py`) é o processo dos terminais do
+Workspace; sem ele o resto funciona, e a tela oferece o Windows Terminal.
 
 `desinstalar.ps1` remove os atalhos. Para parar pela linha de comando:
 
@@ -93,6 +95,7 @@ em vez de chamar o `powershell.exe` direto, senão um console preto pisca no log
 |---|---|---|
 | 5273 | front (Vite) | `FRONT_ORIGIN` no `.env` da raiz — o Vite lê a porta dela |
 | 8765 | API local | `API_PORT` |
+| 8766 | terminal host (terminais do Workspace, sem reload) | `TERMINAL_PORT` |
 | 5433 | Postgres (Docker) | `DB_PORT` |
 
 O front **não** usa a 5173, padrão do Vite: ela é do front do `organia-configs` (e o
@@ -315,6 +318,93 @@ continua lendo e o painel mostra o erro do Jira.
 | `POST /api/issues/{key}/transitions` | move a tarefa (`{ "transition_id": "31" }`); 409 se a transição não existe mais ou pede campos |
 | `PUT /api/issues/{key}/story-points` | grava os Story Points (`{ "story_points": 5 }`, `null` apaga); 409 se o campo não está na tela de edição |
 
+## Workspace (`/workspace`)
+
+Uma feature numa aba: os cards dela, a **linha do tempo das branches** de cada repositório
+envolvido e um **terminal** na pasta de cada um. Abre pelo ícone de pasta no cabeçalho do
+painel de qualquer tarefa, ou pela chave na própria tela. Também existe o **workspace livre**,
+sem tarefa — só os repositórios escolhidos, para ter terminal à mão.
+
+- **Abas no topo da tela** com os workspaces abertos. Fechar a aba não apaga o workspace: ele
+  vai para "Abertos antes", e abrir de novo a mesma tarefa reabre o dela. As abas ficam na
+  tela, e não no topo do app — lá moram os lembretes fixados.
+- **Conjunto da feature.** Raiz Épico, Enhancements ou Feature desce até três níveis: filhas
+  pelo `parent`, quem aponta para ela por link de hierarquia (a Tarefa fatiada que "Relates"
+  o Enhancements) e o que ela própria liga — é assim que a fatia de outro dev aparece,
+  tracejada, só com o snapshot do link. Raiz Tarefa traz as subtarefas e as vizinhas por
+  Blocks, "is caused by" e Relates; o pai entra como contexto, fora da moldura. Filha de outro
+  dev pelo `parent` não aparece: o espelho só guarda as suas.
+- **Aba Tarefas:** o mesmo canvas da Sprint, com a moldura "N tarefa(s) na feature". Clique
+  abre o painel da tarefa.
+- **Repositórios envolvidos** (coluna da esquerda), cada um dizendo de onde veio: branch local
+  com a chave, PR ou branch no espelho do Bitbucket, `[repo]` do título, ou fixado por você.
+  Dá para esconder um repo e adicionar outro de `C:\projects`. Cada linha abre a pasta no
+  **VS Code** ou no **Windows Terminal**.
+- **Aba Linha do tempo:** o grafo de commits do repo, como o `gitk --all`/GitLens — pistas
+  coloridas, etiquetas de branch local (cheia), `origin/` (tracejada), tag e HEAD, a local e
+  a `origin/` no mesmo commit viram uma etiqueta só (nuvem), à frente/atrás do upstream, a
+  marca de worktree e o selo do PR do espelho; tag em amarelo. **Só da feature** mostra a base
+  e as branches com a chave das tarefas; **Todas** é o `--all` (sem o stash). Em cima, a linha
+  de "Alterações não commitadas" de cada worktree e as worktrees de fora de `C:\projects`
+  (as da pasta temporária do Claude), marcadas. A chave `WAI-XXXX` de cada commit vem na cor do
+  status de PR da tarefa (Mergeada roxo, Aprovada verde…), a mesma do selo do card; clique abre
+  a tarefa. Clique no commit mostra mensagem e arquivos com +/−. Atualiza sozinha a cada 5 s, e
+  o git só roda quando o `.git` mudou.
+- **Painel de branches** à esquerda da linha do tempo (botão **Branches** esconde): as locais
+  (HEAD, worktree, à frente/atrás, "apagada no remoto", selo do PR), as `origin/` e as tags,
+  da mais recente para a mais antiga. Clique leva ao commit. Em cada branch local:
+  - **Avançar até o upstream** (quando ela está atrás): só fast-forward. Aberta numa worktree,
+    é o `merge --ff-only` lá dentro (os arquivos mudam); fechada, só a ref anda. Divergiu,
+    tem alteração no caminho ou não tem upstream: o painel diz e nada muda.
+  - **Apagar a branch local:** o segundo clique confirma. Branch com commit que não está em
+    outra o git recusa, e o painel pergunta de novo — o terceiro clique apaga mesmo assim
+    (`-D`). A branch base e a aberta numa worktree não se apagam. A mensagem diz o
+    `git branch <nome> <hash>` que desfaz. Branch no **Bitbucket não se apaga** daqui.
+- **Fetch** no cabeçalho: `git fetch origin --prune` — traz do Bitbucket o que mudou e tira as
+  `origin/` que sumiram lá. Só pelo botão; o painel conta o que veio ("2 novas, 1 removida do
+  remoto"). Não escreve nada no Bitbucket.
+- **Busca** no cabeçalho: filtra o painel na hora (branch, tag, assunto) e procura no
+  histórico inteiro do repo — mensagem, autor e começo de hash, texto literal. Os commits
+  achados aparecem no painel e ficam marcados no grafo.
+- **Terminais** embaixo, um PowerShell por repo, aberto na pasta (o `powershell.exe` de
+  verdade, com o seu perfil). Até três lado a lado; mais que isso, abas. A altura se ajusta
+  arrastando a borda e fica salva neste navegador. Recarregar a página reata os shells vivos
+  com o que já tinha passado neles. Colar várias linhas pede confirmação; Ctrl+C com texto
+  selecionado copia, sem seleção interrompe; os atalhos globais (Ctrl+K…) ficam com o shell
+  quando o foco está no terminal. Fechar o terminal encerra o shell e tudo o que rodava nele.
+
+**Configurações › Workspace** lista as pastas de `C:\projects` lidas do disco agora (sem
+rodar git): vínculo com o Bitbucket pelo remote `origin` e a branch base (do Bitbucket, do
+`origin/HEAD` do clone ou por palpite), com ajuste manual quando o automático errar.
+
+| Rota | O que faz |
+|---|---|
+| `GET /api/workspace/repos` | pastas de `C:\projects` com vínculo, base e branch atual |
+| `PUT /api/workspace/repos/{slug}` | ajusta vínculo (`auto`/`none`/`manual`) e branch base |
+| `GET /api/workspace/repos/{slug}/graph` | refs, worktrees e commits (`scope`, `keys`, `skip`, `limit`, `since`) |
+| `GET /api/workspace/repos/{slug}/commits/{sha}` | detalhe do commit com os arquivos |
+| `GET /api/workspace/repos/{slug}/refs` | todas as branches locais, `origin/` e tags, com upstream e selo do PR |
+| `GET /api/workspace/repos/{slug}/search?q=` | commits do histórico pela mensagem, autor ou hash |
+| `POST /api/workspace/repos/{slug}/fetch` | `git fetch origin --prune`; devolve as novas, atualizadas e removidas |
+| `POST /api/workspace/repos/{slug}/branches/update` | avança a branch local até o upstream (`{ "name" }`, só fast-forward) |
+| `POST /api/workspace/repos/{slug}/branches/delete` | apaga a branch local (`{ "name", "force" }`); 409 com `code` (`unmerged`, `checked_out`, `protected`…) |
+| `POST /api/workspace/open` | abre a pasta no VS Code (`ide`) ou no Windows Terminal (`terminal`) |
+| `GET/POST /api/workspaces` | lista; abre o da tarefa (reabre se existe) ou cria um livre |
+| `GET/PATCH/DELETE /api/workspaces/{id}` | detalhe com os repos envolvidos; aba aberta/fechada; apagar |
+| `GET /api/workspaces/{id}/tree` | árvore da feature, no formato do canvas da Sprint |
+| `PUT /api/workspaces/{id}/repos/{slug}` | fixa (`add`), esconde (`hide`) ou volta ao automático (`auto`) |
+
+Terminal host (`:8766`, pelo proxy do Vite em `/api/terminal`):
+
+| Rota | O que faz |
+|---|---|
+| `GET /api/terminal/health` | no ar? |
+| `GET/POST /api/terminal/sessions` | lista; abre um PowerShell na pasta (`cwd`, `cols`, `rows`) |
+| `POST /api/terminal/sessions/{id}/input` | teclas (`{ "data": "..." }`) |
+| `POST /api/terminal/sessions/{id}/resize` | tamanho em colunas e linhas |
+| `DELETE /api/terminal/sessions/{id}` | encerra o shell (e a árvore de processos dele) |
+| `GET /api/terminal/stream?since=<id>:<offset>,…` | saída de todas as sessões, num stream só |
+
 ## Lembretes (`/lembretes`)
 
 - Post-its com título, texto, cor, tags, fixar, arquivar e **horário de lembrete** (atalhos "em 1 hora", "amanhã 9h", "segunda 9h").
@@ -509,6 +599,9 @@ cd back && uv run pytest && uv run ruff check .
 cd front && npm test && npm run lint
 ```
 
+Os testes do terminal host usam um PTY de mentira; um deles abre um `cmd.exe` de verdade pelo
+WinPTY (só no Windows). Os da linha do tempo montam um repo git pequeno numa pasta temporária.
+
 ## Estrutura
 
 ```
@@ -517,7 +610,10 @@ back/
   config.py          settings do .env da raiz
   core/              logger com máscara de segredos
   database/          pool asyncpg sob demanda
-  security/          cofre de credenciais (keyring) e guarda da API local
+  security/          cofre de credenciais (keyring), guarda da API local, guarda de caminho
+                     (paths.py) e ambiente limpo dos processos (process_env.py)
+  services/workspace/ repos locais, git só leitura, conjunto da feature, abrir no VS Code/WT
+  terminal_host.py   terminal host (processo à parte, sem reload) — terminal/ tem as sessões
   integrations/      clientes Jira/Bitbucket (retry, paginação, erros sem segredo)
   routers/ → services/ → repositories/ ; schemas/
   migrations/        alembic async, migrations escritas à mão
