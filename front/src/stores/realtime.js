@@ -13,7 +13,7 @@ import { API_BASE, CLIENT_HEADER } from '@/services/api'
  */
 const RETRY_MS = [1000, 2000, 5000, 10_000, 30_000]
 
-function parseBlock(block) {
+export function parseBlock(block) {
   let kind = 'message'
   const data = []
   for (const line of block.split('\n')) {

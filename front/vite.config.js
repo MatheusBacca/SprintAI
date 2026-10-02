@@ -5,6 +5,8 @@ import { fileURLToPath, URL } from 'node:url'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '..', '')
   const apiTarget = `http://${env.API_HOST || '127.0.0.1'}:${env.API_PORT || '8765'}`
+  // Terminais do Workspace: processo próprio, sem reload (back/terminal_host.py).
+  const terminalTarget = `http://${env.API_HOST || '127.0.0.1'}:${env.TERMINAL_PORT || '8766'}`
 
   // A porta sai do FRONT_ORIGIN do .env da raiz: é a mesma origem que a guarda
   // local do back libera. Duas fontes da verdade dariam um 403 no primeiro
@@ -26,7 +28,9 @@ export default defineConfig(({ mode }) => {
       // Sem strictPort o Vite cairia para a porta seguinte e o back recusaria a
       // origem com 403 — melhor falhar dizendo que a porta está ocupada.
       strictPort: true,
+      // A ordem importa: o `/api/terminal` mais específico vem antes do `/api`.
       proxy: {
+        '/api/terminal': { target: terminalTarget, changeOrigin: false },
         '/api': { target: apiTarget, changeOrigin: false },
       },
     },

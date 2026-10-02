@@ -54,6 +54,8 @@ const handlers = {
 
 function onKeydown(event) {
   if (shortcuts.recording || event.repeat || event.isComposing || event.defaultPrevented) return
+  // No terminal do Workspace a tecla é do shell: Ctrl+K, Ctrl+Shift+L e cia. vão para ele.
+  if (event.target?.closest?.('[data-terminal]')) return
   const combo = comboFromEvent(event)
   const action = combo && shortcuts.actionFor(combo)
   if (!action || !handlers[action]) return
