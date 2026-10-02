@@ -20,6 +20,7 @@ Roda por `subprocess.run` numa thread: com `reload=True` o uvicorn usa o
 
 import asyncio
 import hashlib
+import heapq
 import os
 import re
 import subprocess
@@ -282,7 +283,9 @@ async def worktree_changes(worktree_path: Path) -> Changes:
 
 # --- Log (o grafo) --------------------------------------------------------------------------
 
-LOG_FORMAT = "%H%x1f%P%x1f%an%x1f%aI%x1f%cI%x1f%s%x1e"
+# O `%m` no fim é a marca do `--boundary`: `-` no commit de fronteira (o ponto da base de onde
+# a feature saiu), `>` no resto.
+LOG_FORMAT = "%H%x1f%P%x1f%an%x1f%aI%x1f%cI%x1f%s%x1f%m%x1e"
 
 
 @dataclass(frozen=True)
@@ -293,6 +296,8 @@ class Commit:
     authored_at: datetime | None
     committed_at: datetime | None
     subject: str
+    # Commit de fronteira: não é da feature, é o ponto da base em que ela se apoia.
+    boundary: bool = False
 
 
 def parse_log(output: str) -> list[Commit]:
@@ -313,6 +318,7 @@ def parse_log(output: str) -> list[Commit]:
                 authored_at=_parse_date(authored),
                 committed_at=_parse_date(committed),
                 subject=subject,
+                boundary=len(parts) > 6 and parts[6].strip() == "-",
             )
         )
     return commits
@@ -337,6 +343,146 @@ async def log(repo_path: Path, revisions: list[str], *, skip: int, limit: int) -
         "--",
     )
     return parse_log(output)
+
+
+# --- Só da feature ---------------------------------------------------------------------------
+
+
+async def feature_history(
+    repo_path: Path, feature_refs: list[str], base_refs: list[str], *, limit: int
+) -> list[Commit]:
+    """O que as branches da feature carregam, desde a base — e não o histórico inteiro.
+
+    Para cada branch da feature:
+
+    - **ainda não entrou na base:** os commits que só ela tem (`<branch> ^<base>`) e o commit
+      de fronteira, que é o ponto da base de onde ela saiu (ou o último merge da base nela);
+    - **já entrou por merge:** o merge que a levou para a base e os commits que ela trouxe
+      (`<branch> ^<primeiro pai do merge>`), com a base daquele momento como fronteira;
+    - **nasceu agora (ou entrou por fast-forward):** só o commit em que ela está.
+
+    O resultado volta numa ordem só, filho antes de pai, do mais novo para o mais antigo.
+    """
+    for rev in (*feature_refs, *base_refs):
+        if rev.startswith("-"):
+            raise GitError("Revisão inválida.")
+    negatives = [f"^{ref}" for ref in base_refs]
+    found: dict[str, Commit] = {}
+
+    def add(commits: list[Commit]) -> None:
+        for commit in commits:
+            known = found.get(commit.sha)
+            # O mesmo commit pode vir como fronteira de uma branch e próprio de outra: vale o
+            # "próprio", que desenha os pais.
+            if known is None or (known.boundary and not commit.boundary):
+                found[commit.sha] = commit
+
+    common = ["--boundary", "--date-order", f"--format={LOG_FORMAT}", f"--max-count={limit}"]
+    for ref in dict.fromkeys(feature_refs):
+        own = parse_log(await git(repo_path, "log", *common, ref, *negatives, "--"))
+        if any(not c.boundary for c in own):
+            add(own)
+            continue
+        merge = await _merge_into_base(repo_path, ref, base_refs)
+        if merge is not None:
+            add([merge])
+            add(parse_log(await git(repo_path, "log", *common, ref, f"^{merge.parents[0]}", "--")))
+            # A base de antes do merge: é nela que a linha do merge pousa.
+            add(await _as_boundary(repo_path, merge.parents[0]))
+            continue
+        add(await _as_boundary(repo_path, ref))
+    return _topological(list(found.values()))[:limit]
+
+
+async def commits_mentioning(repo_path: Path, keys: list[str], *, limit: int) -> list[Commit]:
+    """A feature cuja branch já foi apagada (o normal depois do merge pelo Bitbucket): os
+    commits que citam a chave na mensagem — `feat(WAI-8790): …`, "Merged in WAI-8790-…" — em
+    qualquer branch, remota ou tag, mais o ponto da base de onde eles partem."""
+    for key in keys:
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]{1,9}-\d{1,7}", key):
+            raise GitError("Chave inválida.")
+    if not keys:
+        return []
+    output = await git(
+        repo_path,
+        "log",
+        "--date-order",
+        f"--format={LOG_FORMAT}",
+        f"--max-count={limit}",
+        "-i",
+        "-F",
+        *(f"--grep={key}" for key in keys),
+        *SEARCH_REVISIONS,
+        "--",
+    )
+    commits = parse_log(output)
+    return _topological(commits + await _missing_parents(repo_path, commits))
+
+
+async def _missing_parents(repo_path: Path, commits: list[Commit]) -> list[Commit]:
+    """Os pais que ficaram de fora, como fronteira: é neles que as linhas pousam."""
+    known = {c.sha for c in commits}
+    missing = sorted({p for c in commits if not c.boundary for p in c.parents} - known)
+    if not missing:
+        return []
+    output = await git(repo_path, "log", "--no-walk", f"--format={LOG_FORMAT}", *missing, "--")
+    return [Commit(**{**vars(c), "boundary": True}) for c in parse_log(output)]
+
+
+async def _as_boundary(repo_path: Path, rev: str) -> list[Commit]:
+    output = await git(repo_path, "log", "-1", f"--format={LOG_FORMAT}", rev, "--")
+    return [Commit(**{**vars(c), "boundary": True}) for c in parse_log(output)]
+
+
+async def _merge_into_base(repo_path: Path, ref: str, base_refs: list[str]) -> Commit | None:
+    """O merge que levou a branch para a base: o mais antigo no caminho dela até a base. Os
+    merges do Bitbucket ("Merged in …") têm a base como primeiro pai."""
+    for base in base_refs:
+        output = await git(
+            repo_path,
+            "log",
+            "--ancestry-path",
+            "--merges",
+            f"--format={LOG_FORMAT}",
+            f"{ref}..{base}",
+            "--",
+        )
+        merges = parse_log(output)
+        if merges:
+            return merges[-1]
+    return None
+
+
+def _topological(commits: list[Commit]) -> list[Commit]:
+    """Filho antes de pai e, entre os prontos, o mais novo primeiro — a mesma regra do
+    `--date-order`, para juntar o que veio de vários `git log`."""
+    by_sha = {c.sha: c for c in commits}
+    children = {sha: 0 for sha in by_sha}
+    for commit in commits:
+        if commit.boundary:
+            continue
+        for parent in commit.parents:
+            if parent in children:
+                children[parent] += 1
+
+    def key(commit: Commit) -> tuple[float, str]:
+        return (-(commit.committed_at.timestamp() if commit.committed_at else 0), commit.sha)
+
+    ready = [(key(c), c.sha) for c in commits if children[c.sha] == 0]
+    heapq.heapify(ready)
+    ordered: list[Commit] = []
+    while ready:
+        _, sha = heapq.heappop(ready)
+        commit = by_sha[sha]
+        ordered.append(commit)
+        if commit.boundary:
+            continue
+        for parent in commit.parents:
+            if parent in children:
+                children[parent] -= 1
+                if children[parent] == 0:
+                    heapq.heappush(ready, (key(by_sha[parent]), parent))
+    return ordered
 
 
 # --- Busca -----------------------------------------------------------------------------------

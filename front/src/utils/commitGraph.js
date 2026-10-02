@@ -17,6 +17,9 @@
  *   que se juntam nele);
  * - `outgoing`: colunas para onde descem as linhas dos pais (a primeira é a da pista);
  * - `lanes`: quantas colunas a linha ocupa (para a largura do desenho).
+ *
+ * Commit de fronteira (`boundary`, no "Só da feature") é o ponto da base em que a feature se
+ * apoia: a pista termina nele, sem descer para os pais — eles não são da feature.
  */
 export function layoutGraph(commits) {
   const lanes = []
@@ -41,7 +44,7 @@ export function layoutGraph(commits) {
 
     for (const index of waiting) lanes[index] = null
 
-    const [first, ...others] = commit.parents ?? []
+    const [first, ...others] = commit.boundary ? [] : (commit.parents ?? [])
     const outgoing = []
     if (first) {
       lanes[lane] = first

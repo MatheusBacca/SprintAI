@@ -44,17 +44,20 @@ def _ref(graph, name):
     return next(r for r in graph["refs"] if r["name"] == name)
 
 
-async def test_so_da_feature_traz_a_base_e_as_branches_da_chave(client, repo):
+async def test_so_da_feature_traz_o_que_a_branch_carrega_e_o_ponto_da_base(client, repo):
     graph = await _graph(client, keys="WAI-100")
 
     assert graph["scope"] == "feature"
     assert graph["base_branch"] == "main"
-    shas = [c["sha"] for c in graph["commits"]]
-    assert repo["feature_local"] in shas
-    assert repo["hotfix"] in shas
-    assert repo["first"] in shas
-    # A worktree WAI-200 é de outra tarefa: o commit dela não entra no "só da feature".
-    assert repo["other"] not in shas
+    by_sha = {c["sha"]: c for c in graph["commits"]}
+    # Os dois commits da WAI-100 e o ponto da main de onde ela saiu — nada do resto.
+    assert list(by_sha) == [repo["feature_local"], repo["feature_pushed"], repo["first"]]
+    assert by_sha[repo["first"]]["boundary"] is True
+    assert by_sha[repo["feature_local"]]["boundary"] is False
+    # O hotfix entrou na main depois que a feature saiu; a WAI-200 é de outra tarefa.
+    assert repo["hotfix"] not in by_sha
+    assert repo["other"] not in by_sha
+    assert graph["has_more"] is False
 
     feature = _ref(graph, "WAI-100-chave")
     assert feature["in_feature"] is True
@@ -70,10 +73,50 @@ async def test_so_da_feature_traz_a_base_e_as_branches_da_chave(client, repo):
     assert main["ahead"] == 1
     assert _ref(graph, "origin/main")["is_base"] is True
 
-    by_sha = {c["sha"]: c for c in graph["commits"]}
     assert by_sha[repo["feature_pushed"]]["parents"] == [repo["first"]]
     assert by_sha[repo["feature_pushed"]]["issue_keys"] == ["WAI-100"]
     assert by_sha[repo["feature_pushed"]]["subject"] == "WAI-100: aplica a chave na integração"
+
+
+async def test_so_da_feature_de_branch_mergeada_mostra_o_merge_e_o_que_ela_levou(client, repo):
+    git(repo["repo"], "merge", "-q", "--no-ff", "-m", "Merged in WAI-100-chave", "WAI-100-chave")
+    commit(repo["repo"], "main seguiu depois do merge", "depois.txt")
+    merge = git(repo["repo"], "rev-parse", "HEAD~1")
+
+    graph = await _graph(client, keys="WAI-100")
+    by_sha = {c["sha"]: c for c in graph["commits"]}
+    order = list(by_sha)
+    assert order[0] == merge
+    assert set(order) == {merge, repo["hotfix"], repo["feature_local"], repo["feature_pushed"], repo["first"]}
+    assert order.index(repo["feature_local"]) < order.index(repo["feature_pushed"]) < order.index(repo["first"])
+    assert by_sha[merge]["boundary"] is False
+    # A fronteira é a main de antes do merge: o hotfix, primeiro pai do merge.
+    assert by_sha[repo["hotfix"]]["boundary"] is True
+    assert by_sha[repo["first"]]["boundary"] is True
+    assert "main seguiu depois do merge" not in {c["subject"] for c in graph["commits"]}
+
+
+async def test_so_da_feature_sem_branch_usa_os_commits_que_citam_a_chave(client, repo):
+    # O normal depois do merge pelo Bitbucket: a branch some, local e no origin.
+    git(repo["repo"], "merge", "-q", "--no-ff", "-m", "Merged in WAI-100-chave", "WAI-100-chave")
+    merge = git(repo["repo"], "rev-parse", "HEAD")
+    git(repo["repo"], "branch", "-D", "WAI-100-chave")
+    git(repo["repo"], "push", "-q", "origin", "--delete", "WAI-100-chave")
+
+    graph = await _graph(client, keys="WAI-100")
+    by_sha = {c["sha"]: c for c in graph["commits"]}
+    # O merge e o commit que citam a chave, e as bases onde as linhas pousam.
+    assert {sha for sha, c in by_sha.items() if not c["boundary"]} == {merge, repo["feature_pushed"]}
+    assert by_sha[repo["hotfix"]]["boundary"] is True
+    assert by_sha[repo["first"]]["boundary"] is True
+    assert graph["has_more"] is False
+
+
+async def test_so_da_feature_de_branch_recem_criada_mostra_so_o_ponto_de_partida(client, repo):
+    git(repo["repo"], "branch", "WAI-300-nova")
+    graph = await _graph(client, keys="WAI-300")
+    assert [(c["sha"], c["boundary"]) for c in graph["commits"]] == [(repo["hotfix"], True)]
+    assert _ref(graph, "WAI-300-nova")["in_feature"] is True
 
 
 async def test_todas_as_branches_inclui_a_worktree_e_as_branches_sem_chave(client, repo):
@@ -107,11 +150,14 @@ async def test_since_sem_mudanca_devolve_so_as_worktrees(client, repo):
     assert again["refs"] == []
     assert again["worktrees"][0]["changes"]["untracked"] == 1
 
-    new_sha = commit(repo["repo"], "WAI-100 mais um ajuste", "chave2.txt")
+    # O clone principal está na main: o commit novo é da base, e aparece no "Todas".
+    new_sha = commit(repo["repo"], "main andou", "chave2.txt")
     changed = await _graph(client, keys="WAI-100", since=first["fingerprint"])
     assert changed["unchanged"] is False
     assert changed["fingerprint"] != first["fingerprint"]
-    assert changed["commits"][0]["sha"] == new_sha
+    assert new_sha not in {c["sha"] for c in changed["commits"]}
+    everything = await _graph(client, keys="WAI-100", scope="all")
+    assert everything["commits"][0]["sha"] == new_sha
 
 
 async def test_paginacao_pelo_skip(client, repo):

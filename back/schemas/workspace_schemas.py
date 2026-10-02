@@ -126,6 +126,9 @@ class GraphCommitOut(BaseModel):
     committed_at: datetime | None
     subject: str
     issue_keys: list[str]
+    # "Só da feature": o commit é o ponto da base em que a feature se apoia, não dela — a
+    # tela desenha sem as linhas para os pais.
+    boundary: bool = False
 
 
 class IssuePrStatusOut(BaseModel):

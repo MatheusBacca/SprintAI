@@ -173,6 +173,7 @@ function worktreeTitle(label) {
             'commit--highlight': isHighlighted(commit),
             'commit--merge': commit.parents.length > 1,
             'commit--match': matches.has(commit.sha),
+            'commit--boundary': commit.boundary,
           }"
           :style="{ top: `${index * ROW}px`, height: `${ROW}px` }"
           :data-sha="commit.sha"
@@ -188,7 +189,7 @@ function worktreeTitle(label) {
               :cx="x(row.lane)"
               :cy="MID"
               :r="commit.parents.length > 1 ? 3 : 4"
-              :style="{ fill: laneColor(row.lane) }"
+              :style="commit.boundary ? { fill: 'var(--color-surface)', stroke: laneColor(row.lane) } : { fill: laneColor(row.lane) }"
               class="commit__node"
             />
           </svg>
@@ -225,6 +226,7 @@ function worktreeTitle(label) {
             </template>
           </span>
 
+          <span v-if="commit.boundary" class="commit__base" title="Ponto da base em que a feature se apoia — não é commit da feature">base</span>
           <span class="commit__subject" :title="commit.subject">{{ commit.subject }}</span>
           <IssueKeyChip
             v-for="key in commit.issue_keys"
@@ -329,6 +331,19 @@ function worktreeTitle(label) {
 
 .commit--match .commit__subject {
   background: var(--color-mark);
+}
+
+.commit--boundary .commit__subject {
+  color: var(--color-text-muted);
+}
+
+.commit__base {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 10px;
 }
 
 .commit--merge .commit__subject {

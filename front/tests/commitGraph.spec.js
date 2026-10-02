@@ -49,6 +49,11 @@ describe('layoutGraph', () => {
     expect(width).toBe(2)
   })
 
+  it('commit de fronteira fecha a pista nele: os pais não são da feature', () => {
+    const { rows } = layoutGraph([c('f2', 'f1'), c('f1', 'base'), { sha: 'base', parents: ['antes'], boundary: true }])
+    expect(rows[2]).toMatchObject({ lane: 0, incoming: [0], outgoing: [] })
+  })
+
   it('pai fora da página deixa a pista aberta até o fim', () => {
     const { rows } = layoutGraph([c('x2', 'x1'), c('x1', 'fora-da-pagina')])
     expect(rows[1].outgoing).toEqual([0])

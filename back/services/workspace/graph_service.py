@@ -8,9 +8,10 @@ Junta, de um repo de `C:\\projects`:
 - as alterações não commitadas de cada worktree;
 - e, do espelho do Bitbucket, os PRs cuja branch de origem é uma das refs.
 
-**Só da feature** = a branch base (local e `origin/`) mais as branches que têm a chave da
-tarefa — é o que mostra de onde a feature saiu e se a base andou. **Todas** = branches,
-remotas e tags (o `--all` sem o `stash`).
+**Só da feature** = o que as branches com a chave da tarefa carregam, desde a base: os
+commits que só elas têm e o ponto da base de onde saíram (ou, já mergeadas, o merge que as
+levou e o que trouxeram) — `git_local.feature_history`. Sem branch da tarefa, a branch aberta
+no clone. **Todas** = branches, remotas e tags (o `--all` sem o `stash`).
 
 O git só roda quando a impressão digital do `.git` muda; a tela pergunta a cada poucos
 segundos com `since=<impressão>` e, sem mudança, recebe só as worktrees. O "não commitado"
@@ -46,6 +47,8 @@ from services.workspace.repos_service import to_out
 from utils.issue_keys import extract_issue_keys
 
 CHANGES_TTL_SECONDS = 4.0
+# "Só da feature" vem inteiro: o que uma feature carrega cabe folgado nisto.
+FEATURE_HISTORY_LIMIT = 1000
 MAX_CACHE_ENTRIES = 256
 
 
@@ -155,11 +158,32 @@ async def graph(
         ref_keys = extract_issue_keys(ref.name, project_keys=project_keys)
         classified.append((ref, ref_keys, bool(wanted & set(ref_keys)), ref.name in base_names))
 
-    revisions = _revisions(scope, classified, worktrees, main_path)
-    page = await _cached(
-        ("log", ctx.path, fp, tuple(revisions), skip, limit),
-        git_local.log(ctx.path, revisions, skip=skip, limit=limit + 1),
-    )
+    feature_refs = [ref.full for ref, _keys, in_feature, _base in classified if in_feature]
+    base_refs = [ref.full for ref, _keys, _feature, is_base in classified if is_base]
+    if scope == "feature" and feature_refs and base_refs:
+        # Só o que a feature carrega, desde a base — vem inteiro, sem página.
+        history = await _cached(
+            ("feature", ctx.path, fp, tuple(feature_refs), tuple(base_refs)),
+            git_local.feature_history(
+                ctx.path, feature_refs, base_refs, limit=FEATURE_HISTORY_LIMIT + 1
+            ),
+        )
+        page = history if skip == 0 else []
+        limit = max(limit, FEATURE_HISTORY_LIMIT)
+    elif scope == "feature" and wanted and base_refs:
+        # A branch já foi apagada (merge feito no Bitbucket): a feature é o que cita a chave.
+        history = await _cached(
+            ("mentions", ctx.path, fp, tuple(sorted(wanted))),
+            git_local.commits_mentioning(ctx.path, sorted(wanted), limit=FEATURE_HISTORY_LIMIT + 1),
+        )
+        page = history if skip == 0 else []
+        limit = max(limit, FEATURE_HISTORY_LIMIT)
+    else:
+        revisions = _revisions(scope, classified, worktrees, main_path)
+        page = await _cached(
+            ("log", ctx.path, fp, tuple(revisions), skip, limit),
+            git_local.log(ctx.path, revisions, skip=skip, limit=limit + 1),
+        )
     commits = page[:limit]
 
     # O weaction-api tem mais de mil refs (cada PR antigo deixa um `origin/`). Volta só quem
@@ -218,6 +242,7 @@ def commit_out(c: git_local.Commit, project_keys: list[str]) -> GraphCommitOut:
         committed_at=c.committed_at,
         subject=c.subject,
         issue_keys=extract_issue_keys(c.subject, project_keys=project_keys),
+        boundary=c.boundary,
     )
 
 

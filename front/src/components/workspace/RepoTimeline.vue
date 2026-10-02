@@ -138,7 +138,11 @@ function worktreeHint(wt) {
       </div>
 
       <div class="segmented timeline__scope" role="radiogroup" aria-label="Quais branches">
-        <label class="segmented__option" :class="{ 'segmented__option--on': scope === 'feature' }">
+        <label
+          class="segmented__option"
+          :class="{ 'segmented__option--on': scope === 'feature' }"
+          :title="keys.length ? 'Só o que as branches da tarefa carregam, desde o ponto da base de onde saíram (sem branch, os commits que citam a chave)' : 'A branch aberta no clone'"
+        >
           <input v-model="scope" type="radio" value="feature">
           {{ keys.length ? 'Só da feature' : 'Branch aberta' }}
         </label>
