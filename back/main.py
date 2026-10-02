@@ -33,6 +33,7 @@ from routers import (
     sprints,
     sync,
     week,
+    workspace,
 )
 from security.credential_store import CredentialStoreError
 from security.local_guard import LocalGuardMiddleware, build_allowed_origins
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(search.router, prefix="/api")
     app.include_router(week.router, prefix="/api")
     app.include_router(preferences.router, prefix="/api")
+    app.include_router(workspace.router, prefix="/api")
     return app
 
 

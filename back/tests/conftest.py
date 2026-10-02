@@ -31,7 +31,8 @@ MIRROR_TABLES = (
     "jira_comment, bb_repository, bb_pull_request, bb_pr_comment, bb_branch, sync_state, "
     "sync_run, "
     "note, note_issue_link, task_context, context_relation, search_document, "
-    "jira_status_transition, activity_event, issue_seen"
+    "jira_status_transition, activity_event, issue_seen, workspace_repo, workspace, "
+    "workspace_repo_pin"
 )
 
 
