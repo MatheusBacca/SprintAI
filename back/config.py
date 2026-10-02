@@ -41,6 +41,19 @@ class Settings(BaseSettings):
     # Agendador de sync dentro da API. Desligado nos testes.
     sync_autostart: bool = True
 
+    # Raízes de leitura do disco (`security/paths.py`): os repos e o harness pessoal.
+    # Nada fora delas é lido nem vira `cwd` de processo — `Z:\` nunca.
+    projects_root: Path = Path(r"C:\projects")
+    claude_home: Path = Path.home() / ".claude"
+
+    # Terminal host (`terminal_host.py`): processo à parte da API, sem reload.
+    terminal_port: int = 8766
+    # 1 = WinPTY. O ConPTY (0) do pywinpty não repassa o Ctrl+C aos filhos (spike W0).
+    terminal_pty_backend: int = 1
+    terminal_max_sessions: int = 12
+    # Quanto da saída de cada terminal fica em memória para redesenhar a tela.
+    terminal_buffer_chars: int = 200_000
+
     @property
     def asyncpg_dsn(self) -> str:
         return (
