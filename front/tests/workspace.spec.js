@@ -183,6 +183,30 @@ describe('WorkspaceView', () => {
     expect(dock.props('collapsed')).toBe(true)
   })
 
+  it('lado a lado mostra as duas telas, a divisão ajusta e fica salva', async () => {
+    localStorage.removeItem('sprintai.workspace.split')
+    const { wrapper, router } = await mountView('?ws=1&aba=lado')
+
+    expect(wrapper.find('.canvas-stub').exists()).toBe(true)
+    expect(wrapper.find('.timeline-stub').exists()).toBe(true)
+    const tasks = () => wrapper.find('.ws-main__pane--tasks').attributes('style')
+    expect(tasks()).toContain('flex-basis: 50%')
+
+    const splitter = wrapper.find('.ws-main__splitter')
+    await splitter.trigger('keydown', { key: 'ArrowRight' })
+    await splitter.trigger('keydown', { key: 'ArrowRight' })
+    expect(tasks()).toContain('flex-basis: 60%')
+    expect(localStorage.getItem('sprintai.workspace.split')).toBe('0.6')
+    await splitter.trigger('dblclick')
+    expect(tasks()).toContain('flex-basis: 50%')
+
+    // Trocar de repo pela coluna não tira o canvas da tela.
+    await wrapper.find('.repo[data-repo="qualificai"] .repo__main').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toMatchObject({ aba: 'lado', repo: 'qualificai' })
+    expect(wrapper.find('.canvas-stub').exists()).toBe(true)
+  })
+
   it('esconder repo, abrir no VS Code e fechar a aba', async () => {
     const { wrapper, router } = await mountView('?ws=1')
 
