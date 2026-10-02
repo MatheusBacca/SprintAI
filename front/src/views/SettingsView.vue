@@ -10,6 +10,7 @@ import PrApprovalPanel from '@/components/settings/PrApprovalPanel.vue'
 import ProgressStagesPanel from '@/components/settings/ProgressStagesPanel.vue'
 import ShortcutsPanel from '@/components/settings/ShortcutsPanel.vue'
 import SyncSettingsPanel from '@/components/settings/SyncSettingsPanel.vue'
+import WorkspaceReposPanel from '@/components/settings/WorkspaceReposPanel.vue'
 import { useConnectionsStore } from '@/stores/connections'
 
 const store = useConnectionsStore()
@@ -22,6 +23,7 @@ const tabs = [
   { id: 'progresso', label: 'Progresso' },
   { id: 'pull-requests', label: 'Pull requests' },
   { id: 'cores', label: 'Cores dos cards' },
+  { id: 'workspace', label: 'Workspace' },
   { id: 'atalhos', label: 'Atalhos' },
 ]
 
@@ -63,6 +65,7 @@ onMounted(() => store.load())
     <ProgressStagesPanel v-else-if="activeTab === 'progresso'" />
     <PrApprovalPanel v-else-if="activeTab === 'pull-requests'" />
     <CardColorsPanel v-else-if="activeTab === 'cores'" />
+    <WorkspaceReposPanel v-else-if="activeTab === 'workspace'" />
     <ShortcutsPanel v-else-if="activeTab === 'atalhos'" />
 
     <template v-else>
