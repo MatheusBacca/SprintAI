@@ -7,7 +7,7 @@ defineProps({
 <template>
   <div class="frame" :style="{ width: `${data.width}px`, height: `${data.height}px` }">
     <span class="frame__label">
-      <template v-if="data.title">{{ data.title }} · </template>{{ data.count }}<template v-if="data.total != null && data.total !== data.count"> de {{ data.total }}</template> tarefa(s) na sprint
+      <template v-if="data.title">{{ data.title }} · </template>{{ data.count }}<template v-if="data.total != null && data.total !== data.count"> de {{ data.total }}</template> tarefa(s) {{ data.label ?? 'na sprint' }}
     </span>
   </div>
 </template>

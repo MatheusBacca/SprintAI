@@ -24,10 +24,10 @@ const props = defineProps({
   highlightStatus: { type: String, default: null },
   /** Largura, em px, coberta à direita pelo que flutua sobre o canvas (sprint e tarefa aberta). */
   rightInset: { type: Number, default: 0 },
+  /** Um id por tela: a Sprint e o Workspace são dois canvas, cada um com a sua câmera. */
+  flowId: { type: String, default: 'sprint-tree' },
 })
 const emit = defineEmits(['select', 'highlight'])
-
-const flowId = 'sprint-tree'
 
 /**
  * A câmera vem do `pane-ready`: é a instância que o próprio pane entrega, sem
@@ -108,10 +108,12 @@ function fullyVisible(node, pane, camera) {
 /**
  * Mesma sprint com os mesmos cards: é recarga (sync, "Recarregar", status movido pelo
  * próprio canvas), não desenho novo. Reenquadrar aí tirava a câmera de onde o dev
- * estava a cada status trocado num card.
+ * estava a cada status trocado num card. No Workspace, a moldura é a da feature.
  */
+const frameId = (tree) => tree?.frame?.id ?? tree?.sprint?.id
+
 function sameFrame(tree, previous) {
-  if (!previous || tree?.sprint?.id !== previous.sprint?.id) return false
+  if (!previous || frameId(tree) !== frameId(previous)) return false
   const keys = (t) => (t.nodes ?? []).map((n) => n.key).sort().join(',')
   return keys(tree) === keys(previous)
 }

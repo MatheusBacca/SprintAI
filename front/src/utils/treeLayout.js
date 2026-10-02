@@ -266,6 +266,8 @@ export function layoutTree(tree, { selectedKey = null } = {}) {
     position: { x: 0, y: 0 },
     data: {
       title: null,
+      // "na sprint" ou, no Workspace, o que o back manda na moldura ("na feature").
+      label: tree.frame?.label ?? 'na sprint',
       count: tree.nodes.filter((n) => n.in_sprint).length,
       // Só vem na árvore recortada pelos chips de etapa (`filterTreeByStages`).
       total: tree.total_tasks ?? null,
