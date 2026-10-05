@@ -128,6 +128,12 @@ describe('AdfRenderer', () => {
   })
 })
 
+const PAINTED = [
+  { text: '[', color: null },
+  { text: 'Monitoria', color: '#2f7cf6' },
+  { text: '] Enviar a coleta', color: null },
+]
+
 describe('IssueDrawer', () => {
   let calls
   beforeEach(() => {
@@ -137,6 +143,7 @@ describe('IssueDrawer', () => {
       calls.push(url)
       if (url === '/api/issues/WAI-124') return json(200, ISSUE)
       if (url === '/api/issues/WAI-124/changelog') return json(200, CHANGELOG)
+      if (url === '/api/issues/WAI-125') return json(200, { ...ISSUE, key: 'WAI-125', summary: '[Monitoria] Enviar a coleta', title_parts: PAINTED })
       if (url === '/api/issues/WAI-999') return json(404, { detail: 'WAI-999 não está no espelho local.' })
       throw new Error(`não mockado: ${url}`)
     }))
@@ -170,8 +177,35 @@ describe('IssueDrawer', () => {
     await flushPromises()
     expect(posts).toEqual([{ root_issue_key: 'WAI-124' }])
     // A rota do Workspace carrega a tela sob demanda: a navegação termina depois do import.
-    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('workspace'))
+    // Com a suíte inteira rodando, o import frio da tela passa do segundo padrão do waitFor.
+    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('workspace'), { timeout: 5000 })
     expect(router.currentRoute.value.query.ws).toBe('9')
+    wrapper.unmount()
+  })
+
+  it('título com o colchete na cor do repositório, como no card', async () => {
+    const wrapper = await mountDrawer('WAI-125')
+
+    const title = wrapper.find('.drawer__title')
+    expect(title.text()).toBe('[Monitoria] Enviar a coleta')
+    const painted = title.findAll('.drawer__repo')
+    expect(painted.map((p) => p.text())).toEqual(['Monitoria'])
+    expect(painted[0].attributes('style')).toContain('--repo: #2f7cf6')
+    wrapper.unmount()
+  })
+
+  it('a aba Detalhes mostra o que a tela põe no slot details, antes da descrição', async () => {
+    const wrapper = mount(IssueDrawer, {
+      props: { issueKey: 'WAI-124' },
+      slots: { details: '<section class="extra">Repositórios envolvidos</section>' },
+      attachTo: document.body,
+    })
+    await flushPromises()
+
+    const details = wrapper.find('.details')
+    expect(details.element.firstElementChild.classList.contains('extra')).toBe(true)
+    await wrapper.findAll('.drawer__tab')[1].trigger('click')
+    expect(wrapper.find('.extra').exists()).toBe(false)
     wrapper.unmount()
   })
 

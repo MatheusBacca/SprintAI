@@ -69,6 +69,8 @@ const fields = computed(() => {
 
 <template>
   <div class="details">
+    <slot />
+
     <section class="details__section">
       <h2 class="details__heading">
         Descrição (Jira)
@@ -263,7 +265,10 @@ const fields = computed(() => {
   overflow-wrap: anywhere;
 }
 
+/* Nome de classe ou caminho longo não tem onde quebrar: sem isto, o painel estreito
+   ganhava rolagem de lado. */
 .details__description :deep(.adf-code) {
+  overflow-wrap: anywhere;
   padding: 1px 4px;
   border-radius: 4px;
   background: var(--color-surface-muted);

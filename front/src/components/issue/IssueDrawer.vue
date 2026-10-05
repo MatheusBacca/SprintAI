@@ -38,6 +38,8 @@ const countsSettled = ref(false)
 
 const entry = computed(() => store.issues[props.issueKey] ?? { data: null, loading: true, error: null })
 const issue = computed(() => entry.value.data)
+// Os nomes do colchete na cor do repositório, como no título do card.
+const titleParts = computed(() => issue.value?.title_parts ?? [])
 // Mesma regra do card do canvas: ícone de bloqueio só enquanto algum bloqueador não abriu PR.
 const waitingBlocker = computed(() => (issue.value?.blockers_without_pr ?? []).length > 0)
 // Contorno na cor da etapa do status, a mesma do card. Sem etapa, fica a borda padrão.
@@ -192,7 +194,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         </button>
       </div>
 
-      <h2 class="drawer__title">{{ issue?.summary ?? (entry.loading ? 'Carregando…' : issueKey) }}</h2>
+      <h2 v-if="titleParts.length" class="drawer__title">
+        <span
+          v-for="(part, index) in titleParts"
+          :key="index"
+          :class="{ drawer__repo: part.color }"
+          :style="part.color ? { '--repo': part.color } : undefined"
+        >{{ part.text }}</span>
+      </h2>
+      <h2 v-else class="drawer__title">{{ issue?.summary ?? (entry.loading ? 'Carregando…' : issueKey) }}</h2>
 
       <nav v-if="issue" class="drawer__tabs" role="tablist">
         <button
@@ -213,7 +223,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     <div class="drawer__body">
       <p v-if="entry.error && !issue" class="drawer__error" role="alert">{{ entry.error }}</p>
       <template v-else-if="issue">
-        <IssueDetailsTab v-if="tab === 'detalhes'" :issue="issue" @open="emit('open', $event)" />
+        <!-- `details`: o que a tela soma aos detalhes (o Workspace põe os repositórios). -->
+        <IssueDetailsTab v-if="tab === 'detalhes'" :issue="issue" @open="emit('open', $event)">
+          <slot name="details" :issue="issue" />
+        </IssueDetailsTab>
         <IssueDependenciesTab v-else-if="tab === 'dependencias'" :issue="issue" @open="emit('open', $event)" />
         <IssuePullRequestsTab v-else-if="tab === 'prs'" :summary="issue.pull_requests" />
         <IssueHistoryTab v-else-if="tab === 'historico'" :key="issue.key" :issue="issue" />
@@ -342,6 +355,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   font-weight: 600;
   line-height: 24px;
   letter-spacing: -0.01em;
+}
+
+.drawer__repo {
+  color: color-mix(in srgb, var(--repo) var(--card-tint-ink), var(--color-text));
 }
 
 .drawer__chip {
