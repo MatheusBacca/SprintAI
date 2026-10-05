@@ -8,7 +8,9 @@ import NotificationPins from '@/components/shell/NotificationPins.vue'
 import { routes } from '@/router/routes'
 import { useNotesStore } from '@/stores/notes'
 import { useNotificationsStore } from '@/stores/notifications'
+import { useSprintBoardStore } from '@/stores/sprintBoard'
 import { useUiStore } from '@/stores/ui'
+import { useWorkspaceStore } from '@/stores/workspace'
 
 const NOW = new Date()
 
@@ -218,6 +220,24 @@ describe('notificações de tarefa da sprint', () => {
     expect(primeira.querySelector('.notif__what').textContent).toContain('Rafael')
     expect(primeira.querySelector('.notif__when').textContent).toContain('3 novidades')
     expect(store.unseenCount).toBe(0)
+    wrapper.unmount()
+  })
+
+  it('abrir o card da tarefa no canvas (Sprint ou Workspace) marca a mexida dela como vista', async () => {
+    const { store, wrapper } = await mountBell()
+    expect(badge().textContent).toBe('4')
+
+    // O canvas chama o markSeen ao abrir o card — com bolinha ou sem.
+    await useSprintBoardStore().markSeen('WAI-1')
+    await flushPromises()
+    expect(badge().textContent).toBe('3')
+    expect(JSON.parse(localStorage.getItem('sprintai.notifications.seen'))).toEqual([store.entries[2].id])
+
+    await useWorkspaceStore().markSeen('WAI-2')
+    await flushPromises()
+    expect(badge().textContent).toBe('2')
+    // Os lembretes não são da tarefa: continuam somando.
+    expect(store.unseenCount).toBe(2)
     wrapper.unmount()
   })
 

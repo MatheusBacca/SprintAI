@@ -162,6 +162,17 @@ export const useNotificationsStore = defineStore('notifications', {
       this._setSeen([...vistas])
     },
 
+    /**
+     * O dev abriu o card da tarefa no canvas (Sprint ou Workspace): a mexida dela no sino
+     * conta como vista, junto com a bolinha verde do card. Vale para as que já estão na
+     * lista — uma mexida que chegar depois é notícia nova e volta a contar.
+     */
+    markIssueSeen(key) {
+      const ids = this.entries.filter((entry) => entry.kind === 'update' && entry.update.key === key).map((entry) => entry.id)
+      if (!ids.length || ids.every((id) => this.seenIds.includes(id))) return
+      this._setSeen([...new Set([...this.seenIds, ...ids])])
+    },
+
     togglePin(id) {
       const pinned = this.pinnedIds.includes(id)
         ? this.pinnedIds.filter((other) => other !== id)

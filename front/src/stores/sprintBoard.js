@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { api } from '@/services/api'
+import { useNotificationsStore } from '@/stores/notifications'
 
 export const useSprintBoardStore = defineStore('sprintBoard', {
   state: () => ({
@@ -64,6 +65,9 @@ export const useSprintBoardStore = defineStore('sprintBoard', {
      * árvore — não vale um erro na tela.
      */
     async markSeen(key) {
+      // A notificação da tarefa no sino vai junto, tenha o card bolinha ou não: um
+      // comentário não acende a bolinha, mas abrir o card é ver a novidade.
+      useNotificationsStore().markIssueSeen(key)
       const node = this.tree?.nodes.find((n) => n.key === key)
       if (!node?.unseen_changes?.length) return
       node.unseen_changes = []
