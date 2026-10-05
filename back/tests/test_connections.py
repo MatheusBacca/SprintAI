@@ -35,10 +35,12 @@ def mock_jira_myself(status=200):
     )
 
 
-def mock_bitbucket(user_status=200, repos_status=200):
+def mock_bitbucket(user_status=200, repos_status=200, scopes=None):
+    # O Bitbucket diz no `x-oauth-scopes` o que o token tem; sem o cabeçalho, não se sabe.
+    headers = {"x-oauth-scopes": ", ".join(scopes)} if scopes is not None else {}
     respx.get("https://api.bitbucket.org/2.0/user").mock(
         return_value=httpx.Response(
-            user_status, json={"display_name": "Matheus Bacca", "uuid": "{u}"}
+            user_status, json={"display_name": "Matheus Bacca", "uuid": "{u}"}, headers=headers
         )
     )
     return respx.get("https://api.bitbucket.org/2.0/repositories/weonrepo").mock(
@@ -147,6 +149,65 @@ async def test_salva_bitbucket_validando_workspace(client, credential_store):
     assert repos.called
     assert response.json()["settings"]["workspace"] == "weonrepo"
     assert BB_TOKEN not in response.text
+
+
+ALL_SCOPES = [
+    "read:user:bitbucket",
+    "read:repository:bitbucket",
+    "read:pullrequest:bitbucket",
+    "read:workspace:bitbucket",
+    "write:pullrequest:bitbucket",
+]
+
+
+@respx.mock
+async def test_bitbucket_com_todos_os_escopos_nao_avisa_nada(client, credential_store):
+    mock_bitbucket(scopes=[*ALL_SCOPES, "read:pipeline:bitbucket"])
+
+    response = await client.put("/api/connections/bitbucket", json=bitbucket_payload())
+
+    assert response.status_code == 200
+    assert response.json()["settings"]["missing_scopes"] == []
+
+
+@respx.mock
+async def test_bitbucket_sem_escopo_de_escrita_salva_e_avisa_o_que_nao_funciona(
+    client, credential_store
+):
+    mock_bitbucket(scopes=ALL_SCOPES[:3])
+
+    response = await client.put("/api/connections/bitbucket", json=bitbucket_payload())
+    assert response.status_code == 200
+    assert response.json()["settings"]["missing_scopes"] == [
+        "read:workspace:bitbucket",
+        "write:pullrequest:bitbucket",
+    ]
+
+    tested = (await client.post("/api/connections/bitbucket/test")).json()
+    assert tested["ok"] is True
+    assert "write:pullrequest:bitbucket (mergear no Concluir" in tested["message"]
+
+    # Token trocado por um completo: o aviso some.
+    respx.get("https://api.bitbucket.org/2.0/user").mock(
+        return_value=httpx.Response(
+            200,
+            json={"display_name": "Matheus Bacca", "uuid": "{u}"},
+            headers={"x-oauth-scopes": ", ".join(ALL_SCOPES)},
+        )
+    )
+    tested = (await client.post("/api/connections/bitbucket/test")).json()
+    assert tested["status"]["settings"]["missing_scopes"] == []
+
+
+@respx.mock
+async def test_bitbucket_sem_leitura_de_pr_nem_salva(client, credential_store):
+    mock_bitbucket(scopes=[s for s in ALL_SCOPES if s != "read:pullrequest:bitbucket"])
+
+    response = await client.put("/api/connections/bitbucket", json=bitbucket_payload())
+
+    assert response.status_code == 422
+    assert "read:pullrequest:bitbucket" in response.json()["detail"]
+    assert credential_store.get("bitbucket") is None
 
 
 @respx.mock

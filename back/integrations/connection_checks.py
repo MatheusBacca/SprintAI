@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from integrations.bitbucket_client import BitbucketClient
+from integrations.bitbucket_client import ESSENTIAL_SCOPES, REQUIRED_SCOPES, BitbucketClient
 from integrations.errors import (
     IntegrationError,
     IntegrationUnavailable,
@@ -72,11 +72,19 @@ async def check_bitbucket(*, email: str, api_token: str, workspace: str) -> Conn
             email=email, api_token=api_token, workspace=workspace, client=http, max_retries=0
         )
         try:
-            body = await bitbucket.current_user()
+            body, scopes = await bitbucket.current_user_with_scopes()
         except IntegrationUnavailable:
             return ConnectionCheck(ok=False, message="Bitbucket: não foi possível conectar à API.")
         except IntegrationError as exc:
             return ConnectionCheck(ok=False, message=exc.message)
+
+        missing = [s for s in REQUIRED_SCOPES if scopes is not None and s not in scopes]
+        essential = [s for s in missing if s in ESSENTIAL_SCOPES]
+        if essential:
+            return ConnectionCheck(
+                ok=False,
+                message="Bitbucket: faltam escopos no token — " + _scopes_text(essential) + ".",
+            )
 
         try:
             repository_count = await bitbucket.repository_count()
@@ -97,5 +105,16 @@ async def check_bitbucket(*, email: str, api_token: str, workspace: str) -> Conn
         ok=True,
         account_name=body.get("display_name"),
         account_id=body.get("account_id") or body.get("uuid"),
-        extra={"repository_count": repository_count},
+        # O que falta vai para a tela, que avisa o que não vai funcionar. Lista vazia limpa o
+        # aviso de um token antigo, trocado por um completo.
+        message=(
+            "Bitbucket: conectado, mas faltam escopos — " + _scopes_text(missing) + "."
+            if missing
+            else None
+        ),
+        extra={"repository_count": repository_count, "missing_scopes": missing},
     )
+
+
+def _scopes_text(scopes: list[str]) -> str:
+    return "; ".join(f"{scope} ({REQUIRED_SCOPES[scope]})" for scope in scopes)
