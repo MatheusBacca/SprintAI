@@ -185,6 +185,7 @@ async def involved_repos(
     branches: dict[str, set[str]] = defaultdict(set)
     issue_keys: dict[str, set[str]] = defaultdict(set)
     remote_only: dict[str, str] = {}
+    colors = await card_colors.load_colors(pool)
 
     if keys:
         project_keys = (await load_scope(pool)).jira.project_keys
@@ -208,11 +209,10 @@ async def involved_repos(
             sources[slug].add("pr")
             issue_keys[slug] |= wanted & set(mirror["issue_keys"])
 
-        colors = await card_colors.load_colors(pool)
         known = set(colors.known) | set(by_slug) | set(by_bb)
-        colors = dataclasses.replace(colors, known=tuple(sorted(known)))
+        resolver = dataclasses.replace(colors, known=tuple(sorted(known)))
         for key, summary in summaries.items():
-            for named in colors.title_repos(summary):
+            for named in resolver.title_repos(summary):
                 slug = named if named in by_slug else by_bb.get(named, named)
                 if slug not in by_slug:
                     remote_only.setdefault(slug, named)
@@ -228,18 +228,21 @@ async def involved_repos(
     result = []
     for slug in sorted(set(sources) | {s for s, m in pins.items() if m == "hide"}):
         repo = by_slug.get(slug)
+        bb_slug = repo.bb_slug if repo else remote_only.get(slug)
         result.append(
             InvolvedRepoOut(
                 slug=slug,
                 path=repo.path if repo and _has_clone(repo) else None,
                 local=bool(repo and _has_clone(repo)),
-                bb_slug=repo.bb_slug if repo else remote_only.get(slug),
+                bb_slug=bb_slug,
                 base_branch=repo.base_branch if repo else None,
                 current_branch=repo.current_branch if repo else None,
                 sources=sorted(sources.get(slug, set()), key=SOURCE_ORDER.index),
                 branches=sorted(branches.get(slug, set())),
                 issue_keys=sorted(issue_keys.get(slug, set())),
                 hidden=pins.get(slug) == "hide",
+                # A cor é cadastrada pelo repo do Bitbucket; a pasta pode ter outro nome.
+                color=colors.repos.get(slug) or colors.repos.get(bb_slug or ""),
             )
         )
     return result

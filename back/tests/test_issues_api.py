@@ -199,6 +199,22 @@ async def test_detalhe_completo_da_tarefa(db_app, client, seeded):
     assert body["pull_requests"]["repos"][0]["pull_requests"][0]["id"] == 412
 
 
+async def test_titulo_vem_pintado_com_a_cor_do_repositorio(db_app, client, db_pool, seeded):
+    await db_pool.execute(
+        "UPDATE jira_issue SET summary = '[Monitoria] Enviar a coleta' WHERE key = 'WAI-124'"
+    )
+    await client.put("/api/preferences/card-colors", json={"repos": {"monitoria": "#2f7cf6"}})
+
+    body = (await client.get("/api/issues/WAI-124")).json()
+    assert body["title_parts"] == [
+        {"text": "[", "color": None},
+        {"text": "Monitoria", "color": "#2f7cf6"},
+        {"text": "] Enviar a coleta", "color": None},
+    ]
+    # Sem colchete com cor, o painel mostra o `summary`.
+    assert (await client.get("/api/issues/WAI-126")).json()["title_parts"] == []
+
+
 async def test_dependencias_agrupadas_com_status_de_pr(db_app, client, seeded):
     body = (await client.get("/api/issues/WAI-124")).json()
 

@@ -284,6 +284,8 @@ class InvolvedRepoOut(BaseModel):
     branches: list[str]
     issue_keys: list[str]
     hidden: bool
+    # Cor do repositório em Configurações › Cores dos cards — a mesma do colchete do título.
+    color: str | None = None
 
 
 class WorkspaceDetailOut(BaseModel):

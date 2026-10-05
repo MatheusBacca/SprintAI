@@ -237,6 +237,18 @@ async def test_fixar_e_esconder_repo(client, seeded, projects):
     assert (await client.put("/api/workspaces/999/repos/x", json={"mode": "add"})).status_code == 404
 
 
+async def test_repo_envolvido_leva_a_cor_dos_cards(client, seeded, projects):
+    await client.put("/api/preferences/card-colors", json={"repos": {"qualificai": "#0d9488"}})
+    workspace = (await _open(client, title="Testes de carga", repos=["qualificai"])).json()
+    await client.put(f"/api/workspaces/{workspace['id']}/repos/monitoria", json={"mode": "add"})
+
+    detail = (await client.get(f"/api/workspaces/{workspace['id']}")).json()
+    assert {r["slug"]: r["color"] for r in detail["repos"]} == {
+        "monitoria": None,
+        "qualificai": "#0d9488",
+    }
+
+
 async def test_workspace_livre_lista_so_os_fixados(client, seeded, projects):
     workspace = (await _open(client, title="Testes de carga", repos=["qualificai"])).json()
     assert (workspace["kind"], workspace["root_issue_key"]) == ("free", None)

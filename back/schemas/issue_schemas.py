@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from schemas.pr_status_schemas import IssuePrSummaryOut, PrStatusBadgeOut
 from schemas.progress_schemas import StageRefOut
+from schemas.sprint_schemas import TitlePartOut
 
 
 class IssueRefOut(BaseModel):
@@ -65,6 +66,9 @@ class IssueDetailOut(BaseModel):
     key: str
     url: str | None
     summary: str
+    # Mesma pintura do card do canvas: os nomes do colchete na cor do repositório. Vazio
+    # quando nenhum tem cor — o painel mostra o `summary`.
+    title_parts: list[TitlePartOut] = []
     issue_type: str
     is_subtask: bool
     status: str

@@ -19,8 +19,9 @@ from schemas.issue_schemas import (
     IssueRefOut,
     SprintRefOut,
 )
+from schemas.sprint_schemas import TitlePartOut
 from security.credential_store import CredentialStore
-from services import pr_status_service
+from services import card_colors, pr_status_service
 from services.blocking import blockers_without_pr
 from services.hierarchy import BLOCK_LINK_TYPE, is_hierarchy_link
 from services.progress.service import load_stages, stage_ref
@@ -123,11 +124,13 @@ async def get_detail(pool: asyncpg.Pool, store: CredentialStore, key: str) -> Is
 
     blocked_by = groups.get(("blocked_by", "É bloqueada por"), [])
     stages = await load_stages(pool)
+    paint = (await card_colors.load_colors(pool)).paint(row["issue_type"], row["summary"])
     points = row["story_points"]
     return IssueDetailOut(
         key=row["key"],
         url=_browse(site_url, row["key"]),
         summary=row["summary"],
+        title_parts=[TitlePartOut(**vars(p)) for p in paint.title],
         issue_type=row["issue_type"],
         is_subtask=row["is_subtask"],
         status=row["status"],
