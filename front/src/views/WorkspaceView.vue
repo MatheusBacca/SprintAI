@@ -451,6 +451,7 @@ watch(view, async (value, previous) => {
             class="ws-main__pane ws-main__pane--tasks"
             :class="{ 'ws-main__pane--parked': view === 'linha' }"
             :style="view === 'lado' ? { flexBasis: `${tasksWidth}px` } : null"
+            :inert="view === 'linha' || null"
           >
             <p v-if="store.treeError" class="ws-main__empty" role="alert">{{ store.treeError }}</p>
             <SprintCanvas
@@ -688,12 +689,16 @@ watch(view, async (value, previous) => {
 }
 
 /* Guardado: ocupa a área inteira por baixo (a largura não muda, nem a câmera), sem ser
-   visto nem clicado. `visibility` e não `display: none` — sem medida, o Vue Flow reclama
-   e perde as dimensões do pane. */
+   visto nem clicado. Não pode ser `display: none` — sem medida, o Vue Flow reclama e perde as
+   dimensões do pane. E só `visibility: hidden` não basta: o Vue Flow põe `visibility:
+   visible` e `pointer-events: all` em cada card, e os cards vazavam por cima da linha do
+   tempo, clicáveis. Por isso a opacidade (que filho nenhum desfaz) e o `inert` no elemento,
+   que tira clique e foco de tudo o que está dentro. */
 .ws-main__pane--parked {
   position: absolute;
   inset: 0;
   visibility: hidden;
+  opacity: 0;
   pointer-events: none;
 }
 

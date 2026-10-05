@@ -269,6 +269,8 @@ describe('WorkspaceView', () => {
     // Guardado, não desmontado: a câmera fica onde estava para quando voltar.
     expect(first.wrapper.find('.canvas-stub').exists()).toBe(true)
     expect(tasksPane(first.wrapper).classes()).toContain('ws-main__pane--parked')
+    // O Vue Flow põe `pointer-events: all` em cada card: sem o inert, eles seguiam clicáveis.
+    expect(tasksPane(first.wrapper).attributes('inert')).toBeDefined()
     first.wrapper.unmount()
 
     const again = await mountView('?ws=1')
@@ -280,6 +282,7 @@ describe('WorkspaceView', () => {
     const linked = await mountView('?ws=1&aba=tarefas')
     expect(linked.wrapper.find('.timeline-stub').exists()).toBe(false)
     expect(tasksPane(linked.wrapper).classes()).not.toContain('ws-main__pane--parked')
+    expect(tasksPane(linked.wrapper).attributes('inert')).toBeUndefined()
   })
 
   it('lado a lado abre o canvas na largura de um card, focado na tarefa, e a divisão ajusta', async () => {
