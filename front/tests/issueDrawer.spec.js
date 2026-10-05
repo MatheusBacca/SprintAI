@@ -431,7 +431,7 @@ describe('IssueDrawer', () => {
     expect(text).toContain('Build falhou')
     expect(text).toContain('citada no título')
     expect(text).toContain('sobra de merge')
-    expect(wrapper.findAll('.pr__reviewers li').map((r) => r.attributes('data-state'))).toEqual(['approved', 'changes_requested'])
+    expect(wrapper.findAll('.reviewers__chip').map((r) => r.attributes('data-state'))).toEqual(['approved', 'changes_requested'])
     wrapper.unmount()
   })
 })

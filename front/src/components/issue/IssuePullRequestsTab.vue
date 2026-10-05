@@ -14,6 +14,7 @@ import {
 } from 'lucide-vue-next'
 import ActivityKindIcon from '@/components/activity/ActivityKindIcon.vue'
 import MarkdownRenderer from '@/components/issue/MarkdownRenderer.js'
+import PrReviewers from '@/components/pr/PrReviewers.vue'
 import PrStatusBadge from '@/components/pr/PrStatusBadge.vue'
 import { activityKindMeta } from '@/constants/activityKinds'
 import { prKey, useIssueDetailStore } from '@/stores/issueDetail'
@@ -144,16 +145,8 @@ function reviewCount(pr) {
             <span class="pr__when">{{ formatRelative(pr.updated_on) }}</span>
           </div>
 
-          <ul v-if="pr.reviewers.length" class="pr__reviewers">
-            <li
-              v-for="(r, i) in pr.reviewers"
-              :key="i"
-              :data-state="r.approved ? 'approved' : r.state || 'pending'"
-              :title="r.approved ? 'Aprovou' : r.state === 'changes_requested' ? 'Pediu ajustes' : 'Aguardando'"
-            >
-              {{ r.name ?? 'Revisor' }}
-            </li>
-          </ul>
+          <!-- No PR aberto, pôr e tirar reviewers pelo SprintAI, com confirmação. -->
+          <PrReviewers :pr="pr" />
 
           <div class="tl">
             <button
@@ -372,33 +365,6 @@ a.pr__title:hover {
 .pr__when {
   margin-left: auto;
   color: var(--color-text-muted);
-}
-
-.pr__reviewers {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 2px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.pr__reviewers li {
-  padding: 1px 8px;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  font-size: 11px;
-  color: var(--color-text-secondary);
-}
-
-.pr__reviewers li[data-state='approved'] {
-  border-color: var(--color-success-border);
-  color: var(--color-success);
-}
-
-.pr__reviewers li[data-state='changes_requested'] {
-  border-color: var(--color-warning-border);
-  color: var(--color-warning);
 }
 
 /* Histórico da PR ------------------------------------------------------------- */
