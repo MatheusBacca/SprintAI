@@ -200,7 +200,7 @@ function worktreeHint(wt) {
     </ul>
 
     <p v-if="!repos.length" class="timeline__empty">
-      Nenhum repositório com clone local neste workspace. Adicione um na coluna da esquerda.
+      Nenhum repositório com clone local neste workspace. Adicione um em Repositórios envolvidos — no painel da tarefa raiz ou, no workspace livre, no botão Repositórios.
     </p>
     <p v-else-if="store.error && !graph" class="timeline__empty" role="alert">{{ store.error }}</p>
     <p v-else-if="!graph" class="timeline__empty muted">Lendo o git…</p>

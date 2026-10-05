@@ -148,7 +148,7 @@ onBeforeUnmount(() => {
   if (acquired) store.release()
 })
 
-// Escolher um repo na coluna da esquerda traz o terminal dele para a frente.
+// Escolher um repo (na linha do tempo ou no painel da tarefa) traz o terminal dele para a frente.
 watch(
   () => props.selectedRepo,
   (slug) => {

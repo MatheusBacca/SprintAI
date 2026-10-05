@@ -1,32 +1,34 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Columns2, GitGraph, RefreshCw, Workflow } from 'lucide-vue-next'
+import { Columns2, FolderGit2, GitGraph, RefreshCw, Workflow, X } from 'lucide-vue-next'
 
 import IssueDrawer from '@/components/issue/IssueDrawer.vue'
 import SprintCanvas from '@/components/sprint/SprintCanvas.vue'
+import InvolvedRepos from '@/components/workspace/InvolvedRepos.vue'
 import RepoTimeline from '@/components/workspace/RepoTimeline.vue'
 import TerminalDock from '@/components/workspace/TerminalDock.vue'
-import WorkspaceSide from '@/components/workspace/WorkspaceSide.vue'
 import WorkspaceStart from '@/components/workspace/WorkspaceStart.vue'
 import WorkspaceTabs from '@/components/workspace/WorkspaceTabs.vue'
-import { useIssueDetailStore } from '@/stores/issueDetail'
 import { useNotesStore } from '@/stores/notes'
 import { useRefreshStore } from '@/stores/refresh'
 import { useScreenContextStore } from '@/stores/screenContext'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useWorkspaceReposStore } from '@/stores/workspaceRepos'
+import { NODE_WIDTH } from '@/utils/treeLayout'
 
 /**
  * Workspace (`/workspace?ws=<id>`): a feature numa aba. Estado na URL, como na Sprint —
  * `ws` é o workspace, `aba` a área principal (`tarefas` | `linha` | `lado`, as duas lado a
  * lado), `repo` o repositório da linha do tempo e `tarefa` o painel aberto.
+ *
+ * A tarefa e os repositórios envolvidos ficam no painel da direita, o mesmo das outras telas:
+ * a aba Detalhes ganha a lista de repositórios só aqui (slot `details`).
  */
 const route = useRoute()
 const router = useRouter()
 const store = useWorkspaceStore()
 const localRepos = useWorkspaceReposStore()
-const issueDetail = useIssueDetailStore()
 const refresh = useRefreshStore()
 const notes = useNotesStore()
 const screen = useScreenContextStore()
@@ -35,19 +37,44 @@ const workspaceId = computed(() => Number(route.query.ws) || null)
 const selectedKey = computed(() => route.query.tarefa ?? null)
 const current = computed(() => (workspaceId.value ? store.list.find((w) => w.id === workspaceId.value) ?? null : null))
 const isIssue = computed(() => current.value?.kind === 'issue')
+const rootKey = computed(() => current.value?.root_issue_key ?? null)
+
+// --- Área principal: a última escolhida fica salva neste navegador -------------------------
+
 const VIEWS = ['tarefas', 'linha', 'lado']
+const VIEW_KEY = 'sprintai.workspace.view'
+
+function readView() {
+  try {
+    const saved = localStorage.getItem(VIEW_KEY)
+    if (VIEWS.includes(saved)) return saved
+  } catch {
+    // Sem localStorage (janela anônima, teste): começa nas tarefas.
+  }
+  return 'tarefas'
+}
+
+const savedView = ref(readView())
+/** A da URL manda (link colado, voltar do navegador); sem ela, a última que o dev escolheu. */
 const view = computed(() => {
   if (!isIssue.value) return 'linha'
-  return VIEWS.includes(route.query.aba) ? route.query.aba : 'tarefas'
+  return VIEWS.includes(route.query.aba) ? route.query.aba : savedView.value
 })
-const showTasks = computed(() => view.value !== 'linha')
 const showTimeline = computed(() => view.value !== 'tarefas')
 
-const rootIssue = computed(() => {
-  const key = current.value?.root_issue_key
-  return key ? issueDetail.issues[key]?.data ?? null : null
-})
-const rootNode = computed(() => store.tree?.nodes.find((n) => n.key === current.value?.root_issue_key) ?? null)
+/**
+ * Só o clique nas abas grava. Escolher um repo leva à linha do tempo sem mudar a
+ * preferência: é um pulo para olhar o repo, não a tela com que o dev quer abrir.
+ */
+function chooseView(value) {
+  savedView.value = value
+  try {
+    localStorage.setItem(VIEW_KEY, value)
+  } catch {
+    // idem
+  }
+  patchQuery({ aba: value })
+}
 
 /** Repo da linha do tempo: o da URL, senão o primeiro com clone local. */
 const selectedRepo = computed(() => {
@@ -115,6 +142,69 @@ const focusRepos = computed(() =>
   selectedKey.value ? store.visibleRepos.filter((r) => r.issue_keys.includes(selectedKey.value)).map((r) => r.slug) : [],
 )
 
+/** A tarefa e as filhas dela no canvas da feature (pai direto e por link de hierarquia). */
+function subtreeKeys(key) {
+  const byKey = new Map((store.tree?.nodes ?? []).map((n) => [n.key, n]))
+  const seen = new Set([key])
+  const queue = [key]
+  while (queue.length) {
+    const node = byKey.get(queue.shift())
+    for (const child of [...(node?.children ?? []), ...(node?.co_children ?? [])]) {
+      if (seen.has(child)) continue
+      seen.add(child)
+      queue.push(child)
+    }
+  }
+  return seen
+}
+
+/**
+ * "Repositórios envolvidos" na aba Detalhes do painel. Na tarefa raiz, a lista do workspace
+ * inteiro, com adicionar e escondidos — era a coluna da esquerda. Numa tarefa da feature, só
+ * os repos dela e das filhas dela: o Épico mostra os das suas tarefas. Tarefa de fora da
+ * feature (um link aberto do próprio painel) fica sem a seção.
+ */
+const drawerRepos = computed(() => {
+  const key = selectedKey.value
+  if (!key || !isIssue.value) return null
+  if (key === rootKey.value) return { repos: store.visibleRepos, root: true }
+  if (!featureKeys.value.includes(key)) return null
+  const keys = subtreeKeys(key)
+  return { repos: store.visibleRepos.filter((r) => r.issue_keys.some((k) => keys.has(k))), root: false }
+})
+
+/** Workspace livre não tem tarefa: os repositórios abrem num painel próprio, no mesmo lugar. */
+const reposOpen = ref(false)
+
+// --- Entrada e saída do painel da direita ---------------------------------------------------
+
+/**
+ * A mesma entrada da Sprint: o painel monta fora da vista e só entra quando a tarefa inteira
+ * chegou (`ready`), para o título não chegar antes do selo e as contagens não pipocarem
+ * depois. Se a resposta demorar demais, entra assim mesmo com o "Carregando…". Como aqui ele
+ * empurra a tela, quem anima é a largura da coluna: a área encolhe junto com a entrada e, ao
+ * fechar, faz o caminho de volta. Trocar de tarefa com ele aberto carrega no lugar, sem animar.
+ */
+const REVEAL_TIMEOUT = 1500
+const drawerRevealed = ref(false)
+let revealTimer = null
+
+watch(
+  selectedKey,
+  (key) => {
+    clearTimeout(revealTimer)
+    if (!key) {
+      drawerRevealed.value = false
+      return
+    }
+    if (!drawerRevealed.value) revealTimer = setTimeout(() => (drawerRevealed.value = true), REVEAL_TIMEOUT)
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => clearTimeout(revealTimer))
+
+const panelOpen = computed(() => (isIssue.value ? Boolean(selectedKey.value) && drawerRevealed.value : reposOpen.value))
+
 screen.enter('workspace')
 
 onMounted(async () => {
@@ -134,14 +224,6 @@ watch(
   { immediate: true },
 )
 
-watch(
-  () => current.value?.root_issue_key,
-  (key) => {
-    if (key) issueDetail.load(key)
-  },
-  { immediate: true },
-)
-
 watch(selectedKey, (key) => screen.focusIssue(key), { immediate: true })
 watch(
   () => store.tree,
@@ -155,14 +237,13 @@ watch(
   { immediate: true },
 )
 
-// Sync, escrita no Jira ou "Recarregar": cards, repos e a tarefa raiz se refazem.
+// Sync, escrita no Jira ou "Recarregar": cards e repos se refazem. O painel da tarefa
+// recarrega sozinho (ele também observa o `refresh.revision`).
 watch(() => refresh.revision, () => {
   store.loadList()
   if (!workspaceId.value) return
   store.loadDetail()
   store.loadTree()
-  if (current.value?.root_issue_key) issueDetail.load(current.value.root_issue_key)
-  if (selectedKey.value) issueDetail.load(selectedKey.value)
 })
 
 // Lembrete criado ou arquivado muda o ícone do rodapé dos cards.
@@ -209,49 +290,21 @@ function reload() {
   refresh.reload()
 }
 
-// --- Painel da tarefa por cima da área principal --------------------------------------
+// --- Lado a lado: o canvas abre na largura de um card, e a divisão é arrastável -------------
 
-const drawerEl = ref(null)
-const drawerWidth = ref(0)
-let drawerObserver = null
+/**
+ * Pedido do dev: lado a lado é para olhar a linha do tempo com a tarefa à mão. O canvas abre
+ * na largura de um card em foco — o card e a folga dos dois lados —, e todo o resto fica
+ * para a linha do tempo. Arrastar alarga durante a visita; voltar ao lado a lado (ou o duplo
+ * clique na divisão) traz a largura de um card de novo.
+ */
+const CARD_PANE = NODE_WIDTH + 72
+const SPLIT_MIN = 240
+// A linha do tempo nunca fica mais estreita que isto: abaixo, nem o painel de branches cabe.
+const TIMELINE_MIN = 360
+const SPLIT_STEP = 40
 
-watch(drawerEl, (el) => {
-  drawerObserver?.disconnect()
-  drawerWidth.value = 0
-  const node = el?.$el ?? el
-  if (!node || typeof ResizeObserver === 'undefined') return
-  drawerObserver = new ResizeObserver(() => (drawerWidth.value = node.offsetWidth + 24))
-  drawerObserver.observe(node)
-})
-onBeforeUnmount(() => drawerObserver?.disconnect())
-
-// --- Lado a lado: a divisão é arrastável e fica salva neste navegador ---------------------
-
-const SPLIT_KEY = 'sprintai.workspace.split'
-const SPLIT_MIN = 0.2
-const SPLIT_MAX = 0.8
-
-function readSplit() {
-  try {
-    const saved = Number(localStorage.getItem(SPLIT_KEY))
-    if (saved >= SPLIT_MIN && saved <= SPLIT_MAX) return saved
-  } catch {
-    // Sem localStorage: metade e metade.
-  }
-  return 0.5
-}
-
-const split = ref(readSplit())
-watch(split, (value) => {
-  try {
-    localStorage.setItem(SPLIT_KEY, String(value))
-  } catch {
-    // idem
-  }
-})
-
-// Arredonda: somar 0,05 três vezes dá 0,6000000000000001, e isso ia para o localStorage.
-const clampSplit = (value) => Math.round(Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, value)) * 1000) / 1000
+const tasksWidth = ref(CARD_PANE)
 const areaEl = ref(null)
 const areaWidth = ref(0)
 let areaObserver = null
@@ -264,11 +317,14 @@ watch(areaEl, (el) => {
 })
 onBeforeUnmount(() => areaObserver?.disconnect())
 
+const splitMax = computed(() => (areaWidth.value ? Math.max(SPLIT_MIN, areaWidth.value - TIMELINE_MIN) : Infinity))
+const clampSplit = (value) => Math.round(Math.min(splitMax.value, Math.max(SPLIT_MIN, value)))
+
 function startSplit(event) {
   const area = areaEl.value
   if (!area) return
-  const { left, width } = area.getBoundingClientRect()
-  const move = (e) => (split.value = clampSplit((e.clientX - left) / width))
+  const { left } = area.getBoundingClientRect()
+  const move = (e) => (tasksWidth.value = clampSplit(e.clientX - left))
   const stop = () => {
     window.removeEventListener('pointermove', move)
     window.removeEventListener('pointerup', stop)
@@ -279,18 +335,32 @@ function startSplit(event) {
 }
 
 function nudgeSplit(delta) {
-  split.value = clampSplit(split.value + delta)
+  tasksWidth.value = clampSplit(tasksWidth.value + delta)
 }
 
+// --- Câmera do canvas ao trocar de área ------------------------------------------------------
+
 /**
- * Quanto o painel da tarefa cobre do canvas. Sozinho, o canvas fica embaixo do painel
- * inteiro; lado a lado, o painel cai primeiro sobre a linha do tempo, e só o que sobra dele
- * chega ao canvas.
+ * Sem tarefa aberta, lado a lado pousa na raiz: enquadrar a feature inteira na largura de um
+ * card deixaria cada card do tamanho de um selo.
  */
-const rightInset = computed(() => {
-  if (!drawerWidth.value) return 0
-  if (view.value !== 'lado') return drawerWidth.value
-  return Math.max(0, drawerWidth.value - areaWidth.value * (1 - split.value))
+const anchorKey = computed(() => (view.value === 'lado' ? rootKey.value : null))
+const canvasEl = ref(null)
+
+/**
+ * Entrar no lado a lado traz a largura de um card e pousa a câmera no card em foco (o aberto
+ * no painel, senão a raiz), no tamanho de foco. Espera dois quadros: o pane precisa ter
+ * encolhido antes, senão a conta centraliza na largura velha. Trocar entre as outras áreas
+ * não precisa disto — o canvas segue a tarefa em foco quando a largura muda (`SprintCanvas`).
+ */
+watch(view, async (value, previous) => {
+  if (value !== 'lado' || previous === 'lado') return
+  tasksWidth.value = CARD_PANE
+  await nextTick()
+  if (typeof requestAnimationFrame === 'function') {
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  }
+  canvasEl.value?.focus?.(selectedKey.value ?? anchorKey.value)
 })
 </script>
 
@@ -323,22 +393,6 @@ const rightInset = computed(() => {
     </p>
 
     <div v-else-if="current" class="ws-body">
-      <WorkspaceSide
-        class="ws-body__side"
-        :workspace="current"
-        :issue="rootIssue"
-        :root-node="rootNode"
-        :repos="store.visibleRepos"
-        :hidden-repos="store.hiddenRepos"
-        :addable="addable"
-        :selected-repo="selectedRepo"
-        :loading="store.detailLoading"
-        @select-repo="selectRepo"
-        @pin="store.pin"
-        @open-folder="store.openFolder"
-        @open-issue="selectIssue"
-      />
-
       <section class="ws-main">
         <nav v-if="isIssue" class="ws-main__views" role="tablist" aria-label="Área principal">
           <button
@@ -347,7 +401,7 @@ const rightInset = computed(() => {
             class="ws-main__view"
             :class="{ 'ws-main__view--active': view === 'tarefas' }"
             :aria-selected="view === 'tarefas'"
-            @click="patchQuery({ aba: 'tarefas' })"
+            @click="chooseView('tarefas')"
           >
             <Workflow :size="14" /> Tarefas
             <span v-if="store.tree?.counters?.tasks" class="ws-main__count">{{ store.tree.counters.tasks }}</span>
@@ -358,7 +412,7 @@ const rightInset = computed(() => {
             class="ws-main__view"
             :class="{ 'ws-main__view--active': view === 'linha' }"
             :aria-selected="view === 'linha'"
-            @click="patchQuery({ aba: 'linha' })"
+            @click="chooseView('linha')"
           >
             <GitGraph :size="14" /> Linha do tempo
           </button>
@@ -369,25 +423,43 @@ const rightInset = computed(() => {
             :class="{ 'ws-main__view--active': view === 'lado' }"
             :aria-selected="view === 'lado'"
             title="Tarefas e linha do tempo juntas — arraste a divisão para ajustar"
-            @click="patchQuery({ aba: 'lado' })"
+            @click="chooseView('lado')"
           >
             <Columns2 :size="14" /> Lado a lado
           </button>
         </nav>
+        <div v-else class="ws-main__views">
+          <span class="ws-main__free">Workspace livre</span>
+          <button
+            type="button"
+            class="ws-main__view"
+            :class="{ 'ws-main__view--active': reposOpen }"
+            :aria-pressed="reposOpen"
+            title="Os repositórios deste workspace: adicionar, esconder, abrir no VS Code"
+            @click="reposOpen = !reposOpen"
+          >
+            <FolderGit2 :size="14" /> Repositórios
+            <span class="ws-main__count">{{ store.visibleRepos.length }}</span>
+          </button>
+        </div>
 
         <div ref="areaEl" class="ws-main__area card" :class="{ 'ws-main__area--split': view === 'lado' }">
+          <!-- Na linha do tempo o canvas fica guardado (montado e invisível), não desmontado: a
+               câmera continua onde estava, e voltar não recria nem remede cada card. -->
           <div
-            v-if="showTasks"
+            v-if="isIssue"
             class="ws-main__pane ws-main__pane--tasks"
-            :style="view === 'lado' ? { flexBasis: `${split * 100}%` } : null"
+            :class="{ 'ws-main__pane--parked': view === 'linha' }"
+            :style="view === 'lado' ? { flexBasis: `${tasksWidth}px` } : null"
           >
             <p v-if="store.treeError" class="ws-main__empty" role="alert">{{ store.treeError }}</p>
             <SprintCanvas
               v-else-if="store.tree?.nodes.length"
+              ref="canvasEl"
               flow-id="workspace-tree"
               :tree="store.tree"
               :selected-key="selectedKey"
-              :right-inset="rightInset"
+              :anchor-key="anchorKey"
               @select="selectIssue"
             />
             <p v-else-if="store.tree" class="ws-main__empty">Nenhuma tarefa no espelho para esta feature.</p>
@@ -400,14 +472,14 @@ const rightInset = computed(() => {
             tabindex="0"
             aria-orientation="vertical"
             aria-label="Ajustar a largura das tarefas e da linha do tempo"
-            :aria-valuenow="Math.round(split * 100)"
-            aria-valuemin="20"
-            aria-valuemax="80"
-            title="Arraste para ajustar · duplo clique volta ao meio"
+            :aria-valuenow="tasksWidth"
+            :aria-valuemin="SPLIT_MIN"
+            :aria-valuemax="Number.isFinite(splitMax) ? splitMax : undefined"
+            title="Arraste para ajustar · duplo clique volta à largura de um card"
             @pointerdown.prevent="startSplit"
-            @dblclick="split = 0.5"
-            @keydown.left.prevent="nudgeSplit(-0.05)"
-            @keydown.right.prevent="nudgeSplit(0.05)"
+            @dblclick="tasksWidth = CARD_PANE"
+            @keydown.left.prevent="nudgeSplit(-SPLIT_STEP)"
+            @keydown.right.prevent="nudgeSplit(SPLIT_STEP)"
           />
           <div v-if="showTimeline" class="ws-main__pane ws-main__pane--timeline">
             <RepoTimeline
@@ -419,15 +491,6 @@ const rightInset = computed(() => {
               @open-issue="selectIssue"
             />
           </div>
-
-          <IssueDrawer
-            v-if="selectedKey"
-            ref="drawerEl"
-            class="ws-main__drawer"
-            :issue-key="selectedKey"
-            @close="selectIssue(null)"
-            @open="selectIssue"
-          />
         </div>
 
         <div
@@ -452,6 +515,67 @@ const rightInset = computed(() => {
           @open-folder="store.openFolder"
         />
       </section>
+
+      <!-- O painel é uma coluna da tela, não uma camada por cima: abrir empurra as abas, a
+           área (tarefas, linha do tempo ou as duas) e os terminais, e nada fica escondido
+           atrás dele. Desce do topo ao rodapé, como na Sprint. A coluna cresce do zero quando
+           a tarefa chegou; ao fechar, o painel fica na tela enquanto ela encolhe. -->
+      <div class="ws-panel" :class="{ 'ws-panel--open': panelOpen }">
+        <Transition name="ws-panel">
+          <IssueDrawer
+            v-if="isIssue && selectedKey"
+            class="ws-body__panel"
+            :issue-key="selectedKey"
+            @close="selectIssue(null)"
+            @open="selectIssue"
+            @ready="drawerRevealed = true"
+          >
+            <template #details>
+              <InvolvedRepos
+                v-if="drawerRepos"
+                class="ws-body__repos"
+                :repos="drawerRepos.repos"
+                :hidden-repos="store.hiddenRepos"
+                :addable="addable"
+                :selected-repo="selectedRepo"
+                :loading="store.detailLoading"
+                :manage="drawerRepos.root"
+                empty-text="Nenhum repositório com branch, PR ou título desta tarefa."
+                @select-repo="selectRepo"
+                @pin="store.pin"
+                @open-folder="store.openFolder"
+              >
+                <button v-if="!drawerRepos.root" type="button" class="ws-body__all-repos" @click="selectIssue(rootKey)">
+                  Todos os repositórios do workspace, na {{ rootKey }}
+                </button>
+              </InvolvedRepos>
+            </template>
+          </IssueDrawer>
+
+          <aside v-else-if="!isIssue && reposOpen" class="ws-body__panel ws-free card" aria-label="Repositórios do workspace">
+            <header class="ws-free__head">
+              <div class="ws-free__titles">
+                <p class="ws-free__type">WORKSPACE LIVRE</p>
+                <h2 class="ws-free__title">{{ current.title }}</h2>
+              </div>
+              <button type="button" class="ws-free__close" title="Fechar" aria-label="Fechar painel" @click="reposOpen = false">
+                <X :size="16" />
+              </button>
+            </header>
+            <p class="ws-free__desc">Sem tarefa: só os repositórios que você escolheu, com linha do tempo e terminal.</p>
+            <InvolvedRepos
+              :repos="store.visibleRepos"
+              :hidden-repos="store.hiddenRepos"
+              :addable="addable"
+              :selected-repo="selectedRepo"
+              :loading="store.detailLoading"
+              @select-repo="selectRepo"
+              @pin="store.pin"
+              @open-folder="store.openFolder"
+            />
+          </aside>
+        </Transition>
+      </div>
     </div>
   </div>
 </template>
@@ -488,19 +612,15 @@ const rightInset = computed(() => {
   color: var(--color-error);
 }
 
+/* A área principal e o painel da direita lado a lado: o painel tem a altura toda. */
 .ws-body {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
-  gap: var(--space-3);
-}
-
-.ws-body__side {
-  min-height: 0;
+  display: flex;
 }
 
 .ws-main {
+  flex: 1;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -510,6 +630,7 @@ const rightInset = computed(() => {
 
 .ws-main__views {
   display: flex;
+  align-items: center;
   gap: var(--space-2);
 }
 
@@ -539,6 +660,14 @@ const rightInset = computed(() => {
   font-size: 11px;
 }
 
+.ws-main__free {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
 .ws-main__area {
   position: relative;
   flex: 1;
@@ -556,6 +685,16 @@ const rightInset = computed(() => {
 
 .ws-main__area--split .ws-main__pane--tasks {
   flex: 0 0 auto;
+}
+
+/* Guardado: ocupa a área inteira por baixo (a largura não muda, nem a câmera), sem ser
+   visto nem clicado. `visibility` e não `display: none` — sem medida, o Vue Flow reclama
+   e perde as dimensões do pane. */
+.ws-main__pane--parked {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .ws-main__splitter {
@@ -596,13 +735,118 @@ const rightInset = computed(() => {
   font-size: var(--text-sm);
 }
 
-/* O painel da tarefa flutua à direita da área, como na Sprint. */
-.ws-main__drawer {
-  position: absolute;
-  top: var(--space-3);
-  right: var(--space-3);
-  bottom: var(--space-3);
-  z-index: 5;
+/* A coluna do painel. Fechada, tem largura zero e o painel (montado à espera da tarefa, ou
+   saindo) fica para fora da borda direita, cortado. `clip` só na horizontal: o selo de
+   status senta em cima do contorno, metade acima do painel, e não pode ser cortado. A largura
+   é a do painel da tarefa nas outras telas, mais o respiro até a área principal. */
+.ws-panel {
+  --panel-width: max(360px, min(480px, 42vw));
+
+  flex-shrink: 0;
+  display: flex;
+  width: 0;
+  overflow-x: clip;
+  transition: width 0.26s cubic-bezier(0.4, 0, 0.8, 0.4);
+}
+
+.ws-panel--open {
+  width: calc(var(--panel-width) + var(--space-3));
+  transition: width 0.34s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Duas classes: o painel da tarefa tem largura própria, e aqui ela vem da coluna. */
+.ws-panel > .ws-body__panel {
+  flex-shrink: 0;
+  width: var(--panel-width);
+  min-width: 0;
+  min-height: 0;
+  margin-left: var(--space-3);
+}
+
+/* Some enquanto a coluna encolhe: o mesmo tempo da saída na Sprint. */
+.ws-panel-leave-active {
+  transition: opacity 0.26s ease-in;
+}
+
+.ws-panel-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-panel,
+  .ws-panel--open,
+  .ws-panel-leave-active {
+    transition: none;
+  }
+}
+
+.ws-body__repos {
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ws-body__all-repos {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: var(--text-xs);
+  color: var(--color-primary);
+}
+
+.ws-free {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  overflow-y: auto;
+}
+
+.ws-free__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.ws-free__titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.ws-free__type {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.ws-free__title {
+  margin: 0;
+  font-size: var(--text-lg);
+  line-height: 24px;
+}
+
+.ws-free__close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text-muted);
+}
+
+.ws-free__close:hover {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.ws-free__desc {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
 }
 
 .spin {
@@ -612,13 +856,6 @@ const rightInset = computed(() => {
 @keyframes spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@media (max-width: 900px) {
-  .ws-body {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(360px, 1fr);
   }
 }
 </style>

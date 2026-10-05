@@ -51,18 +51,31 @@ const TREE = {
   frame: { id: 'workspace:1', label: 'na feature' },
   counters: { tasks: 2, parents: 1, blocked: 0, mine: 2, story_points: 5, done: 0 },
   nodes: [
-    { key: 'WAI-8677', summary: 'Plano gratuito', issue_type: 'Enhancements', in_sprint: true, title_parts: [], unseen_changes: [] },
-    { key: 'WAI-8792', summary: '[weaction-api] Trial', issue_type: 'Tarefa', in_sprint: true, title_parts: [], unseen_changes: ['status'] },
+    { key: 'WAI-8677', summary: 'Plano gratuito', issue_type: 'Enhancements', in_sprint: true, children: ['WAI-8792'], title_parts: [], unseen_changes: [] },
+    { key: 'WAI-8792', summary: '[weaction-api] Trial', issue_type: 'Tarefa', in_sprint: true, children: [], title_parts: [], unseen_changes: ['status'] },
   ],
   edges: [],
   groups: [],
 }
 
+const canvasFocus = vi.fn()
 const CANVAS_STUB = {
   name: 'SprintCanvas',
-  props: ['tree', 'selectedKey', 'rightInset', 'flowId'],
+  props: ['tree', 'selectedKey', 'anchorKey', 'rightInset', 'flowId'],
   emits: ['select'],
+  methods: {
+    focus(key) {
+      canvasFocus(key)
+    },
+  },
   template: '<div class="canvas-stub" />',
+}
+// O painel de verdade busca a tarefa; aqui só importa o que a tela põe na aba Detalhes.
+const DRAWER_STUB = {
+  name: 'IssueDrawer',
+  props: ['issueKey'],
+  emits: ['close', 'open', 'ready'],
+  template: '<aside class="drawer-stub" :data-key="issueKey"><slot name="details" /></aside>',
 }
 const DOCK_STUB = {
   name: 'TerminalDock',
@@ -81,15 +94,24 @@ describe('WorkspaceView', () => {
   let calls
   let list
   let detail
+  // A tela tem timer (a entrada do painel): montada e esquecida, ela redesenha no meio do
+  // teste seguinte — e já sem os stubs, com o painel de verdade buscando a tarefa.
+  let mounted = []
 
   beforeEach(() => {
     setActivePinia(createPinia())
+    localStorage.clear()
+    canvasFocus.mockClear()
     calls = []
     list = [workspace(1), workspace(2, { root_issue_key: null, kind: 'free', title: 'Testes', is_open: false })]
     detail = {
       workspace: workspace(1),
       keys: ['WAI-8677', 'WAI-8792'],
-      repos: [repo('weaction-api'), repo('qualificai', { sources: ['pr'], branches: [] }), repo('monitoria', { hidden: true })],
+      repos: [
+        repo('weaction-api', { color: '#2f7cf6' }),
+        repo('qualificai', { sources: ['pr'], branches: [], issue_keys: ['WAI-8677'] }),
+        repo('monitoria', { hidden: true }),
+      ],
     }
     vi.stubGlobal(
       'fetch',
@@ -109,7 +131,9 @@ describe('WorkspaceView', () => {
           return json(list.find((w) => w.id === id))
         }
         if (url === '/api/workspaces/1') return json(detail)
-        if (url === '/api/workspaces/1/tree') return json(TREE)
+        if (url === '/api/workspaces/1/tree') return json(structuredClone(TREE))
+        if (url === '/api/workspaces/2') return json({ workspace: list[1], keys: [], repos: [repo('qualificai', { sources: ['pin'], branches: [], issue_keys: [] })] })
+        if (url === '/api/workspaces/2/tree') return json({ workspace_id: 2, frame: null, counters: {}, nodes: [], edges: [], groups: [] })
         if (url.startsWith('/api/workspaces/1/repos/')) return NO_CONTENT
         if (url === '/api/workspace/repos') return json({ root: 'C:\\projects', repos: [] })
         if (url === '/api/workspace/open') return NO_CONTENT
@@ -119,15 +143,26 @@ describe('WorkspaceView', () => {
       }),
     )
   })
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    for (const wrapper of mounted) {
+      try {
+        wrapper.unmount()
+      } catch {
+        // Já desmontada pelo próprio teste.
+      }
+    }
+    mounted = []
+    vi.unstubAllGlobals()
+  })
 
   async function mountView(query = '') {
     const router = createRouter({ history: createMemoryHistory(), routes })
     router.push(`/workspace${query}`)
     await router.isReady()
     const wrapper = mount(WorkspaceView, {
-      global: { plugins: [router], stubs: { SprintCanvas: CANVAS_STUB, RepoTimeline: TIMELINE_STUB, TerminalDock: DOCK_STUB, IssueDrawer: true } },
+      global: { plugins: [router], stubs: { SprintCanvas: CANVAS_STUB, RepoTimeline: TIMELINE_STUB, TerminalDock: DOCK_STUB, IssueDrawer: DRAWER_STUB } },
     })
+    mounted.push(wrapper)
     await flushPromises()
     return { wrapper, router }
   }
@@ -138,17 +173,11 @@ describe('WorkspaceView', () => {
     expect(wrapper.findAll('.tabs__item').map((t) => t.attributes('data-id'))).toEqual(['1'])
   })
 
-  it('mostra a tarefa raiz, os repos com a fonte e a árvore no canvas da feature', async () => {
+  it('sem coluna da esquerda: a árvore no canvas da feature e o painel só com tarefa aberta', async () => {
     const { wrapper } = await mountView('?ws=1')
 
-    expect(wrapper.find('.side__title').text()).toBe('Plano gratuito do QualificAI')
-    expect(wrapper.find('.side__desc').text()).toBe('Toda empresa ganha 7 dias.')
-    const repos = wrapper.findAll('.repo').map((r) => r.attributes('data-repo'))
-    expect(repos).toEqual(['weaction-api', 'qualificai'])
-    expect(wrapper.find('.repo[data-repo="weaction-api"]').text()).toContain('branch local · título')
-    expect(wrapper.find('.repo[data-repo="weaction-api"]').text()).toContain('feature/WAI-8792')
-    expect(wrapper.find('.side__toggle').text()).toBe('1 escondido(s)')
-
+    expect(wrapper.find('.side').exists()).toBe(false)
+    expect(wrapper.find('.drawer-stub').exists()).toBe(false)
     const canvas = wrapper.findComponent({ name: 'SprintCanvas' })
     expect(canvas.props('flowId')).toBe('workspace-tree')
     expect(canvas.props('tree').frame.label).toBe('na feature')
@@ -156,24 +185,65 @@ describe('WorkspaceView', () => {
     expect(useScreenContextStore().visibleIssueKeys).toEqual(['WAI-8677', 'WAI-8792'])
   })
 
-  it('card aberto vai para a URL e apaga a bolinha; repo escolhido leva à linha do tempo', async () => {
+  it('a tarefa raiz traz na aba Detalhes os repositórios do workspace, pintados e com a fonte', async () => {
+    const { wrapper } = await mountView('?ws=1&tarefa=WAI-8677')
+
+    const drawer = wrapper.find('.drawer-stub')
+    expect(drawer.attributes('data-key')).toBe('WAI-8677')
+    expect(drawer.findAll('.repo').map((r) => r.attributes('data-repo'))).toEqual(['weaction-api', 'qualificai'])
+    const weaction = drawer.find('.repo[data-repo="weaction-api"]')
+    expect(weaction.text()).toContain('branch local · título')
+    expect(weaction.text()).toContain('feature/WAI-8792')
+    // A cor do repositório (Configurações › Cores dos cards), como no colchete do card.
+    expect(weaction.find('.repo__name').classes()).toContain('repo__name--painted')
+    expect(weaction.find('.repo__name').attributes('style')).toContain('--repo: #2f7cf6')
+    expect(drawer.find('.repo[data-repo="qualificai"] .repo__name').classes()).not.toContain('repo__name--painted')
+    expect(drawer.find('.involved__toggle').text()).toBe('1 escondido(s)')
+    expect(drawer.find('.ws-body__all-repos').exists()).toBe(false)
+  })
+
+  it('tarefa filha mostra só os repos dela, sem adicionar nem escondidos; de fora da feature, nada', async () => {
+    const { wrapper, router } = await mountView('?ws=1&tarefa=WAI-8792')
+
+    const drawer = wrapper.find('.drawer-stub')
+    expect(drawer.findAll('.repo').map((r) => r.attributes('data-repo'))).toEqual(['weaction-api'])
+    expect(drawer.find('.involved__toggle').exists()).toBe(false)
+    await drawer.find('.ws-body__all-repos').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.tarefa).toBe('WAI-8677')
+
+    await router.replace({ query: { ws: '1', tarefa: 'WAI-1' } })
+    await flushPromises()
+    expect(wrapper.find('.drawer-stub').exists()).toBe(true)
+    expect(wrapper.find('.drawer-stub .involved').exists()).toBe(false)
+  })
+
+  it('card aberto vai para a URL e apaga a bolinha; repo escolhido no painel leva à linha do tempo', async () => {
     const { wrapper, router } = await mountView('?ws=1')
 
     wrapper.findComponent({ name: 'SprintCanvas' }).vm.$emit('select', 'WAI-8792')
     await flushPromises()
     expect(router.currentRoute.value.query.tarefa).toBe('WAI-8792')
     expect(calls.some((c) => c.method === 'POST' && c.url === '/api/issues/WAI-8792/seen')).toBe(true)
-
-    await wrapper.find('.repo[data-repo="qualificai"] .repo__main').trigger('click')
+    // A coluna do painel só abre (e empurra a tela) quando a tarefa inteira chegou.
+    const panel = () => wrapper.find('.ws-panel').classes()
+    expect(panel()).not.toContain('ws-panel--open')
+    wrapper.findComponent({ name: 'IssueDrawer' }).vm.$emit('ready')
     await flushPromises()
-    expect(router.currentRoute.value.query).toMatchObject({ aba: 'linha', repo: 'qualificai' })
+    expect(panel()).toContain('ws-panel--open')
+
+    await wrapper.find('.drawer-stub .repo[data-repo="weaction-api"] .repo__main').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toMatchObject({ aba: 'linha', repo: 'weaction-api' })
+    // Pulo para olhar o repo: não vira a aba com que o Workspace abre.
+    expect(localStorage.getItem('sprintai.workspace.view')).toBeNull()
     const timeline = wrapper.findComponent({ name: 'RepoTimeline' })
-    expect(timeline.props('repo')).toBe('qualificai')
+    expect(timeline.props('repo')).toBe('weaction-api')
     expect(timeline.props('keys')).toEqual(['WAI-8677', 'WAI-8792'])
     expect(timeline.props('highlightKeys')).toEqual(['WAI-8792'])
     // Os terminais acompanham o repo escolhido e só os repos com clone local.
     const dock = wrapper.findComponent({ name: 'TerminalDock' })
-    expect(dock.props('selectedRepo')).toBe('qualificai')
+    expect(dock.props('selectedRepo')).toBe('weaction-api')
     expect(dock.props('repos').map((r) => r.slug)).toEqual(['weaction-api', 'qualificai'])
 
     dock.vm.$emit('pin-repo', 'supervisor-web')
@@ -181,34 +251,80 @@ describe('WorkspaceView', () => {
     await flushPromises()
     expect(calls).toContainEqual({ method: 'PUT', url: '/api/workspaces/1/repos/supervisor-web', body: { mode: 'add' } })
     expect(dock.props('collapsed')).toBe(true)
+
+    wrapper.findComponent({ name: 'IssueDrawer' }).vm.$emit('close')
+    await flushPromises()
+    expect(router.currentRoute.value.query.tarefa).toBeUndefined()
+    expect(panel()).not.toContain('ws-panel--open')
   })
 
-  it('lado a lado mostra as duas telas, a divisão ajusta e fica salva', async () => {
-    localStorage.removeItem('sprintai.workspace.split')
-    const { wrapper, router } = await mountView('?ws=1&aba=lado')
+  it('a aba escolhida fica salva e volta ao abrir; na linha do tempo o canvas fica guardado', async () => {
+    const first = await mountView('?ws=1')
+    const tasksPane = (wrapper) => wrapper.find('.ws-main__pane--tasks')
 
-    expect(wrapper.find('.canvas-stub').exists()).toBe(true)
-    expect(wrapper.find('.timeline-stub').exists()).toBe(true)
+    await first.wrapper.findAll('.ws-main__view')[1].trigger('click')
+    await flushPromises()
+    expect(localStorage.getItem('sprintai.workspace.view')).toBe('linha')
+    expect(first.wrapper.find('.timeline-stub').exists()).toBe(true)
+    // Guardado, não desmontado: a câmera fica onde estava para quando voltar.
+    expect(first.wrapper.find('.canvas-stub').exists()).toBe(true)
+    expect(tasksPane(first.wrapper).classes()).toContain('ws-main__pane--parked')
+    first.wrapper.unmount()
+
+    const again = await mountView('?ws=1')
+    expect(again.router.currentRoute.value.query.aba).toBeUndefined()
+    expect(again.wrapper.find('.ws-main__view--active').text()).toBe('Linha do tempo')
+    expect(tasksPane(again.wrapper).classes()).toContain('ws-main__pane--parked')
+
+    // A da URL manda sobre a salva.
+    const linked = await mountView('?ws=1&aba=tarefas')
+    expect(linked.wrapper.find('.timeline-stub').exists()).toBe(false)
+    expect(tasksPane(linked.wrapper).classes()).not.toContain('ws-main__pane--parked')
+  })
+
+  it('lado a lado abre o canvas na largura de um card, focado na tarefa, e a divisão ajusta', async () => {
+    const { wrapper, router } = await mountView('?ws=1')
     const tasks = () => wrapper.find('.ws-main__pane--tasks').attributes('style')
-    expect(tasks()).toContain('flex-basis: 50%')
+    const canvas = () => wrapper.findComponent({ name: 'SprintCanvas' })
+    expect(canvas().props('anchorKey')).toBeNull()
+
+    await wrapper.findAll('.ws-main__view')[2].trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.timeline-stub').exists()).toBe(true)
+    // 236px do card e a folga dos dois lados: o resto fica para a linha do tempo.
+    expect(tasks()).toContain('flex-basis: 308px')
+    // Sem tarefa aberta, a câmera pousa na raiz em vez de enquadrar a feature inteira.
+    expect(canvas().props('anchorKey')).toBe('WAI-8677')
+    await vi.waitFor(() => expect(canvasFocus).toHaveBeenCalledWith('WAI-8677'))
 
     const splitter = wrapper.find('.ws-main__splitter')
     await splitter.trigger('keydown', { key: 'ArrowRight' })
     await splitter.trigger('keydown', { key: 'ArrowRight' })
-    expect(tasks()).toContain('flex-basis: 60%')
-    expect(localStorage.getItem('sprintai.workspace.split')).toBe('0.6')
+    expect(tasks()).toContain('flex-basis: 388px')
     await splitter.trigger('dblclick')
-    expect(tasks()).toContain('flex-basis: 50%')
+    expect(tasks()).toContain('flex-basis: 308px')
 
-    // Trocar de repo pela coluna não tira o canvas da tela.
-    await wrapper.find('.repo[data-repo="qualificai"] .repo__main').trigger('click')
+    // Trocar de repo pela linha do tempo não tira o canvas da tela.
+    wrapper.findComponent({ name: 'RepoTimeline' }).vm.$emit('select-repo', 'qualificai')
     await flushPromises()
     expect(router.currentRoute.value.query).toMatchObject({ aba: 'lado', repo: 'qualificai' })
     expect(wrapper.find('.canvas-stub').exists()).toBe(true)
+
+    // Voltar ao lado a lado depois de alargar traz a largura de um card de novo, na tarefa aberta.
+    await splitter.trigger('keydown', { key: 'ArrowRight' })
+    await wrapper.findAll('.ws-main__view')[0].trigger('click')
+    await flushPromises()
+    await router.replace({ query: { ...router.currentRoute.value.query, tarefa: 'WAI-8792' } })
+    await flushPromises()
+    canvasFocus.mockClear()
+    await wrapper.findAll('.ws-main__view')[2].trigger('click')
+    await flushPromises()
+    expect(tasks()).toContain('flex-basis: 308px')
+    await vi.waitFor(() => expect(canvasFocus).toHaveBeenCalledWith('WAI-8792'))
   })
 
   it('esconder repo, abrir no VS Code e fechar a aba', async () => {
-    const { wrapper, router } = await mountView('?ws=1')
+    const { wrapper, router } = await mountView('?ws=1&tarefa=WAI-8677')
 
     await wrapper.find('.repo[data-repo="qualificai"] .repo__action[title="Esconder deste workspace"]').trigger('click')
     await wrapper.find('.repo[data-repo="weaction-api"] .repo__action[title="Abrir no VS Code"]').trigger('click')
@@ -221,6 +337,27 @@ describe('WorkspaceView', () => {
     expect(calls).toContainEqual({ method: 'PATCH', url: '/api/workspaces/1', body: { is_open: false } })
     expect(router.currentRoute.value.query.ws).toBeUndefined()
     expect(wrapper.find('.start').exists()).toBe(true)
+  })
+
+  it('workspace livre: só a linha do tempo, e os repositórios num painel à direita', async () => {
+    list = list.map((w) => ({ ...w, is_open: true }))
+    const { wrapper } = await mountView('?ws=2')
+
+    expect(wrapper.find('[role="tablist"][aria-label="Área principal"]').exists()).toBe(false)
+    expect(wrapper.find('.canvas-stub').exists()).toBe(false)
+    expect(wrapper.find('.timeline-stub').exists()).toBe(true)
+    expect(wrapper.find('.ws-free').exists()).toBe(false)
+
+    await wrapper.find('.ws-main__view').trigger('click')
+    const panel = wrapper.find('.ws-free')
+    expect(panel.find('.ws-free__title').text()).toBe('Testes')
+    expect(panel.findAll('.repo').map((r) => r.attributes('data-repo'))).toEqual(['qualificai'])
+    await panel.find('.repo__action[title="Tirar do workspace"]').trigger('click')
+    await flushPromises()
+    expect(calls).toContainEqual({ method: 'PUT', url: '/api/workspaces/2/repos/qualificai', body: { mode: 'auto' } })
+
+    await wrapper.find('.ws-free__close').trigger('click')
+    expect(wrapper.find('.ws-free').exists()).toBe(false)
   })
 
   it('o começo abre pela chave e lista os fechados', async () => {
