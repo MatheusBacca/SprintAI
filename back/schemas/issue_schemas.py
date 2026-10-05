@@ -99,6 +99,8 @@ class IssueDetailOut(BaseModel):
     stage: StageRefOut | None = None
     comments: list[CommentOut]
     pull_requests: IssuePrSummaryOut
+    # Apto ao Concluir — a mesma regra do card (`conclude_settings.blocked_reason`).
+    conclude: bool = False
 
 
 class ChangeItemOut(BaseModel):

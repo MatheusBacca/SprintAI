@@ -4,7 +4,8 @@ import asyncpg
 from fastapi import APIRouter, Depends
 
 from database.pool import get_pool
-from repositories import settings_repo
+from repositories import progress_repo, settings_repo
+from schemas.conclude_schemas import ConcludeSettingsIn, ConcludeSettingsOut, RepoConclusionIn
 from schemas.pr_status_schemas import ApprovalRuleSettings
 from schemas.preference_schemas import (
     CardColorsIn,
@@ -14,10 +15,11 @@ from schemas.preference_schemas import (
     ShortcutsOut,
     ShortcutsPreferences,
 )
-from services import card_colors, pr_status_service
+from services import card_colors, conclude_settings, pr_status_service
 from services.card_colors import CARD_TYPES, SUGGESTED_COLORS, CardColors
 from services.pr_status import ApprovalRule
 from services.shortcuts import merge_with_defaults
+from services.sync.engine import load_scope
 
 router = APIRouter(prefix="/preferences", tags=["preferences"])
 
@@ -87,3 +89,29 @@ async def put_card_colors(pool: Pool, payload: CardColorsIn):
     known = (await card_colors.load_colors(pool)).known
     colors = CardColors.from_setting(payload.model_dump(), known)
     return _card_colors_out(await card_colors.save_colors(pool, colors))
+
+
+async def _conclude_out(pool: asyncpg.Pool, rules) -> ConcludeSettingsOut:
+    synced = (await load_scope(pool)).bitbucket.repo_slugs
+    statuses = [row["status"] for row in await progress_repo.distinct_statuses(pool)]
+    return ConcludeSettingsOut(
+        repos={slug: RepoConclusionIn(**rule.to_setting()) for slug, rule in rules.items()},
+        known_repos=sorted(set(synced) | set(rules)),
+        statuses=statuses,
+    )
+
+
+@router.get("/conclude", response_model=ConcludeSettingsOut)
+async def get_conclude(pool: Pool):
+    """O que o "Concluir" do card faz em cada repositório."""
+    return await _conclude_out(pool, await conclude_settings.load_rules(pool))
+
+
+@router.put("/conclude", response_model=ConcludeSettingsOut)
+async def put_conclude(pool: Pool, payload: ConcludeSettingsIn):
+    rules = {
+        slug: rule
+        for slug, raw in payload.repos.items()
+        if (rule := conclude_settings.valid_rule(raw.model_dump())) is not None
+    }
+    return await _conclude_out(pool, await conclude_settings.save_rules(pool, rules))

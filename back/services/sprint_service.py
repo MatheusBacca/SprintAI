@@ -11,7 +11,7 @@ from schemas.sprint_schemas import (
     TreeNodeOut,
 )
 from security.credential_store import CredentialStore
-from services import card_colors, card_updates, pr_status_service
+from services import card_colors, card_updates, conclude_settings, pr_status_service
 from services.blocking import blockers_without_pr
 from services.hierarchy import is_hierarchy_link
 from services.progress.service import load_stages, stage_ref
@@ -145,6 +145,15 @@ async def render_nodes(
     )
 
     note_counts = await notes_repo.active_counts(pool, list(tree.nodes))
+    concludes = await conclude_settings.with_conclusion(
+        pool,
+        [
+            conclude_settings.ConcludeTask(n.key, n.summary, n.status, n.status_category)
+            for n in tree.nodes.values()
+            if n.in_sprint and not n.partial
+        ],
+        summaries,
+    )
 
     return [
         TreeNodeOut(
@@ -176,6 +185,7 @@ async def render_nodes(
             stage=stage_ref(stages.stage_of(n.status)),
             tint=_tint_out(paints[n.key].tint),
             title_parts=[TitlePartOut(**vars(p)) for p in paints[n.key].title],
+            conclude=n.key in concludes,
             unseen_changes=changes.get(n.key, []),
             note_count=note_counts.get(n.key, 0),
         )

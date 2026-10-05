@@ -13,6 +13,7 @@ class ReviewerOut(BaseModel):
     role: str | None
     approved: bool
     state: str | None
+    account_id: str | None = None
 
 
 class ReviewProgressOut(BaseModel):

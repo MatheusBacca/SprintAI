@@ -77,6 +77,9 @@ class TreeNodeOut(BaseModel):
     # Título em pedaços, com os nomes do colchete na cor do repositório. Vazio quando
     # nenhum tem cor: o card mostra o `summary`.
     title_parts: list[TitlePartOut] = []
+    # Apto ao Concluir (receita no repo, PR aprovado pela regra, antes de testes): o card
+    # mostra o botão.
+    conclude: bool = False
     # Campos que mudaram desde o último clique no card (status, pr, story_points, assignee).
     unseen_changes: list[str] = []
     # Lembretes não arquivados vinculados à tarefa (ícone do rodapé do card).

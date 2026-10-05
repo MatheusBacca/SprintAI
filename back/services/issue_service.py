@@ -21,7 +21,7 @@ from schemas.issue_schemas import (
 )
 from schemas.sprint_schemas import TitlePartOut
 from security.credential_store import CredentialStore
-from services import card_colors, pr_status_service
+from services import card_colors, conclude_settings, pr_status_service
 from services.blocking import blockers_without_pr
 from services.hierarchy import BLOCK_LINK_TYPE, is_hierarchy_link
 from services.progress.service import load_stages, stage_ref
@@ -161,6 +161,16 @@ async def get_detail(pool: asyncpg.Pool, store: CredentialStore, key: str) -> Is
         stage=stage_ref(stages.stage_of(row["status"])),
         comments=[CommentOut(**c) for c in await issue_repo.comments(pool, key)],
         pull_requests=pr_status_service.to_detail(summaries[key]),
+        conclude=key
+        in await conclude_settings.with_conclusion(
+            pool,
+            [
+                conclude_settings.ConcludeTask(
+                    key, row["summary"], row["status"], row["status_category"]
+                )
+            ],
+            summaries,
+        ),
     )
 
 

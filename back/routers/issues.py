@@ -4,6 +4,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
 from database.pool import get_pool
+from schemas.conclude_schemas import ConcludeIn, ConcludePlanOut, ConcludeResultOut
 from schemas.issue_schemas import (
     ChangelogOut,
     IssueDetailOut,
@@ -15,13 +16,15 @@ from schemas.issue_schemas import (
 )
 from schemas.pr_status_schemas import ISSUE_KEY_PATTERN
 from security.credential_store import CredentialStore, get_credential_store
-from services import card_updates, issue_actions, issue_service
+from services import card_updates, conclude_service, issue_actions, issue_service
+from services.sync.engine import SyncEngine, get_sync_engine
 
 router = APIRouter(prefix="/issues", tags=["issues"])
 
 Pool = Annotated[asyncpg.Pool, Depends(get_pool)]
 Store = Annotated[CredentialStore, Depends(get_credential_store)]
 IssueKey = Annotated[str, Path(pattern=ISSUE_KEY_PATTERN)]
+Engine = Annotated[SyncEngine, Depends(get_sync_engine)]
 
 
 @router.get("", response_model=list[IssuePickOut])
@@ -93,6 +96,27 @@ async def set_story_points(pool: Pool, store: Store, issue_key: IssueKey, body: 
     """Grava os Story Points no Jira (`null` apaga)."""
     try:
         return await issue_actions.set_story_points(pool, store, issue_key, body.story_points)
+    except issue_actions.IssueNotInMirror as exc:
+        raise _not_in_mirror(issue_key) from exc
+    except issue_actions.IssueActionConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=exc.message) from exc
+
+
+@router.get("/{issue_key}/conclude", response_model=ConcludePlanOut)
+async def conclude_plan(pool: Pool, store: Store, issue_key: IssueKey):
+    """O que o "Concluir" faria agora: os merges, com os avisos, e o status do Jira."""
+    try:
+        return await conclude_service.plan(pool, store, issue_key)
+    except issue_actions.IssueNotInMirror as exc:
+        raise _not_in_mirror(issue_key) from exc
+
+
+@router.post("/{issue_key}/conclude", response_model=ConcludeResultOut)
+async def conclude(pool: Pool, store: Store, engine: Engine, issue_key: IssueKey, body: ConcludeIn):
+    """Roda o que o dev confirmou no plano: os merges primeiro, o Jira só se todos entraram.
+    Passo que falha volta no `steps`, com o `done` falso."""
+    try:
+        return await conclude_service.run(pool, store, engine, issue_key, body)
     except issue_actions.IssueNotInMirror as exc:
         raise _not_in_mirror(issue_key) from exc
     except issue_actions.IssueActionConflict as exc:

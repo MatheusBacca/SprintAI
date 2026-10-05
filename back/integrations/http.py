@@ -3,8 +3,9 @@
 - Basic auth (e-mail + token) aplicado só para hosts da lista permitida: uma URL de
   paginação apontando para outro host é recusada antes de enviar credenciais.
 - Novas tentativas com backoff em 429/502/503/504 e falhas de rede, respeitando
-  `Retry-After`. Escrita que não pode repetir (`idempotent=False`, a transição do Jira)
-  só tenta de novo quando o pedido com certeza não chegou: 429 e falha de conexão.
+  `Retry-After`. Escrita que não pode repetir (`idempotent=False`: a transição do Jira e o
+  merge do Bitbucket) só tenta de novo quando o pedido com certeza não chegou: 429 e falha
+  de conexão.
 """
 
 import asyncio
@@ -88,7 +89,10 @@ class ApiTransport:
         params: dict[str, Any] | list[tuple[str, Any]] | None = None,
         json: Any = None,
         idempotent: bool = True,
+        raw: bool = False,
     ) -> Any:
+        """O corpo da resposta, em JSON. `raw` devolve a resposta inteira — é o que lê os
+        cabeçalhos (os escopos do token, no teste de conexão)."""
         url = self._resolve_url(path_or_url)
         retry_statuses = RETRY_STATUSES if idempotent else UNSAFE_RETRY_STATUSES
         attempt = 0
@@ -117,6 +121,8 @@ class ApiTransport:
                     ) from exc
             else:
                 if response.status_code < 400:
+                    if raw:
+                        return response
                     return response.json() if response.content else None
                 if response.status_code not in retry_statuses or attempt >= self._max_retries:
                     raise error_for_status(self.service, response.status_code)

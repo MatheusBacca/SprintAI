@@ -119,6 +119,8 @@ class Reviewer:
     role: str | None
     approved: bool
     state: str | None
+    # `account_id` do Bitbucket (ou o `uuid`, sem ele): é por ele que a tela tira o reviewer.
+    account_id: str | None = None
 
 
 @dataclass
@@ -301,6 +303,7 @@ def pull_request_link(
                 role=p.get("role"),
                 approved=bool(p.get("approved")),
                 state=p.get("state"),
+                account_id=p.get("account_id"),
             )
             for p in participants
             if _is_reviewer(p)

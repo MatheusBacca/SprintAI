@@ -1,10 +1,15 @@
-"""Cliente somente-leitura do Bitbucket Cloud (API 2.0).
+"""Cliente do Bitbucket Cloud (API 2.0).
+
+Quase tudo é leitura. Escreve só duas coisas, cada uma depois da confirmação do dev na tela:
+o **merge** de um PR (o "Concluir" do card) e a **lista de reviewers** de um PR. O merge vai
+com `idempotent=False`: repetir depois de um 5xx poderia mergear de novo o que já entrou.
 
 Paginação segue o link `next` devolvido pela API; o transporte recusa `next` fora
 de `api.bitbucket.org`, então as credenciais nunca vão para outro host.
 """
 
-from collections.abc import AsyncIterator, Iterable
+import asyncio
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,6 +20,27 @@ from integrations.http import ApiTransport
 SERVICE = "Bitbucket"
 BITBUCKET_API = "https://api.bitbucket.org/2.0"
 PR_STATES = ("OPEN", "MERGED", "DECLINED", "SUPERSEDED")
+MERGE_STRATEGIES = ("merge_commit", "squash", "fast_forward")
+
+# Tudo o que o SprintAI usa do Bitbucket, e para quê — o teste de conexão confere contra os
+# escopos que o próprio Bitbucket diz que o token tem (`x-oauth-scopes`).
+REQUIRED_SCOPES: dict[str, str] = {
+    "read:user:bitbucket": "ler a sua conta",
+    "read:repository:bitbucket": "listar repositórios e branches",
+    "read:pullrequest:bitbucket": "espelhar PRs, comentários e builds",
+    "read:workspace:bitbucket": "listar os membros para escolher reviewer",
+    "write:pullrequest:bitbucket": "mergear no Concluir e mexer nos reviewers",
+}
+# Sem estes, o espelho do Bitbucket não funciona: a conexão nem é salva.
+ESSENTIAL_SCOPES = (
+    "read:user:bitbucket",
+    "read:repository:bitbucket",
+    "read:pullrequest:bitbucket",
+)
+# Merge demorado vira 202 com um link de acompanhamento: espera este tanto antes de desistir
+# de saber o fim (o merge segue no Bitbucket).
+MERGE_POLL_SECONDS = 2.0
+MERGE_POLL_ATTEMPTS = 15
 
 
 def _bbql_datetime(value: datetime) -> str:
@@ -62,6 +88,14 @@ class BitbucketClient:
 
     async def current_user(self) -> dict[str, Any]:
         return await self._http.get("/user")
+
+    async def current_user_with_scopes(self) -> tuple[dict[str, Any], set[str] | None]:
+        """A conta e os escopos do token, como o Bitbucket informa no `x-oauth-scopes`.
+        `None` quando ele não diz (credencial sem escopos declarados)."""
+        response = await self._http.get("/user", raw=True)
+        header = response.headers.get("x-oauth-scopes")
+        scopes = {s.strip() for s in header.split(",") if s.strip()} if header else None
+        return (response.json() if response.content else {}), scopes
 
     # --- Repositórios -------------------------------------------------------------
 
@@ -115,6 +149,65 @@ class BitbucketClient:
             f"/repositories/{self.workspace}/{repo_slug}/pullrequests/{pr_id}"
         )
 
+    async def merge_pull_request(
+        self,
+        repo_slug: str,
+        pr_id: int,
+        *,
+        strategy: str,
+        close_source_branch: bool,
+        sleep: Callable[[float], Awaitable[None]] | None = None,
+    ) -> dict[str, Any]:
+        """Mergeia o PR e devolve o PR mergeado. Não repete: um 5xx pode ter mergeado."""
+        if strategy not in MERGE_STRATEGIES:
+            raise ValueError(f"Estratégia de merge desconhecida: {strategy}")
+        result = await self._http.post(
+            f"/repositories/{self.workspace}/{repo_slug}/pullrequests/{pr_id}/merge",
+            json={
+                "type": "pullrequest",
+                "merge_strategy": strategy,
+                "close_source_branch": close_source_branch,
+            },
+            idempotent=False,
+        )
+        # Merge longo: o Bitbucket responde 202 com a tarefa e o link para acompanhar.
+        if (result or {}).get("task_status"):
+            return await self._wait_merge(result, sleep=sleep)
+        return result or {}
+
+    async def _wait_merge(
+        self, task: dict[str, Any], *, sleep: Callable[[float], Awaitable[None]] | None = None
+    ) -> dict[str, Any]:
+        sleep = sleep or asyncio.sleep
+        link = ((task.get("links") or {}).get("self") or {}).get("href")
+        for _ in range(MERGE_POLL_ATTEMPTS):
+            if task.get("task_status") == "SUCCESS":
+                return task.get("merge_result") or {}
+            if not link:
+                break
+            await sleep(MERGE_POLL_SECONDS)
+            task = await self._http.get(link)
+        return {"state": "MERGING"}
+
+    async def set_reviewers(
+        self,
+        repo_slug: str,
+        pr_id: int,
+        reviewers: list[dict[str, str]],
+        *,
+        title: str | None = None,
+    ) -> dict[str, Any]:
+        """Troca a lista inteira de reviewers do PR (`[{uuid}]` ou `[{account_id}]`).
+
+        O Bitbucket pede o título junto no PUT; ele vai como está (lido aqui, se não vier).
+        Lista inteira e não "adicionar um": repetir o mesmo PUT dá o mesmo PR, então pode
+        tentar de novo.
+        """
+        path = f"/repositories/{self.workspace}/{repo_slug}/pullrequests/{pr_id}"
+        if title is None:
+            title = (await self._http.get(path)).get("title") or ""
+        return await self._http.put(path, json={"title": title, "reviewers": reviewers})
+
     async def iter_pull_request_comments(
         self, repo_slug: str, pr_id: int, *, page_size: int = 50
     ) -> AsyncIterator[dict[str, Any]]:
@@ -137,6 +230,17 @@ class BitbucketClient:
             {"pagelen": 50},
         ):
             yield status
+
+    # --- Membros do workspace ------------------------------------------------------
+
+    async def iter_workspace_members(
+        self, *, page_size: int = 100
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Quem pode ser reviewer: os membros do workspace (`read:workspace:bitbucket`)."""
+        async for membership in self._iter_pages(
+            f"/workspaces/{self.workspace}/members", {"pagelen": page_size}
+        ):
+            yield membership.get("user") or {}
 
     # --- Branches -----------------------------------------------------------------
 

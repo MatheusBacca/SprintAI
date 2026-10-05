@@ -91,8 +91,15 @@ async def test_detalhe_da_tarefa_multi_repo(db_app, client, seeded):
     ]
     pr = body["repos"][0]["pull_requests"][0]
     assert pr["changes_requested"] == 1
+    # Sem `account_id` no participante (espelho antigo), o revisor só não ganha o "tirar".
     assert pr["reviewers"] == [
-        {"name": "Revisor", "role": "REVIEWER", "approved": False, "state": "changes_requested"}
+        {
+            "name": "Revisor",
+            "role": "REVIEWER",
+            "approved": False,
+            "state": "changes_requested",
+            "account_id": None,
+        }
     ]
     assert pr["match"] == "branch"
     assert pr["url"].endswith("/pull-requests/10")
