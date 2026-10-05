@@ -5,6 +5,7 @@ import itertools
 import os
 import shutil
 import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -38,12 +39,14 @@ def make_repo(root: Path, name: str, *, url=None, head="ref: refs/heads/main", f
 # (que vira a raiz `projects` do teste), com um "origin" bare ao lado para dar upstream.
 
 _clock = itertools.count()
+_CLOCK_START = datetime(2026, 9, 1, tzinfo=timezone(timedelta(hours=-3)))
 
 
 def git(cwd: Path, *args: str) -> str:
-    # Datas crescentes e fixas: o `--date-order` fica determinístico.
-    tick = next(_clock)
-    stamp = f"2026-09-{1 + tick // 24:02d}T{tick % 24:02d}:00:00-03:00"
+    # Datas crescentes e fixas: o `--date-order` fica determinístico. Uma hora por chamada,
+    # somada a uma data de partida — montar o dia à mão passava de 30/09 com a suíte inteira,
+    # e o git recusava a data (até um `git branch`, que grava no reflog).
+    stamp = (_CLOCK_START + timedelta(hours=next(_clock))).isoformat()
     env = {
         **os.environ,
         "GIT_AUTHOR_DATE": stamp,
