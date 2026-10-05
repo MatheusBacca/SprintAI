@@ -3,15 +3,16 @@ import { markRaw } from 'vue'
 import { api } from '@/services/api'
 
 /**
- * Ações no Jira a partir das telas — mover o status e mudar os Story Points — e a
- * lista de PRs do badge.
+ * Ações no Jira a partir das telas — mover o status e mudar os Story Points —, a lista de
+ * PRs do badge e o "Concluir" (merge no Bitbucket e status no Jira, pela receita do repo).
  *
  * Um painel só para o app (`JiraActionPopover`, montado no AppShell) e ancorado no
  * chip clicado. Não mora dentro do card: a árvore da sprint recarrega a cada sync, o
  * Vue Flow remonta os cards, e um painel dentro deles sumiria no meio da escolha.
  *
  * Escrita só sai daqui por gesto explícito do dev (duplo clique no status, Salvar nos
- * pontos): é a regra proposta → confirmação → ação, uma tarefa por vez.
+ * pontos, "Confirmar e concluir" no plano): é a regra proposta → confirmação → ação, uma
+ * tarefa por vez.
  */
 
 function rectOf(element) {
@@ -27,9 +28,11 @@ function path(key, suffix) {
 
 export const useJiraActionsStore = defineStore('jiraActions', {
   state: () => ({
-    /** `{ kind: 'status' | 'points' | 'prs', issueKey, anchor, rect, points?, links? }` */
+    /** `{ kind: 'status' | 'points' | 'prs' | 'conclude', issueKey, anchor, rect, points?, links? }` */
     open: null,
     flow: { key: null, data: null, loading: false, error: null },
+    /** O plano do Concluir e, depois de rodar, o resultado de cada passo. */
+    conclude: { key: null, data: null, loading: false, error: null, result: null },
     saving: false,
     error: null,
     /** Última escrita desta aba: o AppShell recarrega as telas a partir dela. */
@@ -46,6 +49,10 @@ export const useJiraActionsStore = defineStore('jiraActions', {
 
     openPullRequests(links, anchor, issueKey = null) {
       this._open({ kind: 'prs', issueKey, links }, anchor)
+    },
+
+    openConclude(issueKey, anchor) {
+      if (this._open({ kind: 'conclude', issueKey }, anchor)) this.loadConclude(issueKey)
     },
 
     /** Clicar de novo no mesmo chip fecha — é o que o dev espera de um menu. */
@@ -76,6 +83,37 @@ export const useJiraActionsStore = defineStore('jiraActions', {
         if (this.flow.key === issueKey) {
           this.flow = { key: issueKey, data: null, loading: false, error: error.message }
         }
+      }
+    },
+
+    async loadConclude(issueKey) {
+      this.conclude = { key: issueKey, data: null, loading: true, error: null, result: null }
+      try {
+        const data = await api.get(path(issueKey, 'conclude'))
+        if (this.conclude.key === issueKey) this.conclude = { ...this.conclude, data, loading: false }
+      } catch (error) {
+        if (this.conclude.key === issueKey) this.conclude = { ...this.conclude, loading: false, error: error.message }
+      }
+    },
+
+    /**
+     * Roda o que o dev confirmou no plano. Diferente das outras escritas, o painel fica
+     * aberto com o resultado de cada passo: um merge recusado precisa ser lido.
+     */
+    async runConclude(issueKey, payload) {
+      if (this.saving) return null
+      this.saving = true
+      this.error = null
+      try {
+        const result = await api.post(path(issueKey, 'conclude'), payload)
+        if (result.write_id) this.lastWrite = { id: result.write_id, key: issueKey, at: Date.now() }
+        if (this.conclude.key === issueKey) this.conclude = { ...this.conclude, result }
+        return result
+      } catch (error) {
+        this.error = error.message
+        return null
+      } finally {
+        this.saving = false
       }
     },
 

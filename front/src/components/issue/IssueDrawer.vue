@@ -8,6 +8,7 @@ import IssueDetailsTab from './IssueDetailsTab.vue'
 import IssueHistoryTab from './IssueHistoryTab.vue'
 import IssueNotesTab from './IssueNotesTab.vue'
 import IssuePullRequestsTab from './IssuePullRequestsTab.vue'
+import ConcludeButton from '@/components/jira/ConcludeButton.vue'
 import StatusChip from '@/components/jira/StatusChip.vue'
 import StoryPointsChip from '@/components/jira/StoryPointsChip.vue'
 import PrStatusBadge from '@/components/pr/PrStatusBadge.vue'
@@ -165,6 +166,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             :review="issue.pull_requests.review"
             size="sm"
           />
+          <ConcludeButton v-if="issue.conclude" :issue-key="issue.key" />
         </template>
         <button
           v-if="router"

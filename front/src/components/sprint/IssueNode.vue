@@ -3,6 +3,7 @@ import { computed, inject } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import { CANVAS_MARKS, nodeMarks } from './canvasMarks'
 import { Ban, CircleCheck, Layers, Link2, MessageSquareWarning, SquareCheck, StickyNote } from 'lucide-vue-next'
+import ConcludeButton from '@/components/jira/ConcludeButton.vue'
 import StatusChip from '@/components/jira/StatusChip.vue'
 import StoryPointsChip from '@/components/jira/StoryPointsChip.vue'
 import PrStatusBadge from '@/components/pr/PrStatusBadge.vue'
@@ -207,18 +208,19 @@ const updates = computed(() => {
     <h3 v-else class="node__title">{{ issue.summary || issue.key }}</h3>
 
     <footer class="node__footer">
-      <template v-if="issue.in_sprint && issue.pr">
-        <PrStatusBadge
-          :status="issue.pr.status"
-          :pr-count="issue.pr.pr_count"
-          :build-failed="issue.pr.build_failed"
-          :links="issue.pr.links ?? []"
-          :issue-key="issue.key"
-          :review="issue.pr.review"
-          size="sm"
-        />
-        <span v-if="waitingBlocker" class="node__blocked">bloqueada por {{ issue.blockers_without_pr.join(', ') }}</span>
-      </template>
+      <PrStatusBadge
+        v-if="issue.in_sprint && issue.pr"
+        :status="issue.pr.status"
+        :pr-count="issue.pr.pr_count"
+        :build-failed="issue.pr.build_failed"
+        :links="issue.pr.links ?? []"
+        :issue-key="issue.key"
+        :review="issue.pr.review"
+        size="sm"
+      />
+      <!-- À direita do selo do PR: o repo da tarefa tem receita em Configurações › Concluir. -->
+      <ConcludeButton v-if="issue.in_sprint && issue.conclude" :issue-key="issue.key" :compact="Boolean(waitingBlocker)" />
+      <span v-if="issue.in_sprint && issue.pr && waitingBlocker" class="node__blocked">bloqueada por {{ issue.blockers_without_pr.join(', ') }}</span>
       <button
         type="button"
         class="node__notes"

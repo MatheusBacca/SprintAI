@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import ConcludePlan from './ConcludePlan.vue'
 import PullRequestLinks from './PullRequestLinks.vue'
 import StatusFlowPicker from './StatusFlowPicker.vue'
 import StoryPointsEditor from './StoryPointsEditor.vue'
@@ -28,6 +29,7 @@ const label = computed(() => {
   if (!open) return null
   if (open.kind === 'status') return `Mover ${open.issueKey} no Jira`
   if (open.kind === 'points') return `Story Points de ${open.issueKey}`
+  if (open.kind === 'conclude') return `Concluir ${open.issueKey}`
   return 'PRs no Bitbucket'
 })
 
@@ -159,6 +161,7 @@ onBeforeUnmount(() => {
         :issue-key="store.open.issueKey"
         :points="store.open.points"
       />
+      <ConcludePlan v-else-if="store.open.kind === 'conclude'" :key="store.open.issueKey" :issue-key="store.open.issueKey" />
       <PullRequestLinks v-else :links="store.open.links" :issue-key="store.open.issueKey" />
     </section>
   </Teleport>
