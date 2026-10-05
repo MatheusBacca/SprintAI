@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { api } from '@/services/api'
+import { useGitHeadsStore } from '@/stores/gitHeads'
 
 const PAGE = 300
 
@@ -11,8 +12,8 @@ const PAGE = 300
  * mudança, o back devolve só as worktrees (as alterações não commitadas).
  *
  * O painel de branches (`/refs`) traz todas as refs — o grafo só manda as que etiquetam a
- * página. As três escritas (fetch --prune, avançar e apagar branch local) são gesto do dev;
- * depois de cada uma, grafo e painel se refazem.
+ * página. As quatro escritas (fetch --prune, avançar, apagar branch local e trocar a branch do
+ * clone) são gesto do dev; depois de cada uma, grafo e painel se refazem.
  */
 export const useRepoTimelineStore = defineStore('repoTimeline', {
   state: () => ({
@@ -260,6 +261,36 @@ export const useRepoTimelineStore = defineStore('repoTimeline', {
           branch: name,
           text: `${name} apagada. Para desfazer: git branch ${name} ${result.target.slice(0, 10)}`,
         }
+        await this._afterWrite()
+        return { ok: true }
+      } catch (error) {
+        const code = error.body?.code
+        this.feedback = { type: 'error', branch: name, text: error.message, code }
+        return { ok: false, code }
+      } finally {
+        this.busyBranch = null
+      }
+    },
+
+    /**
+     * Abre a branch no clone principal (`git switch`, sem `--force`). `origin/x` sem local
+     * vira `x` acompanhando o origin. Os terminais do repo releem a branch na hora.
+     */
+    async switchBranch(name) {
+      this.busyBranch = name
+      this.feedback = null
+      try {
+        const result = await api.post(`${this._base()}/branches/switch`, { name })
+        this.feedback = {
+          type: 'success',
+          branch: result.name,
+          text: result.created
+            ? `${result.name} criada a partir de ${name} e aberta no clone.`
+            : result.previous === result.name
+              ? `${result.name} já estava aberta no clone.`
+              : `Clone agora em ${result.name}${result.previous ? ` (antes: ${result.previous})` : ''}.`,
+        }
+        useGitHeadsStore().refresh()
         await this._afterWrite()
         return { ok: true }
       } catch (error) {

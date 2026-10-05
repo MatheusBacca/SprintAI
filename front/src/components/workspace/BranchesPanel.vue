@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { ArrowDown, ArrowDownToLine, ArrowUp, FolderGit2, GitBranch, Globe, Tag, Trash2 } from 'lucide-vue-next'
+import { ArrowDown, ArrowDownToLine, ArrowRightLeft, ArrowUp, FolderGit2, GitBranch, Globe, Tag, Trash2 } from 'lucide-vue-next'
 import IssueKeyChip from './IssueKeyChip.vue'
 import PrStatusBadge from '@/components/pr/PrStatusBadge.vue'
 import { useRepoTimelineStore } from '@/stores/repoTimeline'
@@ -11,7 +11,10 @@ import { formatRelative } from '@/utils/time'
  * Painel de branches da linha do tempo: as locais, as do `origin` e as tags do repo, e — com
  * texto na busca — os commits do histórico inteiro que casam com ele.
  *
- * Duas ações por branch local, as duas só fast-forward ou com confirmação:
+ * Três ações por branch local, todas só fast-forward ou com confirmação:
+ * - **Trocar** — abre a branch no clone principal (`git switch`), com o segundo clique
+ *   confirmando. Alteração não commitada vai junto; o git recusa se alguma conflitar. Na
+ *   `origin/x` sem local, a troca cria a `x` acompanhando o origin;
  * - **Avançar** até o upstream, quando ela está atrás e o upstream existe;
  * - **Apagar** (local), com o segundo clique confirmando. Se ela tem commit que não está em
  *   outra branch, o git recusa e o painel pergunta de novo — o terceiro clique vai com `-D`.
@@ -79,6 +82,41 @@ async function onDelete(item) {
   const result = await store.deleteBranch(item.name, { force })
   // O `-d` recusou por ter commit só nela: o próximo clique vai com `-D`.
   confirming.value = !result.ok && result.code === 'unmerged' && !force ? { name: item.name, force: true } : null
+}
+
+// --- Trocar a branch do clone, com confirmação --------------------------------------------
+
+/** Nome da branch esperando o segundo clique para abrir no clone. */
+const switching = ref(null)
+
+const localNames = computed(() => new Set(store.panel.refs.filter((r) => r.kind === 'local').map((r) => r.name)))
+
+/** Na `origin/x`, a troca só aparece se não há `x` local — aí é por ela que se troca. */
+function canSwitch(item) {
+  if (item.kind === 'local') return !item.is_head
+  return item.kind === 'remote' && item.name !== 'origin/HEAD' && !localNames.value.has(item.name.replace(/^origin\//, ''))
+}
+
+/** Aberta em outra worktree: o git não abre a mesma branch em dois lugares. */
+function switchBlocked(item) {
+  return item.kind === 'local' && Boolean(item.worktree)
+}
+
+function switchTitle(item) {
+  if (switchBlocked(item)) return `Aberta na worktree ${item.worktree} — o git não abre a mesma branch em dois lugares`
+  const created = item.kind === 'remote' ? ` (cria a ${item.name.replace(/^origin\//, '')} acompanhando o origin)` : ''
+  if (switching.value === item.name) return `Clique de novo para abrir ${item.name} no clone${created}`
+  return `Abrir no clone principal${created}. Alteração não commitada vai junto; o git recusa se alguma conflitar.`
+}
+
+async function onSwitch(item) {
+  if (switchBlocked(item)) return
+  if (switching.value !== item.name) {
+    switching.value = item.name
+    return
+  }
+  switching.value = null
+  await store.switchBranch(item.name)
 }
 
 function canUpdate(item) {
@@ -172,7 +210,21 @@ function updateTitle(item) {
               size="sm"
             />
             <span class="item__date">{{ formatRelative(item.committed_at) }}</span>
-            <span v-if="item.kind === 'local'" class="item__actions">
+            <span v-if="item.kind !== 'tag'" class="item__actions">
+              <button
+                v-if="canSwitch(item)"
+                type="button"
+                class="item__action"
+                :class="{ 'item__action--ask': switching === item.name }"
+                :disabled="switchBlocked(item) || store.busyBranch === item.name"
+                :title="switchTitle(item)"
+                :aria-label="switching === item.name ? `Confirmar: abrir ${item.name} no clone` : `Trocar para ${item.name}`"
+                @click="onSwitch(item)"
+                @blur="switching === item.name ? (switching = null) : null"
+              >
+                <ArrowRightLeft :size="12" />
+                <span v-if="switching === item.name">Trocar?</span>
+              </button>
               <button
                 v-if="canUpdate(item)"
                 type="button"
@@ -185,6 +237,7 @@ function updateTitle(item) {
                 <ArrowDownToLine :size="12" />
               </button>
               <button
+                v-if="item.kind === 'local'"
                 type="button"
                 class="item__action item__action--danger"
                 :class="{ 'item__action--confirm': confirming?.name === item.name }"
@@ -430,6 +483,11 @@ function updateTitle(item) {
 
 .item__action--confirm {
   background: var(--color-error-surface);
+}
+
+.item__action--ask {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .item__action:disabled {

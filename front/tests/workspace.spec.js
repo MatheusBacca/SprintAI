@@ -381,6 +381,7 @@ describe('RepoTimeline', () => {
   let graph
   let posts
   let deleteReplies
+  let switchReplies
   let panelRefs
 
   const refs = [
@@ -419,6 +420,7 @@ describe('RepoTimeline', () => {
     }
     posts = []
     deleteReplies = []
+    switchReplies = []
     panelRefs = [
       { ...refs[0], target: 'c3'.padEnd(40, '0'), committed_at: '2026-10-02T10:00:00Z', subject: 'ajusta o consumer' },
       { ...refs[2], name: 'velha', target: 'c1'.padEnd(40, '0'), is_base: false, upstream: 'origin/velha', behind: 2, committed_at: '2026-09-01T10:00:00Z', subject: 'base' },
@@ -437,6 +439,10 @@ describe('RepoTimeline', () => {
           if (url.endsWith('/fetch')) return json({ added: ['origin/WAI-9000'], updated: [], pruned: ['origin/velha'], tags: [], fetched_at: '2026-10-02T15:00:00Z' })
           if (url.endsWith('/branches/update')) return json({ name: body.name, before: 'a', after: 'b', mode: 'ref' })
           if (url.endsWith('/branches/delete')) return deleteReplies.shift() ?? json({ name: body.name, target: 'c1'.padEnd(40, '0') })
+          if (url.endsWith('/branches/switch')) {
+            const created = body.name.startsWith('origin/')
+            return switchReplies.shift() ?? json({ name: body.name.replace(/^origin\//, ''), previous: created ? 'develop' : 'feature/WAI-8792', created })
+          }
         }
         if (url.includes('/refs')) return json({ repo: 'weaction-api', base_branch: 'develop', fetched_at: null, refs: panelRefs, issue_status: {} })
         if (url.includes('/search?')) return json({ query: 'trial', commits: [graph.commits[1]], issue_status: { 'WAI-8792': { status: 'mergeada', status_label: 'Mergeada' } } })
@@ -547,6 +553,47 @@ describe('RepoTimeline', () => {
     const after = calls.slice(before)
     expect(after.some((u) => u.includes('/graph?'))).toBe(true)
     expect(after.some((u) => u.includes('/refs'))).toBe(true)
+  })
+
+  it('trocar abre a branch no clone com dois cliques; a origin/ sem local cria a local', async () => {
+    panelRefs.push(
+      { ...refs[2], name: 'WAI-8800-wt', target: 'c2'.padEnd(40, '0'), is_base: false, worktree: 'C:\\projects\\.worktrees\\weaction-api-WAI-8800', committed_at: '2026-09-02T10:00:00Z' },
+      { ...refs[3], name: 'origin/WAI-9000', target: 'c2'.padEnd(40, '0'), is_base: false, committed_at: '2026-09-02T10:00:00Z' },
+    )
+    const wrapper = await mountTimeline()
+    await wrapper.find('.group[data-group="remote"] .group__head').trigger('click')
+    const row = (name) => wrapper.find(`.panel .item[data-ref="${name}"]`)
+    const switchOf = (name) => row(name).find('.item__action:first-child')
+    const switches = () => posts.filter((p) => p.url.endsWith('/branches/switch'))
+
+    // A aberta no clone não troca; a origin/ que já tem local troca pela local.
+    expect(row('feature/WAI-8792').find('[aria-label^="Trocar"]').exists()).toBe(false)
+    expect(row('origin/develop').find('[aria-label^="Trocar"]').exists()).toBe(false)
+    // Aberta em outra worktree: o git não abre a mesma branch em dois lugares.
+    expect(switchOf('WAI-8800-wt').attributes('disabled')).toBeDefined()
+    expect(switchOf('WAI-8800-wt').attributes('title')).toContain('worktree')
+
+    await switchOf('develop').trigger('click')
+    expect(switchOf('develop').text()).toBe('Trocar?')
+    expect(switches()).toHaveLength(0)
+    await switchOf('develop').trigger('click')
+    await flushPromises()
+    expect(switches()).toEqual([{ url: '/api/workspace/repos/weaction-api/branches/switch', body: { name: 'develop' } }])
+    expect(wrapper.find('.panel__feedback').text()).toBe('Clone agora em develop (antes: feature/WAI-8792).')
+
+    await switchOf('origin/WAI-9000').trigger('click')
+    await switchOf('origin/WAI-9000').trigger('click')
+    await flushPromises()
+    expect(switches().at(-1).body).toEqual({ name: 'origin/WAI-9000' })
+    expect(wrapper.find('.panel__feedback').text()).toBe('WAI-9000 criada a partir de origin/WAI-9000 e aberta no clone.')
+
+    // Alteração que a outra branch sobrescreveria: o git recusa e a tela conta por quê.
+    switchReplies.push(json({ detail: 'Há alterações não commitadas que a outra branch sobrescreveria.', code: 'dirty' }, 409))
+    await switchOf('velha').trigger('click')
+    await switchOf('velha').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.panel__feedback').attributes('data-type')).toBe('error')
+    expect(wrapper.find('.panel__feedback').text()).toContain('sobrescreveria')
   })
 
   it('avançar só aparece com a branch atrás, e apagar pede confirmação — e de novo se tiver commit só nela', async () => {
