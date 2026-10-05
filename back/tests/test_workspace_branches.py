@@ -195,3 +195,91 @@ async def test_o_grafo_traz_o_status_de_pr_de_cada_chave(client, repo):
     graph = (await client.get(f"{BASE}/graph", params={"keys": "WAI-100", "scope": "all"})).json()
     assert set(graph["issue_status"]) == {"WAI-100", "WAI-200"}
     assert graph["issue_status"]["WAI-200"] == {"status": "sem_pr", "status_label": "Sem PR"}
+
+
+async def test_trocar_de_branch_leva_as_alteracoes_e_respeita_as_protecoes(client, repo):
+    # outra-coisa está no mesmo commit da main: as alterações não commitadas vão junto.
+    response = await client.post(f"{BASE}/branches/switch", json={"name": "outra-coisa"})
+    assert response.status_code == 200, response.text
+    assert response.json() == {"name": "outra-coisa", "previous": "main", "created": False}
+    assert git(repo["repo"], "branch", "--show-current") == "outra-coisa"
+    assert (repo["repo"] / "arquivo.txt").read_text(encoding="utf-8") == "mexido sem commit\n"
+    assert _ref((await _refs(client))["refs"], "outra-coisa")["is_head"] is True
+
+    # A que já está aberta não roda git nenhum.
+    again = (await client.post(f"{BASE}/branches/switch", json={"name": "outra-coisa"})).json()
+    assert again == {"name": "outra-coisa", "previous": "outra-coisa", "created": False}
+
+    # Na WAI-100-chave o arquivo.txt não tem o hotfix: a alteração seria sobrescrita, e o git
+    # recusa — nada de --force daqui.
+    response = await client.post(f"{BASE}/branches/switch", json={"name": "WAI-100-chave"})
+    assert (response.status_code, response.json()["code"]) == (409, "dirty")
+    assert git(repo["repo"], "branch", "--show-current") == "outra-coisa"
+
+    cases = {
+        "WAI-200-outra": "checked_out",
+        "nao-existe": "not_found",
+        "origin/WAI-100-chave": "exists",
+    }
+    for name, code in cases.items():
+        response = await client.post(f"{BASE}/branches/switch", json={"name": name})
+        assert (response.status_code, response.json()["code"]) == (409, code), name
+
+
+async def test_trocar_para_origin_sem_local_cria_a_local_acompanhando(client, repo):
+    colleague = repo["colleague"]
+    git(colleague, "checkout", "-q", "-b", "WAI-300-nova")
+    commit(colleague, "WAI-300 nova no servidor", "nova.txt")
+    git(colleague, "push", "-q", "-u", "origin", "WAI-300-nova")
+    await client.post(f"{BASE}/fetch")
+    # Sem a alteração do arquivo.txt, que conflitaria com a branch do colega.
+    git(repo["repo"], "checkout", "--", "arquivo.txt")
+
+    response = await client.post(f"{BASE}/branches/switch", json={"name": "origin/WAI-300-nova"})
+    assert response.status_code == 200, response.text
+    assert response.json() == {"name": "WAI-300-nova", "previous": "main", "created": True}
+    local = _ref((await _refs(client))["refs"], "WAI-300-nova")
+    assert local["is_head"] is True
+    assert local["upstream"] == "origin/WAI-300-nova"
+    assert (repo["repo"] / "nova.txt").exists()
+
+    response = await client.post(f"{BASE}/branches/switch", json={"name": "--detach"})
+    assert response.status_code == 422
+
+
+async def test_branch_de_cada_pasta_sem_rodar_git(client, repo, tmp_path):
+    (repo["repo"] / "src").mkdir()
+    outside = tmp_path / "fora"
+    outside.mkdir()
+    loose = repo["repo"].parent / "sem-git"
+    loose.mkdir()
+    paths = [
+        str(repo["repo"]),
+        str(repo["repo"] / "src"),
+        str(repo["worktree"]),
+        str(loose),
+        str(outside),
+    ]
+
+    response = await client.post("/api/workspace/heads", json={"paths": paths})
+    assert response.status_code == 200, response.text
+    heads = {h["path"]: h for h in response.json()["heads"]}
+    assert [h["path"] for h in response.json()["heads"]] == paths
+    assert (heads[paths[0]]["branch"], heads[paths[0]]["is_repo"]) == ("main", True)
+    # Subpasta do repo: sobe até o `.git`.
+    assert heads[paths[1]]["branch"] == "main"
+    # Worktree: o `.git` é um ponteiro para a pasta dela no repo principal.
+    assert heads[paths[2]]["branch"] == "WAI-200-outra"
+    assert heads[paths[3]] == {
+        "path": paths[3], "is_repo": False, "branch": None, "detached": False, "commit": None
+    }
+    assert heads[paths[4]]["is_repo"] is False
+
+    git(repo["worktree"], "checkout", "-q", "--detach")
+    detached = (await client.post("/api/workspace/heads", json={"paths": [paths[2]]})).json()
+    assert detached["heads"][0]["detached"] is True
+    assert detached["heads"][0]["branch"] is None
+    assert detached["heads"][0]["commit"] == repo["other"][:7]
+
+    too_many = await client.post("/api/workspace/heads", json={"paths": [paths[0]] * 25})
+    assert too_many.status_code == 422

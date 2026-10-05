@@ -11,10 +11,14 @@ from schemas.workspace_schemas import (
     REPO_SLUG_PATTERN,
     BranchActionIn,
     BranchDeleteOut,
+    BranchSwitchIn,
+    BranchSwitchOut,
     BranchUpdateOut,
     CommitDetailOut,
     CommitSearchOut,
     FetchResultOut,
+    FolderHeadsIn,
+    FolderHeadsOut,
     GraphScope,
     RepoGraphOut,
     RepoPinIn,
@@ -54,6 +58,12 @@ RepoSlug = Annotated[str, Path(pattern=REPO_SLUG_PATTERN)]
 async def list_repos(pool: Pool, roots: RootsDep):
     """Pastas de `C:\\projects`, lidas do disco agora, com o vínculo e a branch base."""
     return await repos_service.list_repos(pool, roots)
+
+
+@router.post("/workspace/heads", response_model=FolderHeadsOut)
+async def folder_heads(roots: RootsDep, payload: FolderHeadsIn):
+    """A branch aberta em cada pasta — o cabeçalho dos terminais. Só lê o `HEAD`, sem git."""
+    return FolderHeadsOut(heads=await repos_service.folder_heads(roots, payload.paths))
 
 
 @router.put("/workspace/repos/{slug}", response_model=WorkspaceRepoOut)
@@ -182,6 +192,18 @@ async def delete_branch(pool: Pool, roots: RootsDep, slug: RepoSlug, payload: Br
         return await branch_service.delete_branch(
             pool, roots, slug, payload.name, force=payload.force
         )
+    except GitActionError as exc:
+        return _action_error(exc)
+    except (graph_service.RepoUnavailable, GitError) as exc:
+        raise _git_http_error(exc) from exc
+
+
+@router.post("/workspace/repos/{slug}/branches/switch", response_model=BranchSwitchOut)
+async def switch_branch(pool: Pool, roots: RootsDep, slug: RepoSlug, payload: BranchSwitchIn):
+    """Abre a branch no clone principal (`git switch`, sem `--force`). `origin/x` sem local
+    vira `x` acompanhando o origin."""
+    try:
+        return await branch_service.switch_branch(pool, roots, slug, payload.name)
     except GitActionError as exc:
         return _action_error(exc)
     except (graph_service.RepoUnavailable, GitError) as exc:

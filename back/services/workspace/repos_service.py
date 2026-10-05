@@ -6,13 +6,19 @@ espelho sabe o que o servidor diz), do `origin/HEAD` do clone e, por último, do
 """
 
 import asyncio
+from pathlib import Path
 
 import asyncpg
 
 from repositories import workspace_repo
-from schemas.workspace_schemas import WorkspaceRepoOut, WorkspaceReposOut, WorkspaceRepoUpdate
-from security.paths import Roots
-from services.workspace.discovery import LocalRepo, discover
+from schemas.workspace_schemas import (
+    FolderHeadOut,
+    WorkspaceRepoOut,
+    WorkspaceReposOut,
+    WorkspaceRepoUpdate,
+)
+from security.paths import PathNotAllowed, Roots, is_under, resolve_allowed
+from services.workspace.discovery import LocalRepo, discover, find_git_dir, read_head
 
 
 async def refresh(pool: asyncpg.Pool, roots: Roots) -> list[LocalRepo]:
@@ -107,3 +113,38 @@ def effective_base(
     if detected:
         return detected, detected_source
     return None, None
+
+
+async def folder_heads(roots: Roots, paths: list[str]) -> list[FolderHeadOut]:
+    """A branch aberta em cada pasta (as dos terminais), lida do `HEAD` sem rodar git — a tela
+    pergunta de tempos em tempos, e um processo por terminal a cada consulta não compensa.
+    Pasta fora das raízes, ou que não é repo, volta sem branch."""
+
+    def allowed(path: Path) -> bool:
+        return is_under(path, [roots.projects])
+
+    def read_all() -> list[FolderHeadOut]:
+        out = []
+        for raw in paths:
+            try:
+                folder = resolve_allowed(raw, [roots.projects])
+            except PathNotAllowed:
+                out.append(FolderHeadOut(path=raw))
+                continue
+            git_dir = find_git_dir(folder, allowed)
+            if git_dir is None:
+                out.append(FolderHeadOut(path=raw))
+                continue
+            head = read_head(git_dir)
+            out.append(
+                FolderHeadOut(
+                    path=raw,
+                    is_repo=True,
+                    branch=head.branch,
+                    detached=head.detached,
+                    commit=head.commit,
+                )
+            )
+        return out
+
+    return await asyncio.to_thread(read_all)

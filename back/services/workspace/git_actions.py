@@ -1,6 +1,6 @@
 """Escrita no git local — só por gesto do dev na linha do tempo do Workspace.
 
-São três ações, e só elas. Nenhuma escreve no Bitbucket:
+São quatro ações, e só elas. Nenhuma escreve no Bitbucket:
 
 - **`fetch_prune`** — `git fetch origin --prune`: traz o que mudou no servidor e apaga as
   `origin/*` que já não existem lá. É o botão do cabeçalho da linha do tempo; nunca roda
@@ -10,6 +10,9 @@ São três ações, e só elas. Nenhuma escreve no Bitbucket:
   <upstream>:<branch>`, que mexe só na ref e recusa o que não for fast-forward.
 - **`delete_branch`** — `git branch -d`, que recusa a branch com commit que não está em outra
   branch. O `-D` só vai na segunda confirmação da tela, e a branch base nunca se apaga daqui.
+- **`switch_branch`** — `git switch` no clone principal, nunca com `--force` nem
+  `--discard-changes`: alteração não commitada vai junto, e o git recusa se alguma conflitar.
+  A `origin/x` sem local vira `x` acompanhando o origin (`switch -c x --track origin/x`).
 
 A leitura continua em `git_local.py`, com `--no-optional-locks`. Aqui não: escrita precisa do
 lock. Fica o resto — `core.fsmonitor=false`, sem prompt de credencial (`GIT_TERMINAL_PROMPT=0`,
@@ -53,7 +56,13 @@ _KNOWN_ERRORS = (
      "A branch local tem commits que o upstream não tem: não dá para só avançar. Resolva no "
      "terminal (rebase ou merge)."),
     (r"(would be overwritten|Your local changes)", "dirty",
-     "Há alterações não commitadas que o avanço sobrescreveria. Commite ou guarde (stash) antes."),
+     "Há alterações não commitadas que a outra branch sobrescreveria. Commite ou guarde (stash) "
+     "antes."),
+    (r"(resolve your current index|unmerged files|in the middle of)", "busy",
+     "O clone está no meio de um merge, rebase ou cherry-pick. Termine ou aborte no terminal "
+     "antes."),
+    (r"already exists", "exists",
+     "Já existe uma branch local com esse nome — troque para ela."),
     (r"(Permission denied|Could not read from remote|Authentication failed|Host key verification)",
      "auth",
      "O Bitbucket recusou o acesso — confira a chave SSH no terminal (o `git fetch` lá "
@@ -231,3 +240,48 @@ async def delete_branch(
         )
     await _git(repo_path, "branch", "-D" if force else "-d", name)
     return ref.target
+
+
+# --- Trocar de branch ---------------------------------------------------------------------
+
+
+@dataclass
+class SwitchResult:
+    # A branch aberta agora (na `origin/x`, a local `x` que nasceu dela).
+    name: str
+    previous: str | None
+    created: bool
+
+
+async def switch_branch(repo_path: Path, name: str, *, worktrees: list[Worktree]) -> SwitchResult:
+    """Abre a branch no clone principal — o `git switch` que o dev digitaria. Os arquivos do
+    clone mudam: quem estiver rodando ali (um `npm run dev`) vê a troca.
+
+    Branch aberta em outra worktree o git não abre de novo; a tela já avisa, e o erro dele
+    (`checked_out`) cobre a corrida."""
+    safe_ref_name(name)
+    refs = await git_local.list_refs(repo_path)
+    previous = worktrees[0].branch if worktrees else None
+    local = next((r for r in refs if r.kind == "local" and r.name == name), None)
+    if local is not None:
+        if name == previous:
+            return SwitchResult(name=name, previous=previous, created=False)
+        if any(w.branch == name for w in worktrees[1:]):
+            raise GitActionError(
+                "checked_out",
+                "A branch está aberta em outra worktree — o git não abre a mesma branch em dois "
+                "lugares.",
+            )
+        await _git(repo_path, "switch", name)
+        return SwitchResult(name=name, previous=previous, created=False)
+
+    remote = next((r for r in refs if r.kind == "remote" and r.name == name), None)
+    if remote is None or not name.startswith("origin/") or name == "origin/HEAD":
+        raise GitActionError("not_found", "Branch não encontrada.")
+    local_name = safe_ref_name(name.removeprefix("origin/"))
+    if any(r.kind == "local" and r.name == local_name for r in refs):
+        raise GitActionError(
+            "exists", "Já existe uma branch local com esse nome — troque para ela."
+        )
+    await _git(repo_path, "switch", "-c", local_name, "--track", name)
+    return SwitchResult(name=local_name, previous=previous, created=True)

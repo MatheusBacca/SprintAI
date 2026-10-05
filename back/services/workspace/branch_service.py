@@ -1,5 +1,5 @@
-"""Painel de branches da linha do tempo: todas as refs do repo, a busca no histórico e as três
-ações de escrita (fetch --prune, avançar e apagar branch local).
+"""Painel de branches da linha do tempo: todas as refs do repo, a busca no histórico e as quatro
+ações de escrita (fetch --prune, avançar, apagar branch local e trocar a branch do clone).
 
 A escrita é serializada por repo: dois cliques seguidos (ou duas abas) não disparam dois
 `git` brigando pelo mesmo lock.
@@ -12,6 +12,7 @@ import asyncpg
 
 from schemas.workspace_schemas import (
     BranchDeleteOut,
+    BranchSwitchOut,
     BranchUpdateOut,
     CommitSearchOut,
     FetchResultOut,
@@ -129,3 +130,12 @@ async def delete_branch(
         )
     clear_cache()
     return BranchDeleteOut(name=name, target=target)
+
+
+async def switch_branch(pool: asyncpg.Pool, roots: Roots, slug: str, name: str) -> BranchSwitchOut:
+    ctx = await repo_context(pool, roots, slug)
+    async with _lock(slug):
+        worktrees = await git_local.list_worktrees(ctx.path)
+        result = await git_actions.switch_branch(ctx.path, name, worktrees=worktrees)
+    clear_cache()
+    return BranchSwitchOut(name=result.name, previous=result.previous, created=result.created)

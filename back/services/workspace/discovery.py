@@ -9,6 +9,7 @@ o token não pode ir para o banco nem para a resposta da API.
 """
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -24,6 +25,9 @@ BITBUCKET_REMOTE = re.compile(
 BASE_CANDIDATES = ("develop", "main", "master")
 
 MAX_GIT_FILE_BYTES = 1_000_000
+
+# O `.git` de uma worktree é um arquivo com uma linha: `gitdir: <pasta dela no repo principal>`.
+GITDIR_POINTER = re.compile(r"^\s*gitdir:\s*(.+?)\s*$", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -116,6 +120,45 @@ def sanitize_remote(url: str | None) -> str | None:
     host = parts.hostname or ""
     netloc = f"{host}:{parts.port}" if parts.port else host
     return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+
+
+@dataclass(frozen=True)
+class Head:
+    branch: str | None
+    detached: bool
+    commit: str | None = None
+
+
+def find_git_dir(folder: Path, allowed: Callable[[Path], bool]) -> Path | None:
+    """O `.git` da pasta ou da primeira acima dela — o terminal pode estar numa subpasta do
+    repo. Na worktree o `.git` é um arquivo (`gitdir: …`) que aponta para a pasta dela dentro
+    do repo principal, onde mora o HEAD dela. Só sobe e só segue o ponteiro enquanto
+    `allowed` deixar: nada de ler fora das raízes."""
+    for candidate in (folder, *folder.parents):
+        if not allowed(candidate):
+            return None
+        git = candidate / ".git"
+        if git.is_dir():
+            return git
+        if git.is_file():
+            match = GITDIR_POINTER.search(_read(git) or "")
+            if not match:
+                return None
+            target = Path(match[1])
+            if not target.is_absolute():
+                target = candidate / target
+            try:
+                target = target.resolve(strict=True)
+            except OSError:
+                return None
+            return target if target.is_dir() and allowed(target) else None
+    return None
+
+
+def read_head(git_dir: Path) -> Head:
+    text = (_read(git_dir / "HEAD") or "").strip()
+    branch, detached = parse_head(text)
+    return Head(branch=branch, detached=detached, commit=text[:7] if detached else None)
 
 
 def parse_head(head_text: str | None) -> tuple[str | None, bool]:

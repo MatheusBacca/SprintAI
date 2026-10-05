@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -204,6 +204,46 @@ class BranchDeleteOut(BaseModel):
     name: str
     # Para onde a branch apontava: `git branch <nome> <hash>` desfaz.
     target: str
+
+
+class BranchSwitchIn(BaseModel):
+    """Branch local, ou `origin/x` sem local (vira `x` acompanhando o origin)."""
+
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _branch_segura(cls, value: str) -> str:
+        return safe_ref_name(value)
+
+
+class BranchSwitchOut(BaseModel):
+    name: str
+    # A branch que estava aberta; nula com o HEAD destacado.
+    previous: str | None
+    created: bool
+
+
+FolderPath = Annotated[str, Field(min_length=3, max_length=400)]
+
+
+class FolderHeadsIn(BaseModel):
+    """Pastas dos terminais abertos: a branch de cada uma vai no cabeçalho do terminal."""
+
+    paths: list[FolderPath] = Field(max_length=24)
+
+
+class FolderHeadOut(BaseModel):
+    # Como veio: é por ele que a tela casa a resposta com o terminal.
+    path: str
+    is_repo: bool = False
+    branch: str | None = None
+    detached: bool = False
+    commit: str | None = Field(default=None, description="Hash curto do HEAD destacado")
+
+
+class FolderHeadsOut(BaseModel):
+    heads: list[FolderHeadOut]
 
 
 class CommitFileOut(BaseModel):
