@@ -144,6 +144,14 @@ impressão digital do `.git` (`since`). O texto dos terminais fica fora do estad
 globais: com o foco no terminal, a tecla é do shell. A chave `WAI-XXXX` da linha do tempo
 (`IssueKeyChip`) leva a cor do status de PR da tarefa — o `issue_status` que o back manda em
 cada resposta, a mesma conta do selo do card —, e tag do git é amarela (`--git-tag-*`).
+O painel da tarefa é o `IssueDrawer` de sempre, mas ali é uma **coluna** que empurra a tela
+(a animação é na largura da coluna), não uma camada — por isso o canvas do Workspace não usa
+`rightInset`. Os "Repositórios envolvidos" entram pelo slot `details` do painel: o componente
+segue genérico. Na Linha do tempo o canvas fica **guardado** (`visibility: hidden`, a área
+inteira por baixo), não desmontado: a câmera fica onde estava. `display: none` não serve — o
+Vue Flow perde a medida do pane. Quando a largura do pane muda (lado a lado, divisão,
+janela), o `SprintCanvas` recentraliza a tarefa aberta (ou a `anchorKey`) no zoom de agora;
+sem nenhuma, mantém o centro.
 
 Ação ancorada num chip (status, SP, lista de PRs) abre o **painel único** do AppShell
 (`JiraActionPopover`, pelo store `jiraActions`), nunca um painel dentro do card: o Vue Flow

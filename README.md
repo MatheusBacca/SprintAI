@@ -336,13 +336,23 @@ sem tarefa — só os repositórios escolhidos, para ter terminal à mão.
   dev pelo `parent` não aparece: o espelho só guarda as suas.
 - **Aba Tarefas:** o mesmo canvas da Sprint, com a moldura "N tarefa(s) na feature". Clique
   abre o painel da tarefa.
-- **Lado a lado:** Tarefas e Linha do tempo juntas, separadas por uma divisão que se arrasta
-  na horizontal (setas do teclado também ajustam; duplo clique volta ao meio). A proporção fica
-  salva neste navegador, e trocar de repo na coluna não tira o canvas da tela.
-- **Repositórios envolvidos** (coluna da esquerda), cada um dizendo de onde veio: branch local
-  com a chave, PR ou branch no espelho do Bitbucket, `[repo]` do título, ou fixado por você.
-  Dá para esconder um repo e adicionar outro de `C:\projects`. Cada linha abre a pasta no
-  **VS Code** ou no **Windows Terminal**.
+- **Lado a lado:** Tarefas e Linha do tempo juntas. O canvas abre na largura de um card,
+  pousado no card em foco (a tarefa aberta, senão a raiz), e o resto fica para a linha do tempo.
+  A divisão se arrasta na horizontal (setas do teclado também ajustam; duplo clique volta à
+  largura de um card), e trocar de repo não tira o canvas da tela.
+- **A aba escolhida fica salva** neste navegador: o Workspace abre na última (a `aba` da URL
+  manda, quando vem). Na troca entre elas a câmera do canvas segue a tarefa em foco — na Linha
+  do tempo o canvas fica guardado, montado e invisível, e volta onde estava.
+- **Painel da tarefa** à direita, o mesmo das outras telas, do topo ao rodapé, entrando e
+  saindo com a animação da Sprint. Aqui ele é uma coluna, não uma camada: abrir empurra as
+  abas, a área principal e os terminais. O título leva o `[repo]` na cor do repositório, como
+  no card — em todas as telas.
+- **Repositórios envolvidos** na aba Detalhes desse painel (só no Workspace), cada um com o
+  nome na cor do repositório e dizendo de onde veio: branch local com a chave, PR ou branch no
+  espelho do Bitbucket, `[repo]` do título, ou fixado por você. Na tarefa raiz é a lista do
+  workspace inteiro — dá para esconder um repo e adicionar outro de `C:\projects`; numa tarefa
+  da feature, só os repos dela e das filhas. Cada linha abre a pasta no **VS Code** ou no
+  **Windows Terminal**. No workspace livre, sem tarefa, a lista abre no botão **Repositórios**.
 - **Aba Linha do tempo:** o grafo de commits do repo, como o `gitk --all`/GitLens — pistas
   coloridas, etiquetas de branch local (cheia), `origin/` (tracejada), tag e HEAD, a local e
   a `origin/` no mesmo commit viram uma etiqueta só (nuvem), à frente/atrás do upstream, a
