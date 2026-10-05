@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import TerminalDock from '@/components/workspace/TerminalDock.vue'
+import { useGitHeadsStore } from '@/stores/gitHeads'
 import { isInside, resetTerminalBuffers, useTerminalsStore } from '@/stores/terminals'
 
 vi.mock('@/components/workspace/TerminalPane.vue', () => ({
@@ -150,6 +151,8 @@ describe('TerminalDock', () => {
   let calls
   let health
   let hello
+  /** `{ [cwd]: { branch?, detached?, commit? } }` — o que o back leria do HEAD de cada pasta. */
+  let branches
 
   const repos = [
     { slug: 'monitoria', path: 'C:\\projects\\monitoria' },
@@ -161,6 +164,7 @@ describe('TerminalDock', () => {
     calls = []
     health = true
     hello = []
+    branches = {}
     localStorage.clear()
     let created = 0
     vi.stubGlobal(
@@ -174,6 +178,9 @@ describe('TerminalDock', () => {
         if (url === '/api/terminal/sessions' && method === 'POST') {
           created += 1
           return json(session(String(created).repeat(16).slice(0, 16), body.cwd, { label: body.label }), 201)
+        }
+        if (url === '/api/workspace/heads') {
+          return json({ heads: body.paths.map((path) => ({ path, is_repo: Boolean(branches[path]), branch: null, detached: false, commit: null, ...branches[path] })) })
         }
         if (method === 'DELETE') return NO_CONTENT
         throw new Error(`não mockado: ${method} ${url}`)
@@ -240,7 +247,7 @@ describe('TerminalDock', () => {
   it('terminal fechado à mão não volta sozinho naquele workspace, e o + reabre', async () => {
     const wrapper = await mountDock({ workspaceId: 7 })
     await flushPromises()
-    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(2)
+    expect(calls.filter((c) => c.url === '/api/terminal/sessions')).toHaveLength(2)
 
     const qualificai = wrapper.findAll('.term').find((t) => t.find('.term__label').text() === 'qualificai')
     await qualificai.find('.term__action[aria-label="Fechar terminal"]').trigger('click')
@@ -251,14 +258,14 @@ describe('TerminalDock', () => {
     hello = useTerminalsStore().sessions
     const again = await mountDock({ workspaceId: 7 })
     await flushPromises()
-    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0)
+    expect(calls.filter((c) => c.url === '/api/terminal/sessions')).toHaveLength(0)
 
     // Outro workspace com o mesmo repo: lá ele abre.
     again.unmount()
     calls = []
     await mountDock({ workspaceId: 8 })
     await flushPromises()
-    expect(calls.filter((c) => c.method === 'POST').map((c) => c.body.cwd)).toEqual(['C:\\projects\\qualificai'])
+    expect(calls.filter((c) => c.url === '/api/terminal/sessions').map((c) => c.body.cwd)).toEqual(['C:\\projects\\qualificai'])
   })
 
   it('a tarefa aberta no painel traz o terminal do repo dela para a frente', async () => {
@@ -272,6 +279,31 @@ describe('TerminalDock', () => {
     const active = wrapper.find('.term--active')
     expect(active.find('.term__label').text()).toBe('qualificai')
     expect(active.classes()).toContain('term--focus')
+  })
+
+  it('o cabeçalho mostra a branch aberta na pasta, e o HEAD destacado em outra cor', async () => {
+    const [monitoria, qualificai] = repos.map((r) => r.path)
+    branches = {
+      [monitoria]: { branch: 'WAI-8790-rota-unica' },
+      [qualificai]: { detached: true, commit: 'abc1234' },
+    }
+    hello = [session(A, monitoria), session(B, qualificai)]
+    const wrapper = await mountDock()
+    await flushPromises()
+
+    const asked = calls.filter((c) => c.url === '/api/workspace/heads')
+    expect(asked.at(-1).body.paths).toEqual([monitoria, qualificai])
+    const bar = (slug) => wrapper.findAll('.term').find((t) => t.find('.term__label').text() === slug)
+    expect(bar('monitoria').find('.term__branch').text()).toBe('WAI-8790-rota-unica')
+    expect(bar('monitoria').find('.term__branch').classes()).not.toContain('term__branch--detached')
+    expect(bar('qualificai').find('.term__branch').text()).toBe('HEAD abc1234')
+    expect(bar('qualificai').find('.term__branch').classes()).toContain('term__branch--detached')
+
+    // git switch no terminal: a próxima consulta traz a branch nova.
+    branches[monitoria] = { branch: 'develop' }
+    await useGitHeadsStore().refresh()
+    await flushPromises()
+    expect(bar('monitoria').find('.term__branch').text()).toBe('develop')
   })
 
   it('mais de três terminais viram abas', async () => {

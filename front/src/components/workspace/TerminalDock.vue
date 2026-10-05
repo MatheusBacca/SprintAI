@@ -1,6 +1,7 @@
 <script setup>
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ChevronDown, ChevronUp, Plus, RotateCcw, SquareTerminal, X } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, GitBranch, Plus, RotateCcw, SquareTerminal, X } from 'lucide-vue-next'
+import { useGitHeadsStore } from '@/stores/gitHeads'
 import { isInside, useTerminalsStore } from '@/stores/terminals'
 
 // O xterm é o pedaço pesado do Workspace: só carrega quando um terminal aparece.
@@ -16,6 +17,9 @@ const TerminalPane = defineAsyncComponent(() => import('./TerminalPane.vue'))
  * **Abre sozinho** um terminal para cada repo do workspace que ainda não tem um — é o que o
  * dev quer ao abrir as tarefas. Fechar um terminal à mão vale para aquele workspace: ele não
  * volta sozinho (fica salvo neste navegador), e o "+" do cabeçalho reabre.
+ *
+ * O cabeçalho de cada terminal mostra a **branch aberta** na pasta dele, relida a cada poucos
+ * segundos — o `git switch` digitado ali (ou feito pela linha do tempo) aparece em seguida.
  */
 const props = defineProps({
   /** Repos com clone local: `{ slug, path }`. */
@@ -46,6 +50,35 @@ const adding = ref('')
 
 function repoOf(session) {
   return props.repos.find((r) => isInside(session.cwd, r.path)) ?? null
+}
+
+// --- Branch aberta em cada terminal ----------------------------------------------------------
+
+const HEAD_POLL_MS = 4000
+const heads = useGitHeadsStore()
+let headTimer = null
+
+watch(
+  () => sessions.value.map((s) => s.cwd).join('|'),
+  () => heads.track(sessions.value.map((s) => s.cwd)),
+  { immediate: true },
+)
+
+onMounted(() => {
+  headTimer = setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return
+    heads.refresh()
+  }, HEAD_POLL_MS)
+})
+onBeforeUnmount(() => clearInterval(headTimer))
+
+/** `{ text, title }` do cabeçalho; nada quando a pasta não é repo (ou ainda não respondeu). */
+function headOf(session) {
+  const head = heads.heads[session.cwd]
+  if (!head?.is_repo) return null
+  if (head.branch) return { text: head.branch, title: `Branch aberta nesta pasta: ${head.branch}` }
+  if (head.detached) return { text: `HEAD ${head.commit ?? ''}`.trim(), title: 'HEAD destacado: nenhuma branch aberta nesta pasta' }
+  return null
 }
 
 // --- Abrir sozinho -------------------------------------------------------------------------
@@ -263,6 +296,15 @@ const selected = computed(() => props.repos.find((r) => r.slug === props.selecte
           >
             <header class="term__bar">
               <strong class="term__label">{{ repoOf(session)?.slug ?? session.label }}</strong>
+              <span
+                v-if="headOf(session)"
+                class="term__branch"
+                :class="{ 'term__branch--detached': !heads.heads[session.cwd]?.branch }"
+                :title="headOf(session).title"
+              >
+                <GitBranch :size="11" />
+                <span class="term__branch-name">{{ headOf(session).text }}</span>
+              </span>
               <code class="term__cwd" :title="session.cwd">{{ session.cwd }}</code>
               <span class="term__state" :data-alive="session.alive">{{ session.alive ? 'Ativo' : `Encerrado${session.exit_code != null ? ` (${session.exit_code})` : ''}` }}</span>
               <button v-if="!session.alive" type="button" class="term__action" title="Abrir de novo na mesma pasta" aria-label="Reabrir" @click="store.reopen(session.id)">
@@ -444,6 +486,33 @@ const selected = computed(() => props.repos.find((r) => r.slug === props.selecte
 
 .term__label {
   font-size: var(--text-xs);
+}
+
+/* Encolhe antes da pasta sumir de vez: a branch é o que se procura de relance. */
+.term__branch {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-family: var(--font-mono);
+}
+
+.term__branch--detached {
+  background: var(--color-warning-surface);
+  color: var(--color-warning-text);
+}
+
+.term__branch-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .term__cwd {
