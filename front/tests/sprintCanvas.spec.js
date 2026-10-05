@@ -366,4 +366,85 @@ describe('SprintCanvas: foco da câmera', () => {
 
     expect(fitView).not.toHaveBeenCalled()
   })
+
+  describe('pane que muda de largura (lado a lado, divisão arrastada, janela)', () => {
+    const node = { computedPosition: { x: 1000, y: 400 }, dimensions: { width: 236, height: 132 } }
+
+    async function mountWithPane(props = {}) {
+      const setViewport = vi.fn()
+      const dimensions = ref({ width: 1500, height: 800 })
+      const VueFlowStub = { name: 'VueFlow', emits: ['pane-ready', 'node-click', 'pane-click', 'nodes-initialized'], template: '<div />' }
+      const wrapper = mount(SprintCanvas, {
+        props: { tree, ...props },
+        global: { stubs: { VueFlow: VueFlowStub, Background: true, Controls: true } },
+      })
+      wrapper.findComponent(VueFlowStub).vm.$emit('pane-ready', {
+        fitView: vi.fn(),
+        setViewport,
+        findNode: (id) => (id === 'WAI-9' ? node : undefined),
+        dimensions,
+        viewport: ref({ x: -300, y: -100, zoom: 0.5 }),
+      })
+      // A largura de partida precisa ser vista antes da troca, como na tela.
+      await flushPromises()
+      return { wrapper, setViewport, dimensions }
+    }
+
+    it('com tarefa aberta, ela volta ao centro da parte visível no zoom de agora, sem animação', async () => {
+      const { setViewport, dimensions } = await mountWithPane({ selectedKey: 'WAI-9' })
+
+      dimensions.value = { width: 400, height: 800 }
+      await flushPromises()
+
+      // Centro do card no zoom 0,5: (1118, 466) × 0,5 = (559, 233), levado ao meio dos 400 × 800.
+      expect(setViewport).toHaveBeenCalledWith({ x: 200 - 559, y: 400 - 233, zoom: 0.5 }, { duration: 0 })
+    })
+
+    it('sem tarefa aberta, o que estava no centro continua no centro', async () => {
+      const { setViewport, dimensions } = await mountWithPane()
+
+      dimensions.value = { width: 900, height: 800 }
+      await flushPromises()
+
+      // Encolheu 600 px: a câmera anda metade disso para a esquerda.
+      expect(setViewport).toHaveBeenCalledWith({ x: -600, y: -100, zoom: 0.5 })
+    })
+
+    it('a âncora faz as vezes da tarefa aberta', async () => {
+      const { setViewport, dimensions } = await mountWithPane({ anchorKey: 'WAI-9' })
+
+      dimensions.value = { width: 400, height: 800 }
+      await flushPromises()
+
+      expect(setViewport).toHaveBeenCalledWith({ x: 200 - 559, y: 400 - 233, zoom: 0.5 }, { duration: 0 })
+    })
+
+    it('a primeira medida dos cards pousa na tarefa aberta, no zoom de foco — e só a primeira', async () => {
+      vi.useFakeTimers()
+      try {
+        const { wrapper, setViewport } = await mountWithPane({ selectedKey: 'WAI-9' })
+        const flow = wrapper.findComponent({ name: 'VueFlow' })
+
+        flow.vm.$emit('nodes-initialized')
+        await vi.advanceTimersByTimeAsync(60)
+        expect(setViewport).toHaveBeenCalledWith(expect.objectContaining({ zoom: 1 }), { duration: 320 })
+
+        setViewport.mockClear()
+        flow.vm.$emit('nodes-initialized')
+        await vi.advanceTimersByTimeAsync(60)
+        expect(setViewport).not.toHaveBeenCalled()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('a tela pede o foco num card pelo focus exposto', async () => {
+      const { wrapper, setViewport } = await mountWithPane()
+
+      wrapper.vm.focus('WAI-9')
+      await flushPromises()
+
+      expect(setViewport).toHaveBeenCalledWith(expect.objectContaining({ zoom: 1 }), { duration: 320 })
+    })
+  })
 })

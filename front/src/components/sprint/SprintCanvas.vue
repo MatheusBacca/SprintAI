@@ -26,6 +26,11 @@ const props = defineProps({
   rightInset: { type: Number, default: 0 },
   /** Um id por tela: a Sprint e o Workspace são dois canvas, cada um com a sua câmera. */
   flowId: { type: String, default: 'sprint-tree' },
+  /**
+   * Card em que a câmera pousa quando não há tarefa aberta, em vez de enquadrar tudo — o
+   * lado a lado do Workspace, estreito demais para a feature inteira.
+   */
+  anchorKey: { type: String, default: null },
 })
 const emit = defineEmits(['select', 'highlight'])
 
@@ -60,29 +65,34 @@ const FOCUS_DURATION = 320
  * o card — e os vizinhos dele — escondidos atrás dela. O `fitView` não aceita
  * deslocamento, então a conta é feita à mão. Sem medida do card (ou da instância, em
  * teste), cai no `fitView` comum.
+ *
+ * `keepZoom` só recentraliza, no zoom em que o dev está — é o que a troca de largura do
+ * pane quer; abrir a tarefa leva ao zoom de foco.
  */
-async function focusNode(key, { onlyIfHidden = false } = {}) {
+async function focusNode(key, { onlyIfHidden = false, keepZoom = false, duration = FOCUS_DURATION } = {}) {
   if (!key) return
   await nextTick()
   const instance = flow.value
   const node = instance?.findNode?.(key)
   const viewport = unref(instance?.dimensions)
+  const camera = unref(instance?.viewport)
   const size = node?.dimensions
-  if (onlyIfHidden && fullyVisible(node, viewport, unref(instance?.viewport))) return
+  if (onlyIfHidden && fullyVisible(node, viewport, camera)) return
   if (!instance?.setViewport || !node || !viewport?.width || !size?.width) {
     // `duration` faz a câmera deslizar até o card em vez de teleportar.
-    fitView({ nodes: [key], padding: 0.4, maxZoom: 1.1, duration: FOCUS_DURATION })
+    fitView({ nodes: [key], padding: 0.4, maxZoom: 1.1, duration })
     return
   }
+  const zoom = keepZoom && camera?.zoom ? camera.zoom : FOCUS_ZOOM
   const position = node.computedPosition ?? node.position
-  const visibleWidth = Math.max(viewport.width - props.rightInset, size.width * FOCUS_ZOOM)
+  const visibleWidth = Math.max(viewport.width - props.rightInset, size.width * zoom)
   instance.setViewport(
     {
-      x: visibleWidth / 2 - (position.x + size.width / 2) * FOCUS_ZOOM,
-      y: viewport.height / 2 - (position.y + size.height / 2) * FOCUS_ZOOM,
-      zoom: FOCUS_ZOOM,
+      x: visibleWidth / 2 - (position.x + size.width / 2) * zoom,
+      y: viewport.height / 2 - (position.y + size.height / 2) * zoom,
+      zoom,
     },
-    { duration: FOCUS_DURATION },
+    { duration },
   )
 }
 
@@ -126,12 +136,50 @@ watch(
     if (sameFrame(tree, previous)) return
     await nextTick()
     setTimeout(() => {
-      const key = props.focusKey ?? props.selectedKey
+      const key = props.focusKey ?? props.selectedKey ?? props.anchorKey
       if (key) focusNode(key)
       else fitView({ padding: 0.12, maxZoom: 1 })
     }, 50)
   },
 )
+
+/**
+ * Primeira medida dos cards. A tela que só monta o canvas com a árvore já carregada (o
+ * Workspace) não passa pelo watch acima, e o `fit-view-on-init` enquadrava a feature
+ * inteira mesmo com uma tarefa aberta na URL. Com card em foco, a câmera pousa nele — depois
+ * do enquadramento do Vue Flow, por isso o atraso.
+ */
+let measured = false
+function onNodesInitialized() {
+  if (measured) return
+  measured = true
+  const key = props.focusKey ?? props.selectedKey ?? props.anchorKey
+  if (key) setTimeout(() => focusNode(key), 50)
+}
+
+/**
+ * O pane mudou de largura: o lado a lado do Workspace, a divisão arrastada, a janela. O Vue
+ * Flow segura o canto de cima à esquerda, e o card em foco escorregava para trás do painel
+ * (ou para fora do pane estreito). A tarefa aberta (senão a âncora) volta ao centro da parte
+ * visível, no zoom de agora; sem nenhuma, o que estava no centro continua no centro. Sem
+ * animação: arrastando a divisão, isto roda a cada movimento.
+ */
+watch(
+  () => unref(flow.value?.dimensions)?.width ?? 0,
+  (width, previous) => {
+    if (!width || !previous || width === previous) return
+    const key = props.selectedKey ?? props.anchorKey
+    if (key) {
+      focusNode(key, { keepZoom: true, duration: 0 })
+      return
+    }
+    const camera = unref(flow.value?.viewport)
+    if (camera && flow.value?.setViewport) flow.value.setViewport({ ...camera, x: camera.x + (width - previous) / 2 })
+  },
+)
+
+/** A tela pede o foco num card: o Workspace, ao entrar no lado a lado. */
+defineExpose({ focus: (key) => focusNode(key) })
 
 // Andar pelos resultados da busca move a câmera.
 watch(() => props.focusKey, (key) => focusNode(key))
@@ -173,6 +221,7 @@ function onNodeClick({ event, node }) {
     :fit-view-on-init="true"
     :default-edge-options="{ zIndex: 0 }"
     @pane-ready="flow = $event"
+    @nodes-initialized="onNodesInitialized"
     @node-click="onNodeClick"
     @pane-click="emit('select', null)"
   >
