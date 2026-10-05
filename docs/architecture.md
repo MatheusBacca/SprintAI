@@ -170,7 +170,7 @@ uvicorn usa o `SelectorEventLoop` no Windows, onde `create_subprocess_exec` não
 tela pergunta a cada 5 s com a impressão digital do `.git` (mtime de HEAD, index, refs,
 packed-refs, FETCH_HEAD e worktrees); sem mudança, o git não roda. `fetch` nunca é automático.
 
-**Git de escrita local** (`services/workspace/git_actions.py`). Três ações, cada uma por
+**Git de escrita local** (`services/workspace/git_actions.py`). Quatro ações, cada uma por
 clique do dev no painel de branches, serializadas por repo (`branch_service`, um lock por
 slug):
 
@@ -179,6 +179,15 @@ slug):
 | Fetch | `git fetch origin --prune` | — (só traz; o ssh vai em `BatchMode`, sem pedir senha) |
 | Avançar | aberta numa worktree: `merge --ff-only <upstream>` lá dentro; fechada: `fetch . <upstream>:refs/heads/<branch>` | divergiu, alteração no caminho, sem upstream, worktree fora das raízes |
 | Apagar | `git branch -d` (`-D` só com `force`, a segunda confirmação) | a base, a aberta numa worktree |
+| Trocar | no clone principal: `git switch <branch>`; `origin/x` sem local: `switch -c x --track origin/x` | alteração que a outra branch sobrescreveria, a aberta noutra worktree, merge/rebase em andamento, `x` local já existente |
+
+A troca nunca leva `--force` nem `--discard-changes`: alteração não commitada vai junto, e é
+o próprio git que recusa a que conflitaria.
+
+**Branch dos terminais** (`POST /api/workspace/heads`). O cabeçalho de cada terminal mostra a
+branch da pasta dele, lida do `HEAD` sem rodar git (`discovery.find_git_dir` sobe até o
+`.git` e, na worktree, segue o ponteiro `gitdir:`), só dentro das raízes. A tela pergunta a
+cada 4 s com a aba à vista, e logo depois de uma troca pelo painel.
 
 Escrita precisa do lock, então aqui não vai `--no-optional-locks`; o resto da proteção fica
 (`core.fsmonitor=false`, sem prompt, timeout, sem janela). O stderr do git não vai para a

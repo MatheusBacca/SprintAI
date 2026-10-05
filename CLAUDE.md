@@ -65,10 +65,13 @@ Docker parado não prova nada.
   não escreve nada — o badge de PR só leva até ele.
 - **Processo, só nestes casos — e nenhum endpoint recebe comando.** Git de leitura pela lista
   branca de `services/workspace/git_local.py` (sempre `--no-optional-locks` e
-  `core.fsmonitor=false`); git de **escrita local**, só as três ações de
+  `core.fsmonitor=false`); git de **escrita local**, só as quatro ações de
   `services/workspace/git_actions.py` e só por gesto do dev — `fetch origin --prune` (botão),
-  avançar branch até o upstream (fast-forward, nunca merge de verdade) e apagar branch
-  **local** (`-d`; o `-D` só na segunda confirmação; a base nunca). Nada empurra (`push`) nem
+  avançar branch até o upstream (fast-forward, nunca merge de verdade), apagar branch
+  **local** (`-d`; o `-D` só na segunda confirmação; a base nunca) e trocar a branch do clone
+  principal (`git switch`, segundo clique confirmando; nunca `--force` nem
+  `--discard-changes` — alteração conflitante o git recusa; `origin/x` sem local vira `x` com
+  `--track`). Nada empurra (`push`) nem
   apaga branch no Bitbucket. O shell do terminal roda no terminal host, que recebe **pasta e perfil**
   (`terminal/profiles.py`), nunca um comando; e `Code.exe`/`wt.exe` na pasta, chamados pelo
   executável — nunca por `.cmd`, porque argumento de arquivo de lote passa pelo `cmd.exe`. O
@@ -229,8 +232,9 @@ O SprintAI só escreve `.md` no **PROGRESS canônico**
 [docs/harness/progress-format.md](docs/harness/progress-format.md)). Todo o resto do harness
 — `CLAUDE.md`, `DOCS.md`, skills, agents, specs, handoffs, memory — é **somente leitura**.
 Raízes permitidas: `C:\projects\` e `C:\Users\<dev>\.claude\`. Nunca `Z:\`. No git dos repos
-o SprintAI só mexe pelas três ações da linha do tempo (fetch --prune, avançar e apagar branch
-local), cada uma por clique do dev; o que muda pelo terminal é o dev quem digita.
+o SprintAI só mexe pelas quatro ações da linha do tempo (fetch --prune, avançar, apagar branch
+local e trocar a branch do clone), cada uma por clique do dev; o que muda pelo terminal é o dev
+quem digita.
 
 ## Git
 

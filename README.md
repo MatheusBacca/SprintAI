@@ -373,6 +373,12 @@ sem tarefa — só os repositórios escolhidos, para ter terminal à mão.
 - **Painel de branches** à esquerda da linha do tempo (botão **Branches** esconde): as locais
   (HEAD, worktree, à frente/atrás, "apagada no remoto", selo do PR), as `origin/` e as tags,
   da mais recente para a mais antiga. Clique leva ao commit. Em cada branch local:
+  - **Trocar** (⇄): abre a branch no clone principal — o `git switch`, com o segundo clique
+    confirmando. Alteração não commitada vai junto; se alguma conflitar com a outra branch, o
+    git recusa e o painel diz (nada de `--force`). Numa `origin/x` sem local, a troca cria a
+    `x` acompanhando o origin. A branch aberta noutra worktree não troca — o git não abre a
+    mesma branch em dois lugares. Quem estiver rodando no clone (um `npm run dev`) vê os
+    arquivos mudarem.
   - **Avançar até o upstream** (quando ela está atrás): só fast-forward. Aberta numa worktree,
     é o `merge --ff-only` lá dentro (os arquivos mudam); fechada, só a ref anda. Divergiu,
     tem alteração no caminho ou não tem upstream: o painel diz e nada muda.
@@ -391,7 +397,9 @@ sem tarefa — só os repositórios escolhidos, para ter terminal à mão.
   seu (até seis), e o terminal que já existe para o repo — aberto noutro workspace — é o mesmo
   shell, não abre outro. Fechar um à mão vale para aquele workspace: ele não volta sozinho, e o
   "+" do cabeçalho reabre. Abrir uma tarefa no painel traz o terminal do repo dela para a
-  frente. Até três lado a lado; mais que isso, abas. A altura se ajusta
+  frente. O cabeçalho de cada um mostra a **branch aberta** na pasta (ou o HEAD destacado, em
+  laranja), lida do `.git` a cada poucos segundos — o `git switch` digitado ali, ou feito
+  pelo painel de branches, aparece em seguida. Até três lado a lado; mais que isso, abas. A altura se ajusta
   arrastando a borda e fica salva neste navegador. Recarregar a página reata os shells vivos
   com o que já tinha passado neles. Colar várias linhas pede confirmação; Ctrl+C com texto
   selecionado copia, sem seleção interrompe; os atalhos globais (Ctrl+K…) ficam com o shell
@@ -412,6 +420,8 @@ rodar git): vínculo com o Bitbucket pelo remote `origin` e a branch base (do Bi
 | `POST /api/workspace/repos/{slug}/fetch` | `git fetch origin --prune`; devolve as novas, atualizadas e removidas |
 | `POST /api/workspace/repos/{slug}/branches/update` | avança a branch local até o upstream (`{ "name" }`, só fast-forward) |
 | `POST /api/workspace/repos/{slug}/branches/delete` | apaga a branch local (`{ "name", "force" }`); 409 com `code` (`unmerged`, `checked_out`, `protected`…) |
+| `POST /api/workspace/repos/{slug}/branches/switch` | abre a branch no clone (`{ "name" }`; `origin/x` cria a `x`); 409 com `code` (`dirty`, `checked_out`, `exists`…) |
+| `POST /api/workspace/heads` | a branch aberta em cada pasta (`{ "paths" }`, até 24), lida do `HEAD` sem rodar git |
 | `POST /api/workspace/open` | abre a pasta no VS Code (`ide`) ou no Windows Terminal (`terminal`) |
 | `GET/POST /api/workspaces` | lista; abre o da tarefa (reabre se existe) ou cria um livre |
 | `GET/PATCH/DELETE /api/workspaces/{id}` | detalhe com os repos envolvidos; aba aberta/fechada; apagar |
