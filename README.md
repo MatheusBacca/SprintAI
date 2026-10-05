@@ -19,7 +19,7 @@ Segurança local:
 - **tokens do Jira e Bitbucket nunca vão para `.env`, banco, logs ou para o front** — ficam no Cofre do Windows (serviço `sprintai` no Gerenciador de Credenciais), cadastrados em Configurações › Conexões e só salvos depois de testados;
 - a API recusa (403) requests sem o header `X-SprintAI`, com `Host` fora de loopback (DNS rebinding) ou com `Origin` que não seja o front;
 - erros de validação não ecoam o valor enviado (um token malformado não volta na resposta);
-- **o SprintAI escreve só duas coisas no Jira**, e só por gesto explícito na tela: a transição de status (duplo clique) e os Story Points (Salvar). Veja [Ações no Jira e no Bitbucket](#ações-no-jira-e-no-bitbucket).
+- **o SprintAI escreve só duas coisas no Jira**, e só por gesto explícito na tela: a transição de status (duplo clique) e os Story Points (Salvar). **No Bitbucket, também duas**, as duas confirmadas no painel: o merge do PR (o "Concluir" do card) e os reviewers de um PR aberto. Veja [Ações no Jira e no Bitbucket](#ações-no-jira-e-no-bitbucket).
 
 ## Setup
 
@@ -298,7 +298,29 @@ timeline da Home — três peças deixam de ser só rótulo:
   ("sem SP"), para dar SP a quem chegou sem.
 - **Badge de PR**: leva ao PR no Bitbucket. Com um PR é link direto; com vários, abre a lista
   (o PR que decide o status do card vem primeiro). Recusado e substituído só entram se forem
-  tudo o que há; "Sem PR" e "Branch sem PR" continuam só rótulo. No Bitbucket nada é escrito.
+  tudo o que há; "Sem PR" e "Branch sem PR" continuam só rótulo.
+- **Concluir** (à direita do badge de PR, no card e no painel da tarefa): aparece quando o
+  repo da tarefa — o dos PRs e branches dela, ou o `[repo]` do título — tem uma receita em
+  **Configurações › Concluir**: para que status do Jira ela vai (ou não mexe no Jira) e se o
+  PR aberto é mergeado, com a estratégia (merge commit, squash, fast-forward) e se fecha a
+  branch de origem. Um repo pode ir direto a "Concluído"; outro, mergear e ir a "DISPONIVEL
+  PARA TESTES".
+  - **Só em card apto:** a tarefa tem PR nesses repos, todo PR aberto está **aprovado pela
+    regra** de Configurações › Pull requests (rascunho e ajuste pedido ficam de fora; PR já
+    mergeado conta), e ela ainda não chegou a testes nem foi concluída (etapas de
+    Configurações › Progresso). O back confere de novo na hora de rodar: um card que deixou
+    de estar apto recusa, com o motivo.
+  - O clique abre o **plano**: cada PR que vai ser mergeado (branch → destino, estratégia) com
+    os avisos — rascunho, aprovações abaixo da regra do SprintAI, ajuste pedido sem correção,
+    build falhou — e o status de destino, conferido na hora contra as transições do Jira.
+    Os avisos não barram: quem barra é o Bitbucket, pelas merge checks do repo.
+  - **Nada roda antes do "Confirmar e concluir".** O merge vem primeiro; o Jira só anda se
+    todos os merges entraram. Repos da tarefa com status diferentes pedem a escolha no plano.
+  - Depois, o painel fica com o resultado de cada passo (o que falhou leva o link do PR) e o
+    back chama o sync, que traz o PR mergeado ao espelho com o evento.
+- **Reviewers** (aba PRs do painel da tarefa): no PR aberto, **+ Reviewer** busca entre os
+  membros do workspace do Bitbucket e pede "Adicionar Fulano?"; o **×** de um revisor
+  designado vira "Tirar?" no primeiro clique — e avisa quando quem sai já tinha aprovado.
 
 Depois que o Jira aceita, o espelho recebe o valor novo na hora e todas as telas e abas
 abertas recarregam (evento `issue.changed` no stream). A **história** da mudança — o
@@ -310,13 +332,23 @@ acompanha o selo ao rolar e no zoom do canvas. Recarregar a mesma sprint (sync, 
 status movido) não tira mais a câmera do canvas do lugar.
 
 Token com escopos precisa de **`write:jira-work`** para as duas escritas; sem ele, o resto
-continua lendo e o painel mostra o erro do Jira.
+continua lendo e o painel mostra o erro do Jira. No Bitbucket, o merge e os reviewers pedem
+**`write:pullrequest:bitbucket`**, e a lista de membros para escolher reviewer,
+**`read:workspace:bitbucket`** — sem eles, o resto continua lendo e o painel diz qual falta.
+O teste da conexão (ao salvar e no **Testar**) confere a lista inteira no `x-oauth-scopes`
+que o próprio Bitbucket devolve: sem `read:user`, `read:repository` ou `read:pullrequest` a
+conexão nem salva; sem os outros dois, salva e a tela lista o que falta e para quê.
 
 | Rota | O que faz |
 |---|---|
 | `GET /api/issues/{key}/transitions` | linha de fluxo: status atual (ao vivo), passos do workflow e as transições possíveis |
 | `POST /api/issues/{key}/transitions` | move a tarefa (`{ "transition_id": "31" }`); 409 se a transição não existe mais ou pede campos |
 | `PUT /api/issues/{key}/story-points` | grava os Story Points (`{ "story_points": 5 }`, `null` apaga); 409 se o campo não está na tela de edição |
+| `GET /api/issues/{key}/conclude` | o plano do Concluir: merges com avisos e o status do Jira, conferido agora |
+| `POST /api/issues/{key}/conclude` | roda o que foi confirmado (`{ "jira_status", "merges": [{ "repo_slug", "pr_id" }] }`); cada passo volta em `steps`; 409 se o pedido não bate com o plano de agora |
+| `GET/PUT /api/preferences/conclude` | a receita do Concluir por repo (status do Jira, merge, estratégia, fechar a branch) |
+| `GET /api/bitbucket/members` | membros do workspace do Bitbucket, para escolher reviewer (guardados por meia hora; `?refresh=true` relê) |
+| `PUT /api/pull-requests/{repo}/{id}/reviewers` | põe e tira reviewers do PR aberto (`{ "add": [...], "remove": [...] }`) |
 
 ## Workspace (`/workspace`)
 

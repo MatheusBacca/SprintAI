@@ -195,6 +195,27 @@ tela: os casos conhecidos viram mensagem pronta com um `code` (`unmerged`, `dive
 `checked_out`, `auth`…), e é pelo `code` que a tela decide o que oferecer. Nada empurra nem
 apaga no Bitbucket.
 
+## Escrita no Bitbucket: o Concluir e os reviewers
+
+O cliente do Bitbucket (`integrations/bitbucket_client.py`) escreve duas coisas, cada uma
+depois da confirmação do dev na tela:
+
+| Escrita | Chamada | Repete? |
+|---|---|---|
+| Merge do PR (o "Concluir") | `POST …/pullrequests/{id}/merge` com a estratégia e o fechar a branch; 202 de merge longo é acompanhado pelo link da tarefa | não (`idempotent=False`): um 5xx pode ter mergeado |
+| Reviewers do PR aberto | `GET` do PR (lista atual e título) e `PUT` com a lista inteira | sim: o mesmo PUT dá o mesmo PR |
+
+O **Concluir** (`services/conclude_service.py`) é plano e execução. O plano junta a receita
+do repo (Configurações › Concluir, `app_setting.conclude`), os PRs abertos da tarefa no
+espelho, com os avisos, e o status de destino conferido contra as transições que o Jira
+oferece agora. A execução confere o pedido contra um plano novo, mergeia primeiro e só então
+move o Jira pela mesma `apply_transition` do painel de status. O espelho do PR não é escrito
+à mão: o back chama o sync, que traz o PR mergeado (ou os reviewers novos) e grava o evento
+pelo caminho de sempre — gravar direto faria o sync não ver a mudança, e a história sumiria.
+
+Os membros do workspace (para escolher reviewer) ficam em memória por meia hora; não vão
+para o banco.
+
 **Terminal host** (`terminal_host.py`, `terminal/`). Processo à parte, sem reload — cada
 edição no `back/` derrubaria os shells da API. Não abre banco nem Cofre. Sem WebSocket, para
 a guarda ficar inteira: a saída de todas as sessões vem num stream só

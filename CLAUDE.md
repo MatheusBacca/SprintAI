@@ -61,8 +61,19 @@ Docker parado não prova nada.
   clique na linha de fluxo) e os Story Points (Salvar/Enter, ou duplo clique num atalho).
   Escrita nova — inclusive a do agente, no M8 — segue o mesmo: proposta → confirmação → ação.
   Escrita que não pode repetir vai com `idempotent=False` no transporte: repetir uma
-  transição depois de um 5xx pode andar mais um passo no workflow. No Bitbucket o SprintAI
-  não escreve nada — o badge de PR só leva até ele.
+  transição depois de um 5xx pode andar mais um passo no workflow.
+- **No Bitbucket, só duas escritas, e as duas confirmadas na tela.** O **merge** do PR, pelo
+  "Concluir" do card (`services/conclude_service.py`): a receita é por repo (Configurações ›
+  Concluir), o botão só aparece em card apto (`conclude_settings.blocked_reason`: PR aprovado
+  pela regra de aprovações, tarefa antes de testes) — e a execução confere de novo —, o
+  plano mostra o merge e o status do Jira antes, nada roda sem o "Confirmar e
+  concluir", o merge vem primeiro e o Jira só anda se ele entrou; vai com `idempotent=False`,
+  porque repetir depois de um 5xx poderia mergear de novo. E a **lista de reviewers** de um PR
+  aberto (`services/pr_reviewers.py`), com o segundo clique confirmando o tirar e o
+  "Adicionar?" o pôr. O espelho do PR continua sendo do sync: depois da escrita o back chama
+  o sync, em vez de gravar o PR à mão — o evento (e a história) sai dele, como sempre. Erro do
+  Bitbucket não vem cru para a tela: o merge recusado diz o HTTP e leva o link do PR. Fora
+  isso, o badge de PR só leva até ele.
 - **Processo, só nestes casos — e nenhum endpoint recebe comando.** Git de leitura pela lista
   branca de `services/workspace/git_local.py` (sempre `--no-optional-locks` e
   `core.fsmonitor=false`); git de **escrita local**, só as quatro ações de
