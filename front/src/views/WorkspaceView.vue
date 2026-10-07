@@ -246,7 +246,7 @@ watch(() => refresh.revision, () => {
   store.loadTree()
 })
 
-// Lembrete criado ou arquivado muda o ícone do rodapé dos cards.
+// Lembrete criado ou arquivado muda o ícone de lembretes dos cards.
 watch(() => notes.revision, () => store.loadTree())
 
 function patchQuery(patch) {

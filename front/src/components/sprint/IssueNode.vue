@@ -103,7 +103,7 @@ const pulse = computed(() => {
 })
 
 /**
- * Ícone de lembretes no rodapé: abre o painel da tarefa direto nos lembretes. O clique
+ * Ícone de lembretes no cabeçalho, à direita do SP: abre o painel da tarefa direto nos lembretes. O clique
  * segue até o canvas, que seleciona o card e move a câmera como num clique comum — o
  * ícone só deixa pedida a vista de lembretes antes. Com Alt é destaque de status, não
  * abertura: o pedido ficaria esperando a próxima vez que o card fosse aberto.
@@ -187,11 +187,30 @@ const updates = computed(() => {
         @click.stop
       >{{ issue.key }}</a>
       <span v-else class="node__key">{{ issue.key }}</span>
-      <template v-if="issue.story_points != null">
-        <span v-if="issue.partial" class="node__points" title="Story Points">{{ issue.story_points }} SP</span>
-        <StoryPointsChip v-else class="node__points" :issue-key="issue.key" :points="issue.story_points" />
-      </template>
+      <!-- Sem pontos também aparece, como no painel: é ali que se dá SP à tarefa que chegou
+           sem. Pai sem SP fica sem o chip — ele já mostra as filhas, e épico não leva ponto. -->
+      <span v-if="issue.partial && issue.story_points != null" class="node__points" title="Story Points">{{ issue.story_points }} SP</span>
+      <StoryPointsChip
+        v-else-if="!issue.partial && (issue.story_points != null || !issue.is_parent_type)"
+        class="node__points"
+        :issue-key="issue.key"
+        :points="issue.story_points"
+        placeholder="– SP"
+      />
       <span v-if="issue.is_parent_type && childCount" class="node__points">{{ childCount }} filhas</span>
+      <!-- Lembretes à direita do SP: o rodapé ficou para o PR (as fotos de quem revisa) e o
+           Concluir. -->
+      <button
+        type="button"
+        class="node__notes"
+        :class="{ 'node__notes--filled': noteCount }"
+        :title="notesLabel"
+        :aria-label="notesLabel"
+        @click="openNotes"
+      >
+        <StickyNote :size="12" />
+        <span v-if="noteCount">{{ noteCount }}</span>
+      </button>
       <Link2 v-if="issue.parent_via === 'link'" :size="12" class="node__via" aria-label="pai por link" />
       <span v-if="!issue.is_mine && initials" class="node__avatar" :title="issue.assignee_name">{{ initials }}</span>
       <span v-if="updates" class="node__updated" role="status" :title="updates" :aria-label="updates" />
@@ -219,19 +238,8 @@ const updates = computed(() => {
         size="sm"
       />
       <!-- À direita do selo do PR: o repo da tarefa tem receita em Configurações › Concluir. -->
-      <ConcludeButton v-if="issue.in_sprint && issue.conclude" :issue-key="issue.key" :compact="Boolean(waitingBlocker)" />
+      <ConcludeButton v-if="issue.in_sprint && issue.conclude" :issue-key="issue.key" :compact="Boolean(waitingBlocker)" pulse />
       <span v-if="issue.in_sprint && issue.pr && waitingBlocker" class="node__blocked">bloqueada por {{ issue.blockers_without_pr.join(', ') }}</span>
-      <button
-        type="button"
-        class="node__notes"
-        :class="{ 'node__notes--filled': noteCount }"
-        :title="notesLabel"
-        :aria-label="notesLabel"
-        @click="openNotes"
-      >
-        <StickyNote :size="13" />
-        <span v-if="noteCount">{{ noteCount }}</span>
-      </button>
     </footer>
 
     <Handle id="bottom" type="source" :position="Position.Bottom" class="node__handle" />
@@ -243,7 +251,7 @@ const updates = computed(() => {
 .node {
   position: relative;
   box-sizing: border-box;
-  width: 236px;
+  width: 256px;
   height: 132px;
   display: flex;
   flex-direction: column;
@@ -613,15 +621,14 @@ a.node__key:hover {
   min-height: 22px;
 }
 
-/* Sempre no canto direito do rodapé, com ou sem badge de PR ao lado. */
+/* No cabeçalho, logo depois do SP — da altura do chip dele. */
 .node__notes {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  height: 22px;
-  margin-left: auto;
-  padding: 0 5px;
+  height: 18px;
+  padding: 0 4px;
   border: 0;
   border-radius: var(--radius-sm);
   background: none;

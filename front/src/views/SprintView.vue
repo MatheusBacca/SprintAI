@@ -223,7 +223,7 @@ watch(() => refresh.revision, () => {
   if (selectedKey.value) issueDetail.load(selectedKey.value)
 })
 
-// Lembrete criado, arquivado ou apagado muda a contagem do rodapé dos cards.
+// Lembrete criado, arquivado ou apagado muda a contagem do ícone de lembretes dos cards.
 watch(() => notes.revision, () => {
   if (sprintId.value) board.loadTree(sprintId.value)
 })

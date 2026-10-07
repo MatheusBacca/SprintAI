@@ -8,6 +8,7 @@ import IssueNode from '@/components/sprint/IssueNode.vue'
 import StageFilter from '@/components/sprint/StageFilter.vue'
 import SprintView from '@/views/SprintView.vue'
 import { routes } from '@/router/routes'
+import { useJiraActionsStore } from '@/stores/jiraActions'
 import { useScreenContextStore } from '@/stores/screenContext'
 import { useSprintBoardStore } from '@/stores/sprintBoard'
 import { useUiStore } from '@/stores/ui'
@@ -633,9 +634,28 @@ describe('IssueNode', () => {
     expect(link.attributes('rel')).toContain('noopener')
   })
 
-  it('rodapé sempre tem o ícone de lembretes, com a contagem quando há algum', () => {
+  it('tarefa sem SP mostra o chip vazio, que é onde se define; pai sem SP fica sem ele', async () => {
+    setActivePinia(createPinia())
+    const semPontos = mountNode(node('WAI-7001', { story_points: null }))
+    const chip = semPontos.find('.node__header .points-chip')
+    expect(chip.text()).toBe('– SP')
+    expect(chip.attributes('data-empty')).toBeDefined()
+    await chip.trigger('click')
+    expect(useJiraActionsStore().open).toMatchObject({ kind: 'points', issueKey: 'WAI-7001' })
+
+    const epico = mountNode(node('WAI-6900', { story_points: null, is_parent_type: true, issue_type: 'Épico' }))
+    expect(epico.find('.points-chip').exists()).toBe(false)
+    // Card fora do espelho não edita: sem SP, nada; com SP, só o rótulo.
+    const parcial = mountNode(node('OUT-1', { story_points: null, partial: true }))
+    expect(parcial.find('.node__points').exists()).toBe(false)
+  })
+
+  it('cabeçalho sempre tem o ícone de lembretes logo à direita do SP, com a contagem quando há algum', () => {
     const vazio = mountNode(node('WAI-7001'))
-    expect(vazio.find('.node__footer .node__notes').text()).toBe('')
+    expect(vazio.find('.node__footer .node__notes').exists()).toBe(false)
+    const notes = vazio.find('.node__header .node__notes')
+    expect(notes.text()).toBe('')
+    expect(notes.element.previousElementSibling.classList.contains('points-chip')).toBe(true)
     expect(vazio.find('.node__notes').classes()).not.toContain('node__notes--filled')
 
     const com = mountNode(node('WAI-7001', { note_count: 2 }))

@@ -7,6 +7,7 @@ import RepoTimeline from '@/components/workspace/RepoTimeline.vue'
 import WorkspaceView from '@/views/WorkspaceView.vue'
 import { routes } from '@/router/routes'
 import { useScreenContextStore } from '@/stores/screenContext'
+import { NODE_WIDTH } from '@/utils/treeLayout'
 
 function json(body, status = 200) {
   return { ok: status < 400, status, headers: new Headers({ 'content-type': 'application/json' }), json: async () => body, text: async () => '' }
@@ -294,8 +295,9 @@ describe('WorkspaceView', () => {
     await wrapper.findAll('.ws-main__view')[2].trigger('click')
     await flushPromises()
     expect(wrapper.find('.timeline-stub').exists()).toBe(true)
-    // 236px do card e a folga dos dois lados: o resto fica para a linha do tempo.
-    expect(tasks()).toContain('flex-basis: 308px')
+    // A largura do card e a folga dos dois lados: o resto fica para a linha do tempo.
+    const cardPane = NODE_WIDTH + 72
+    expect(tasks()).toContain(`flex-basis: ${cardPane}px`)
     // Sem tarefa aberta, a câmera pousa na raiz em vez de enquadrar a feature inteira.
     expect(canvas().props('anchorKey')).toBe('WAI-8677')
     await vi.waitFor(() => expect(canvasFocus).toHaveBeenCalledWith('WAI-8677'))
@@ -303,9 +305,9 @@ describe('WorkspaceView', () => {
     const splitter = wrapper.find('.ws-main__splitter')
     await splitter.trigger('keydown', { key: 'ArrowRight' })
     await splitter.trigger('keydown', { key: 'ArrowRight' })
-    expect(tasks()).toContain('flex-basis: 388px')
+    expect(tasks()).toContain(`flex-basis: ${cardPane + 80}px`)
     await splitter.trigger('dblclick')
-    expect(tasks()).toContain('flex-basis: 308px')
+    expect(tasks()).toContain(`flex-basis: ${cardPane}px`)
 
     // Trocar de repo pela linha do tempo não tira o canvas da tela.
     wrapper.findComponent({ name: 'RepoTimeline' }).vm.$emit('select-repo', 'qualificai')
@@ -322,7 +324,7 @@ describe('WorkspaceView', () => {
     canvasFocus.mockClear()
     await wrapper.findAll('.ws-main__view')[2].trigger('click')
     await flushPromises()
-    expect(tasks()).toContain('flex-basis: 308px')
+    expect(tasks()).toContain(`flex-basis: ${cardPane}px`)
     await vi.waitFor(() => expect(canvasFocus).toHaveBeenCalledWith('WAI-8792'))
   })
 

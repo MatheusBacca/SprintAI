@@ -160,6 +160,42 @@ describe('Concluir', () => {
     expect(calls.at(-1).body).toEqual({ jira_status: 'DISPONIVEL PARA TESTES', merges: [] })
   })
 
+  it('com outro PR aberto, mergeia o aprovado e deixa o Jira para o último PR', async () => {
+    routes['POST /api/issues/WAI-1/conclude'] = json({
+      issue_key: 'WAI-1',
+      done: true,
+      status: 'Em Review',
+      write_id: 'w2',
+      steps: [
+        { kind: 'merge', label: 'PR #412 em monitoria mergeado (squash)', ok: true, url: MERGE.url },
+        { kind: 'hold', label: 'O Jira fica em Em Review até o último PR', ok: true, message: 'Ainda aberto: #413 em monitoria (sem a aprovação da regra).' },
+      ],
+    })
+    const { panel } = await openPlan(
+      plan({
+        targets: [],
+        held_statuses: ['DISPONIVEL PARA TESTES'],
+        waiting: [{ repo_slug: 'monitoria', pr_id: 413, title: 'WAI-1 parte 2', url: 'https://bitbucket.org/weonrepo/monitoria/pull-requests/413', reason: 'sem a aprovação da regra' }],
+      }),
+    )
+
+    const held = panel().querySelector('.conclude__step--held')
+    expect(held.textContent).toContain('Mover para DISPONIVEL PARA TESTES no Jira fica para o último PR')
+    expect(held.textContent).toContain('#413 em monitoria — sem a aprovação da regra')
+    expect(held.querySelector('a').getAttribute('href')).toBe('https://bitbucket.org/weonrepo/monitoria/pull-requests/413')
+
+    const confirm = panel().querySelector('.conclude__confirm')
+    expect(confirm.disabled).toBe(false)
+    click(confirm)
+    await flushPromises()
+    // Sem status: o Jira não anda neste Concluir.
+    expect(calls.at(-1).body).toEqual({ jira_status: null, merges: [{ repo_slug: 'monitoria', pr_id: 412 }] })
+    const steps = [...panel().querySelectorAll('.conclude__step')].map((li) => li.dataset.kind)
+    expect(steps).toEqual(['merge', 'hold'])
+    expect(panel().textContent).toContain('O Jira fica onde está até o último PR da tarefa entrar')
+    expect(panel().textContent).not.toContain('Concluída')
+  })
+
   it('card que deixou de estar apto mostra o motivo e não confirma', async () => {
     const { panel } = await openPlan(plan({ blocked: 'PR #412 ainda não está aprovado pela regra de Configurações › Pull requests.' }))
 
@@ -198,6 +234,9 @@ describe('Concluir', () => {
     const parts = footer.findAll('.pr-badge, .conclude-btn').map((el) => el.classes()[0])
     expect(parts).toEqual(['pr-badge', 'conclude-btn'])
     expect(footer.find('.conclude-btn').classes()).toContain('nodrag')
+    // A mesma sombra pulsante do card em desenvolvimento — só no card, não no painel.
+    expect(footer.find('.conclude-btn').classes()).toContain('conclude-btn--pulse')
+    expect(mount(ConcludeButton, { props: { issueKey: 'WAI-9' } }).classes()).not.toContain('conclude-btn--pulse')
     expect(mountNode({ conclude: false }).find('.conclude-btn').exists()).toBe(false)
     expect(mountNode({ conclude: true, in_sprint: false }).find('.conclude-btn').exists()).toBe(false)
   })

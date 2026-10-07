@@ -15,7 +15,7 @@
  * que desce do épico.
  */
 
-export const NODE_WIDTH = 236
+export const NODE_WIDTH = 256
 export const NODE_HEIGHT = 132
 export const COLUMN_GAP = 20
 export const ROW_GAP = 56

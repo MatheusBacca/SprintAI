@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { AlertTriangle, Check, ExternalLink, GitMerge, LoaderCircle, MoveRight, X } from 'lucide-vue-next'
+import { AlertTriangle, Check, ExternalLink, GitMerge, Hourglass, LoaderCircle, MoveRight, X } from 'lucide-vue-next'
 import { useJiraActionsStore } from '@/stores/jiraActions'
 import { safeUrl } from '@/utils/safeUrl'
 
@@ -9,7 +9,8 @@ import { safeUrl } from '@/utils/safeUrl'
  * "Confirmar e concluir" — proposta → confirmação → ação, como toda escrita do SprintAI.
  *
  * O merge vem primeiro e o Jira só anda se todos os merges entraram; o back confere de novo
- * contra o plano de agora antes de rodar. Os avisos (rascunho, aprovações, build) não barram:
+ * contra o plano de agora antes de rodar. Tarefa com vários PRs conclui por partes: entram os
+ * aprovados, os outros ficam listados, e o Jira espera o Concluir do último. Os avisos (rascunho, aprovações, build) não barram:
  * quem barra é o Bitbucket, pelas merge checks. Depois de rodar, o painel fica com o
  * resultado de cada passo — inclusive o que falhou, com o link do PR.
  */
@@ -37,6 +38,10 @@ watch(
 const target = computed(() => plan.value?.targets.find((t) => t.status === chosen.value) ?? null)
 const needsChoice = computed(() => (plan.value?.targets.length ?? 0) > 1 && !chosen.value)
 const nothingToDo = computed(() => plan.value && !plan.value.merges.length && !plan.value.targets.length)
+// PRs abertos que este Concluir não mergeia: o passo do Jira fica para o último.
+const waiting = computed(() => plan.value?.waiting ?? [])
+const held = computed(() => plan.value?.held_statuses ?? [])
+const holding = computed(() => result.value?.steps.some((step) => step.kind === 'hold') ?? false)
 const blocked = computed(() => {
   // Card que deixou de estar apto (o PR perdeu a aprovação, a tarefa andou para testes).
   if (!plan.value || plan.value.blocked || nothingToDo.value || needsChoice.value) return true
@@ -66,8 +71,9 @@ function confirm() {
 
     <template v-else-if="result">
       <ol class="conclude__steps">
-        <li v-for="(step, index) in result.steps" :key="index" class="conclude__step" :data-ok="step.ok">
-          <Check v-if="step.ok" :size="14" class="conclude__icon" />
+        <li v-for="(step, index) in result.steps" :key="index" class="conclude__step" :data-ok="step.ok" :data-kind="step.kind">
+          <Hourglass v-if="step.kind === 'hold'" :size="14" class="conclude__icon" />
+          <Check v-else-if="step.ok" :size="14" class="conclude__icon" />
           <X v-else :size="14" class="conclude__icon" />
           <span class="conclude__step-text">
             <span>{{ step.label }}</span>
@@ -79,7 +85,9 @@ function confirm() {
         </li>
       </ol>
       <p class="conclude__muted">
-        {{ result.done ? 'Concluída. O selo do PR muda quando o sync, que já foi chamado, terminar.' : 'Parou no passo que falhou — o que vinha depois não rodou.' }}
+        <template v-if="!result.done">Parou no passo que falhou — o que vinha depois não rodou.</template>
+        <template v-else-if="holding">Mergeado. O Jira fica onde está até o último PR da tarefa entrar.</template>
+        <template v-else>Concluída. O selo do PR muda quando o sync, que já foi chamado, terminar.</template>
       </p>
       <button type="button" class="btn btn--secondary conclude__close" @click="store.close()">Fechar</button>
     </template>
@@ -113,6 +121,18 @@ function confirm() {
             <span v-else>Mover para <strong>{{ target.status }}</strong> no Jira</span>
             <span v-if="target.reason" class="conclude__step-note conclude__step-note--error">{{ target.reason }}</span>
             <span v-else-if="plan.merges.length && !target.current" class="conclude__step-note">só depois que o merge entrar</span>
+          </span>
+        </li>
+        <li v-else-if="held.length" class="conclude__step conclude__step--held">
+          <Hourglass :size="14" class="conclude__icon" />
+          <span class="conclude__step-text">
+            <span>Mover para <strong>{{ held.join(' ou ') }}</strong> no Jira <em>fica para o último PR</em></span>
+            <span class="conclude__step-note">Ainda aberto{{ waiting.length > 1 ? 's' : '' }}:</span>
+            <span v-for="pr in waiting" :key="`${pr.repo_slug}:${pr.pr_id}`" class="conclude__waiting">
+              <a v-if="safeUrl(pr.url)" :href="safeUrl(pr.url)" target="_blank" rel="noopener noreferrer" title="Abrir o PR no Bitbucket">#{{ pr.pr_id }}</a>
+              <template v-else>#{{ pr.pr_id }}</template>
+              em {{ pr.repo_slug }} — {{ pr.reason }}
+            </span>
           </span>
         </li>
         <li v-else-if="plan.targets.length > 1" class="conclude__step">
@@ -202,6 +222,20 @@ function confirm() {
   font-size: var(--text-xs);
 }
 
+.conclude__step--held em {
+  font-style: normal;
+  color: var(--color-text-muted);
+}
+
+.conclude__waiting {
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.conclude__waiting a {
+  color: var(--color-primary);
+}
+
 .conclude__step[data-blocked] {
   border-color: var(--color-error);
 }
@@ -216,6 +250,12 @@ function confirm() {
 
 .conclude__step[data-ok='false'] .conclude__icon {
   color: var(--color-error);
+}
+
+/* Depois do `data-ok`: o passo em espera é "ok", mas não é verde — o Jira não andou. */
+.conclude__step--held .conclude__icon,
+.conclude__step[data-kind='hold'] .conclude__icon {
+  color: var(--color-warning-text);
 }
 
 .conclude__icon {

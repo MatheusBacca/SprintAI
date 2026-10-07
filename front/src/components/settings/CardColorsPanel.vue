@@ -352,7 +352,7 @@ async function save() {
 
 .row {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) 236px minmax(150px, auto);
+  grid-template-columns: minmax(140px, 1fr) 256px minmax(150px, auto);
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) 0;

@@ -47,7 +47,7 @@ const waitingBlocker = computed(() => (issue.value?.blockers_without_pr ?? []).l
 const toneStyle = computed(() => (issue.value?.stage ? { '--tone': issue.value.stage.color } : null))
 
 /**
- * Lembretes saíram da fileira de abas para o ícone do cabeçalho — o mesmo do rodapé do
+ * Lembretes saíram da fileira de abas para o ícone do cabeçalho — o mesmo do cabeçalho do
  * card no canvas. Clicar de novo volta para os detalhes: sem aba marcada, o ícone é o
  * único jeito de saber (e de sair de) onde se está.
  */
