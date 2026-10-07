@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import { Plus, X } from 'lucide-vue-next'
+import ReviewerAvatar from './ReviewerAvatar.vue'
 import { usePrReviewersStore } from '@/stores/prReviewers'
 import { normalize } from '@/utils/highlight'
 
@@ -11,6 +12,9 @@ import { normalize } from '@/utils/highlight'
  *
  * Depois da troca, a lista que o Bitbucket devolveu fica na tela até o espelho (que o sync,
  * chamado pelo back, atualiza) chegar com ela.
+ *
+ * Cada revisor é uma pílula com a foto e o nome, pintada inteira com o estado: aprovou,
+ * pediu ajustes ou ainda não revisou.
  */
 const props = defineProps({
   pr: { type: Object, required: true },
@@ -131,7 +135,8 @@ function stateTitle(reviewer) {
         :data-confirm="removing === r.account_id || null"
         :title="stateTitle(r)"
       >
-        {{ r.name ?? 'Revisor' }}
+        <ReviewerAvatar :name="r.name" :url="r.avatar_url" :size="16" />
+        <span class="reviewers__name">{{ r.name ?? 'Revisor' }}</span>
         <button
           v-if="removable(r)"
           type="button"
@@ -211,25 +216,35 @@ function stateTitle(reviewer) {
   list-style: none;
 }
 
+/* A pílula inteira na cor do estado — as mesmas cores das fotos no badge do PR. */
 .reviewers__chip {
+  --chip: var(--color-text-muted);
+
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 1px 4px 1px 8px;
-  border: 1px solid var(--color-border);
+  gap: 4px;
+  padding: 1px 4px 1px 1px;
+  border: 1px solid color-mix(in srgb, var(--chip) 40%, transparent);
   border-radius: 999px;
+  background: color-mix(in srgb, var(--chip) 14%, var(--color-surface));
   font-size: 11px;
-  color: var(--color-text-secondary);
+  font-weight: 500;
+  color: color-mix(in srgb, var(--chip) 55%, var(--color-text));
+  --avatar-fill: color-mix(in srgb, var(--chip) 26%, var(--color-surface));
+  --avatar-ink: color-mix(in srgb, var(--chip) 55%, var(--color-text));
 }
 
 .reviewers__chip[data-state='approved'] {
-  border-color: var(--color-success-border);
-  color: var(--color-success);
+  --chip: var(--pr-approved);
 }
 
 .reviewers__chip[data-state='changes_requested'] {
-  border-color: var(--color-warning-border);
-  color: var(--color-warning);
+  --chip: var(--pr-changes);
+}
+
+/* Sem o ×, a pílula fecha com o mesmo respiro do lado da foto. */
+.reviewers__name:last-child {
+  padding-right: 4px;
 }
 
 .reviewers__chip[data-confirm] {

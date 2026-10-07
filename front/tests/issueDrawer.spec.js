@@ -401,6 +401,29 @@ describe('IssueDrawer', () => {
     wrapper.unmount()
   })
 
+  it('quem revisa aparece em fotos no badge ao lado do SP, não mais abaixo do título', async () => {
+    const people = [
+      { name: 'Ana Souza', state: 'approved', account_id: 'acc-ana', avatar_url: 'https://avatar-management.example/AS-2.png' },
+      { name: 'Bruno Lima', state: 'pending', account_id: 'acc-bruno', avatar_url: null },
+    ]
+    const withReview = {
+      ...ISSUE,
+      pull_requests: {
+        ...ISSUE.pull_requests, status: 'pr_aberta', pr_count: 1, open_pr_count: 1,
+        review: { approvals: 1, reviewers: 2, changes_requested: 0, required: 2, people },
+      },
+    }
+    fetch.mockImplementation(async (url) => (url === '/api/issues/WAI-124' ? json(200, withReview) : json(200, CHANGELOG)))
+    const wrapper = await mountDrawer()
+
+    const badge = wrapper.find('.drawer__bar .pr-badge')
+    expect(badge.findAll('.faces__face').map((f) => f.attributes('data-state'))).toEqual(['approved', 'pending'])
+    expect(badge.find('.points-chip').exists()).toBe(false)
+    expect(badge.element.previousElementSibling.classList.contains('points-chip')).toBe(true)
+    expect(wrapper.find('.drawer__title + .faces').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('aba PRs mostra repositório, aprovações, pedido de ajuste, revisores e branch', async () => {
     const withPrs = {
       ...ISSUE,

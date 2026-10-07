@@ -29,8 +29,15 @@ export function prStatusMeta(status) {
   return PR_STATUS[status] ?? PR_STATUS.sem_pr
 }
 
-/** Status em que a review está andando: o badge mostra a barra e o "N/X". */
+/** Status em que a review está andando: o badge mostra a foto de cada revisor e o "N/X". */
 export const REVIEW_STATUSES = new Set(['ajustes_requisitados', 'pr_aberta', 'aprovada'])
+
+/** Estado de cada revisor (`review.people` do back), por extenso para o title. */
+export const REVIEW_PERSON_LABEL = {
+  approved: 'aprovou',
+  changes_requested: 'pediu ajustes',
+  pending: 'falta revisar',
+}
 
 /**
  * Regras de Configurações › Pull requests (`min_percent` do back). 0 é a de antes — basta

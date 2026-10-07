@@ -216,7 +216,7 @@ describe('reviewers do PR', () => {
     ],
   }
 
-  const chip = (wrapper, name) => wrapper.findAll('.reviewers__chip').find((c) => c.text().startsWith(name))
+  const chip = (wrapper, name) => wrapper.findAll('.reviewers__chip').find((c) => c.find('.reviewers__name').text() === name)
 
   it('tirar pede o segundo clique e avisa que a aprovação sai junto', async () => {
     routes['PUT /api/pull-requests/monitoria/412/reviewers'] = json({
@@ -237,7 +237,7 @@ describe('reviewers do PR', () => {
     await flushPromises()
     expect(calls).toEqual([{ method: 'PUT', url: '/api/pull-requests/monitoria/412/reviewers', body: { add: [], remove: ['acc-rafa'] } }])
     // A lista que o Bitbucket devolveu fica na tela até o espelho chegar.
-    expect(wrapper.findAll('.reviewers__chip').map((c) => c.text())).toEqual(['Ju'])
+    expect(wrapper.findAll('.reviewers__name').map((c) => c.text())).toEqual(['Ju'])
   })
 
   it('pôr escolhe entre os membros do workspace (sem quem já está e sem o próprio dev) e confirma', async () => {
@@ -266,6 +266,21 @@ describe('reviewers do PR', () => {
     await flushPromises()
     expect(calls.at(-1)).toEqual({ method: 'PUT', url: '/api/pull-requests/monitoria/412/reviewers', body: { add: ['acc-carla'], remove: [] } })
     expect(wrapper.find('.reviewers__picker').exists()).toBe(false)
+  })
+
+  it('cada revisor é uma pílula com a foto, pintada inteira com o estado', () => {
+    const photo = 'https://avatar-management.example/RF-2.png'
+    const wrapper = mount(PrReviewers, {
+      props: { pr: { ...PR, reviewers: [{ ...PR.reviewers[0], avatar_url: photo }, PR.reviewers[1]] } },
+    })
+
+    const [rafael, ju] = wrapper.findAll('.reviewers__chip')
+    expect(rafael.attributes('data-state')).toBe('approved')
+    expect(rafael.find('img').attributes('src')).toBe(photo)
+    expect(ju.attributes('data-state')).toBe('pending')
+    // Sem foto, as iniciais no lugar.
+    expect(ju.find('img').exists()).toBe(false)
+    expect(ju.find('.avatar--initials').text()).toBe('J')
   })
 
   it('o erro do Bitbucket aparece no PR, e PR fechado não edita', async () => {

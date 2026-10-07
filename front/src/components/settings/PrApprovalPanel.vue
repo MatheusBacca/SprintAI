@@ -38,6 +38,18 @@ const EXAMPLES = [
   { text: '3 revisores, 1 aprovou e 1 pediu ajuste', approvals: 1, reviewers: 3, changes: 1 },
 ]
 
+// Revisores de mentira para a prévia ter as fotos (as iniciais) como o badge de verdade.
+const NAMES = ['Ana Lima', 'Bruno Reis', 'Carla Dias']
+
+function people({ approvals, reviewers, changes }) {
+  return NAMES.slice(0, reviewers).map((name, index) => {
+    let state = 'pending'
+    if (index < approvals) state = 'approved'
+    else if (index < approvals + changes) state = 'changes_requested'
+    return { name, state, account_id: null, avatar_url: null }
+  })
+}
+
 const examples = computed(() =>
   EXAMPLES.map((example) => {
     const review = {
@@ -45,6 +57,7 @@ const examples = computed(() =>
       reviewers: example.reviewers,
       changes_requested: example.changes,
       required: required(example.reviewers),
+      people: people(example),
     }
     let status = 'pr_aberta'
     if (example.changes) status = 'ajustes_requisitados'

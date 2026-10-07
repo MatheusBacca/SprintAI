@@ -19,11 +19,20 @@ const BACKEND_STATUSES = [
   'substituida',
 ]
 
+const PEOPLE = ['Ana Lima', 'Bruno Reis', 'Carla Dias', 'Davi Melo']
+
+// O back manda quem revisa na ordem da barra antiga: aprovou, pediu ajuste, falta revisar.
 const review = (approvals, reviewers, changes = 0, required = 1) => ({
   approvals,
   reviewers,
   changes_requested: changes,
   required,
+  people: PEOPLE.slice(0, reviewers).map((name, i) => ({
+    name,
+    state: i < approvals ? 'approved' : i < approvals + changes ? 'changes_requested' : 'pending',
+    account_id: `acc-${i}`,
+    avatar_url: null,
+  })),
 })
 
 describe('constantes de status de PR', () => {
@@ -63,40 +72,64 @@ describe('PrStatusBadge', () => {
     expect(wrapper.attributes('title')).toBe('PR aberta · build falhando')
   })
 
-  it('com a review andando mostra só N/X, à direita da barra preenchida na proporção', () => {
+  it('com a review andando mostra só as fotos de quem revisa, no lugar da barra e do N/X', () => {
     // Caso real WAI-8791 com a regra "Todos": um dos dois revisores aprovou.
-    const wrapper = mount(PrStatusBadge, { props: { status: 'pr_aberta', review: review(1, 2, 0, 2) } })
+    const photo = 'https://avatar-management.example/AL-2.png'
+    const r = review(1, 2, 0, 2)
+    r.people[0].avatar_url = photo
+    const wrapper = mount(PrStatusBadge, { props: { status: 'pr_aberta', review: r } })
 
-    expect(wrapper.text()).toBe('1/2')
     expect(wrapper.classes()).toContain('pr-badge--review')
-    // O texto vem depois da barra, e não dentro dela — por cima das listras não se lia.
-    const bar = wrapper.find('.pr-badge__bar')
-    expect(bar.text()).toBe('')
-    expect(bar.element.nextElementSibling.textContent).toBe('1/2')
-    const style = wrapper.attributes('style')
-    expect(style).toContain('--review-approved: 50%')
-    expect(style).toContain('--review-changes: 0%')
-    expect(wrapper.attributes('title')).toBe('PR aberta · 1/2 aprovações · falta 1 aprovação')
+    expect(wrapper.find('.pr-badge__bar').exists()).toBe(false)
+    const faces = wrapper.findAll('.faces__face')
+    expect(faces.map((f) => f.attributes('data-state'))).toEqual(['approved', 'pending'])
+    expect(faces.map((f) => f.attributes('title'))).toEqual(['Ana Lima — aprovou', 'Bruno Reis — falta revisar'])
+    expect(faces[0].find('img').attributes()).toMatchObject({ src: photo, referrerpolicy: 'no-referrer' })
+    // Sem foto, as iniciais — e nada de contagem à vista.
+    expect(faces[1].find('img').exists()).toBe(false)
+    expect(wrapper.text()).toBe('BR')
+    expect(wrapper.attributes('title')).toBe(
+      'PR aberta · 1/2 aprovações · Ana Lima aprovou, Bruno Reis falta revisar · falta 1 aprovação',
+    )
   })
 
-  it('pinta o ajuste pedido depois das aprovações e conta no title', () => {
+  it('foto que não carrega cai para as iniciais, e só https vira src', async () => {
+    const r = review(1, 2)
+    r.people[0].avatar_url = 'https://avatar-management.example/x.png'
+    r.people[1].avatar_url = 'javascript:alert(1)'
+    const wrapper = mount(PrStatusBadge, { props: { status: 'aprovada', review: r } })
+
+    expect(wrapper.findAll('img')).toHaveLength(1)
+    await wrapper.find('img').trigger('error')
+    expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.text()).toBe('ALBR')
+  })
+
+  it('pinta quem pediu ajuste e conta no title', () => {
     const wrapper = mount(PrStatusBadge, {
       props: { status: 'ajustes_requisitados', review: review(1, 4, 2, 2) },
     })
 
-    const style = wrapper.attributes('style')
-    expect(style).toContain('--review-approved: 25%')
-    expect(style).toContain('--review-changes: 50%')
-    expect(wrapper.attributes('title')).toBe(
-      'Ajustes requisitados · 1/4 aprovações · 2 pedidos de ajuste · falta 1 aprovação',
-    )
+    expect(wrapper.findAll('.faces__face').map((f) => f.attributes('data-state'))).toEqual([
+      'approved', 'changes_requested', 'changes_requested', 'pending',
+    ])
+    expect(wrapper.attributes('title')).toContain('1/4 aprovações')
+    expect(wrapper.attributes('title')).toContain('2 pedidos de ajuste · falta 1 aprovação')
   })
 
   it('aprovada pela regra não diz que falta aprovação', () => {
     const wrapper = mount(PrStatusBadge, { props: { status: 'aprovada', review: review(1, 2, 0, 1) } })
 
+    expect(wrapper.attributes('title')).toBe('Aprovada · 1/2 aprovações · Ana Lima aprovou, Bruno Reis falta revisar')
+  })
+
+  it('review sem a lista de quem revisa (resposta antiga) fica com o N/X', () => {
+    const { people, ...semFotos } = review(1, 2)
+    expect(people).toHaveLength(2)
+    const wrapper = mount(PrStatusBadge, { props: { status: 'pr_aberta', review: semFotos } })
+
     expect(wrapper.text()).toBe('1/2')
-    expect(wrapper.attributes('title')).toBe('Aprovada · 1/2 aprovações')
+    expect(wrapper.find('.faces').exists()).toBe(false)
   })
 
   it.each(['mergeada', 'rascunho', 'sem_pr'])('fora da review (%s) o badge segue só com o rótulo', (status) => {
@@ -104,14 +137,14 @@ describe('PrStatusBadge', () => {
 
     expect(wrapper.text()).toBe(PR_STATUS[status].label)
     expect(wrapper.classes()).not.toContain('pr-badge--review')
-    expect(wrapper.find('.pr-badge__bar').exists()).toBe(false)
+    expect(wrapper.find('.faces').exists()).toBe(false)
   })
 
-  it('sem revisor não há barra', () => {
+  it('sem revisor não há fotos', () => {
     const wrapper = mount(PrStatusBadge, { props: { status: 'pr_aberta', review: review(0, 0) } })
 
     expect(wrapper.text()).toBe('PR aberta')
-    expect(wrapper.find('.pr-badge__bar').exists()).toBe(false)
+    expect(wrapper.find('.faces').exists()).toBe(false)
   })
 })
 
@@ -153,7 +186,13 @@ describe('PrApprovalPanel', () => {
     await wrapper.findAll('input[type="radio"]')[2].setValue()
     expect(wrapper.find('.segmented__option--on').text()).toBe('Todos')
     expect(statuses(wrapper)).toEqual(['pr_aberta', 'pr_aberta', 'ajustes_requisitados'])
-    expect(wrapper.findAll('.approval__examples .pr-badge').map((b) => b.text())).toEqual(['1/2', '2/3', '1/3'])
+    // A prévia tem as fotos (as iniciais de revisores de exemplo), pintadas como no badge real.
+    const states = wrapper.findAll('.approval__examples .pr-badge').map((b) => b.findAll('.faces__face').map((f) => f.attributes('data-state')))
+    expect(states).toEqual([
+      ['approved', 'pending'],
+      ['approved', 'approved', 'pending'],
+      ['approved', 'changes_requested', 'pending'],
+    ])
 
     await wrapper.findAll('input[type="radio"]')[1].setValue()
     expect(statuses(wrapper)).toEqual(['aprovada', 'aprovada', 'ajustes_requisitados'])
