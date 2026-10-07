@@ -209,9 +209,18 @@ O **Concluir** (`services/conclude_service.py`) é plano e execução. O plano j
 do repo (Configurações › Concluir, `app_setting.conclude`), os PRs abertos da tarefa no
 espelho, com os avisos, e o status de destino conferido contra as transições que o Jira
 oferece agora. A execução confere o pedido contra um plano novo, mergeia primeiro e só então
-move o Jira pela mesma `apply_transition` do painel de status. O espelho do PR não é escrito
+move o Jira pela mesma `apply_transition` do painel de status. Tarefa com vários PRs abertos
+conclui por partes (`conclude_settings.split_open_prs`): entram os aprovados em repo cuja
+receita mergeia, e o resto vai para `waiting` — com algum lá, o plano nem consulta o Jira
+(`held_statuses`) e a execução registra um passo `hold` no lugar da transição. Pedido que
+deixa de fora um merge do plano de agora é recusado (409): o PR foi aprovado depois que o
+plano abriu. O espelho do PR não é escrito
 à mão: o back chama o sync, que traz o PR mergeado (ou os reviewers novos) e grava o evento
 pelo caminho de sempre — gravar direto faria o sync não ver a mudança, e a história sumiria.
+O disparo é o `sync_after_write`, com gatilho próprio (`concluir`, `reviewers` — os mesmos
+do CHECK de `sync_run.trigger` e do `SyncTrigger`): a escrita já entrou, então sync que não
+dispara só vai para o log. Antes da 0013 o CHECK recusava esses gatilhos, e o reviewer posto
+com sucesso aparecia na tela como erro 500.
 
 Os membros do workspace (para escolher reviewer) ficam em memória por meia hora; não vão
 para o banco.

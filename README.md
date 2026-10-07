@@ -167,7 +167,9 @@ Regras que valem a pena saber:
 - A **etapa** de cada status é configurável em **Configurações › Progresso** (padrão: análise
   0 · desenvolvimento 0.4 · review 0.7 · testes 0.85 · concluído 1). A categoria do Jira só é
   usada para status que ninguém mapeou — ela mente para `DISPONIVEL PARA REVIEW` e
-  `DISPONIVEL PARA TESTES`, que chegam como `new`.
+  `DISPONIVEL PARA TESTES`, que chegam como `new`. A tabela lista os status das tarefas do
+  espelho, os que só aparecem no histórico de transições e os que têm etapa salva — um
+  "AJUSTE" sem ninguém em ajuste na semana continua lá, e o Salvar não apaga a etapa dele.
 - A barra de uma tarefa começa na **primeira transição para fora da análise** e termina
   quando ela chegou à etapa final. Como este workflow fecha as tarefas **sem resolução**
   (`resolutiondate` nunca vem preenchido), o fim sai da transição de status, com `updated_at`
@@ -225,7 +227,8 @@ com todo o histórico de PRs de uma vez. Rodar o sync de novo não duplica nada.
   cima, cada um centralizado sobre as suas tarefas, e **as tarefas sem pai entram na mesma
   linha das outras** em vez de numa caixa à parte. Quem diz de quem a tarefa é continua sendo
   a seta que desce do épico.
-- Cards com tipo, título, chave, SP, status do Jira e badge de PR; borda vermelha quando há bloqueador não concluído; seta vermelha "bloqueia" entre tarefas e seta âmbar "origina" da tarefa de onde um Ajuste nasceu ("is caused by").
+- Cards com tipo, chave, SP e o ícone de lembretes no cabeçalho, título, status do Jira e,
+  no rodapé, o badge de PR (com as fotos de quem revisa) e o Concluir; borda vermelha quando há bloqueador não concluído; seta vermelha "bloqueia" entre tarefas e seta âmbar "origina" da tarefa de onde um Ajuste nasceu ("is caused by").
 - **Ondas de implementação**: quando há bloqueio ou origem entre as tarefas do desenho, a
   linha única vira faixas separadas por um pontilhado — "Onda de implementação 1" são as
   tarefas sem antecessora, e cada tarefa desce para a onda seguinte à do seu bloqueador (ou
@@ -294,8 +297,9 @@ timeline da Home — três peças deixam de ser só rótulo:
   - O status atual é lido **na hora** do Jira. Se o espelho estiver atrás, o painel avisa.
 - **"N SP"**: abre o editor de Story Points — atalhos da régua (1, 2, 3, 5, 8, 13; duplo
   clique grava direto) ou um valor no campo (vírgula vale), Enter salva, **Remover** apaga.
-  Campo vazio não apaga nada. No painel da tarefa o chip aparece mesmo sem pontos
-  ("sem SP"), para dar SP a quem chegou sem.
+  Campo vazio não apaga nada. No card e no painel da tarefa o chip aparece mesmo sem pontos
+  ("– SP" no card, "sem SP" no painel), para dar SP a quem chegou sem — menos no card de pai
+  (épico, Enhancements), que mostra as filhas e não leva ponto.
 - **Badge de PR**: leva ao PR no Bitbucket. Com um PR é link direto; com vários, abre a lista
   (o PR que decide o status do card vem primeiro). Recusado e substituído só entram se forem
   tudo o que há; "Sem PR" e "Branch sem PR" continuam só rótulo.
@@ -305,22 +309,31 @@ timeline da Home — três peças deixam de ser só rótulo:
   PR aberto é mergeado, com a estratégia (merge commit, squash, fast-forward) e se fecha a
   branch de origem. Um repo pode ir direto a "Concluído"; outro, mergear e ir a "DISPONIVEL
   PARA TESTES".
-  - **Só em card apto:** a tarefa tem PR nesses repos, todo PR aberto está **aprovado pela
-    regra** de Configurações › Pull requests (rascunho e ajuste pedido ficam de fora; PR já
-    mergeado conta), e ela ainda não chegou a testes nem foi concluída (etapas de
-    Configurações › Progresso). O back confere de novo na hora de rodar: um card que deixou
-    de estar apto recusa, com o motivo.
+  - **Só em card apto:** a tarefa tem PR nesses repos, há o que fazer agora — algum PR aberto
+    **aprovado pela regra** de Configurações › Pull requests para mergear (rascunho e ajuste
+    pedido ficam de fora), ou nenhum PR aberto sobrando e só o Jira por andar (PR já mergeado
+    conta) —, e ela ainda não chegou a testes nem foi concluída (etapas de Configurações ›
+    Progresso). O back confere de novo na hora de rodar: um card que deixou de estar apto
+    recusa, com o motivo. No card, o botão pulsa com a sombra do card em desenvolvimento,
+    em escala de botão.
+  - **Vários PRs abertos, um Concluir por vez:** entram os PRs aprovados; os outros (sem
+    aprovação, ou abertos num repo sem receita) ficam listados no plano, e o passo do Jira
+    espera — ele anda no Concluir que deixa a tarefa sem PR aberto. PR aprovado num repo cuja
+    receita não mergeia conta como resolvido (a receita diz que o merge é de outra pessoa).
   - O clique abre o **plano**: cada PR que vai ser mergeado (branch → destino, estratégia) com
     os avisos — rascunho, aprovações abaixo da regra do SprintAI, ajuste pedido sem correção,
     build falhou — e o status de destino, conferido na hora contra as transições do Jira.
     Os avisos não barram: quem barra é o Bitbucket, pelas merge checks do repo.
   - **Nada roda antes do "Confirmar e concluir".** O merge vem primeiro; o Jira só anda se
-    todos os merges entraram. Repos da tarefa com status diferentes pedem a escolha no plano.
+    todos os merges entraram e não sobrou PR aberto da tarefa. Repos da tarefa com status diferentes pedem a escolha no plano.
   - Depois, o painel fica com o resultado de cada passo (o que falhou leva o link do PR) e o
     back chama o sync, que traz o PR mergeado ao espelho com o evento.
 - **Reviewers** (aba PRs do painel da tarefa): no PR aberto, **+ Reviewer** busca entre os
   membros do workspace do Bitbucket e pede "Adicionar Fulano?"; o **×** de um revisor
   designado vira "Tirar?" no primeiro clique — e avisa quando quem sai já tinha aprovado.
+  Cada revisor é uma pílula com a foto e o nome, pintada inteira com o estado (aprovou,
+  pediu ajustes, ainda não revisou). A foto é a do Bitbucket (só https, sem referrer); sem
+  ela, as iniciais.
 
 Depois que o Jira aceita, o espelho recebe o valor novo na hora e todas as telas e abas
 abertas recarregam (evento `issue.changed` no stream). A **história** da mudança — o
@@ -585,11 +598,14 @@ Regras em `back/services/pr_status.py` (funções puras, 100% de cobertura):
   Aprovada, nem com a regra já batida pelos outros. Trocar a regra não acende a bolinha de
   "teve atualização" nos cards que mudaram de etapa por causa dela.
 - **Badge com a review andando** (PR aberta, Aprovada ou Ajustes requisitados, com revisor): o
-  rótulo vira **"N/X"**, à direita de uma barra em listras diagonais — verde para quem aprovou,
-  amarelo para ajuste pedido e ainda sem correção, liso para quem falta revisar. O texto fica
-  fora da barra: por cima das listras ele ficava ruim de ler. O status segue na borda, no ícone
-  e no *title* ("1/2 aprovações", e quantas aprovações faltam). No
-  card do canvas, uma aprovação nova acende a bolinha mesmo sem mudar a etapa.
+  rótulo vira **a foto de cada revisor** (a do Bitbucket; sem ela, as iniciais), com o anel na
+  cor do estado — verde para quem aprovou, amarelo para ajuste pedido e ainda sem correção,
+  neutro para quem falta revisar —, na ordem aprovou → pediu ajuste → falta. As fotos tomaram
+  o lugar da barra e do "N/X"; o nome de cada um fica no *title* da foto. O status segue na
+  borda, no ícone e no *title* do badge ("1/2 aprovações", quem é quem e quantas aprovações
+  faltam). Vale para todo lugar que mostra o badge: card, painel da tarefa, Home, Semana,
+  Workspace e a prévia de Configurações › Pull requests. No card do canvas, uma aprovação nova
+  acende a bolinha mesmo sem mudar a etapa.
 - **Correção enviada devolve o PR a "PR aberta":** o Bitbucket mantém o *changes requested* do
   revisor até ele mexer de novo, então quem diz que a correção subiu é o histórico do espelho —
   commit registrado depois do último pedido de ajuste (`activity_event`). A aba PRs mostra
