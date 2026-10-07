@@ -19,6 +19,7 @@ from integrations import factory
 from integrations.errors import IntegrationError, IntegrationNotConfigured
 from realtime import bus
 from repositories import bitbucket_repo, jira_repo, settings_repo, sync_repo
+from schemas.sync_schemas import SyncTrigger
 from security.credential_store import CredentialStore, CredentialStoreError, get_credential_store
 from services.activity.recorder import ActivityRecorder
 from services.sync.bitbucket_sync import BitbucketSyncer
@@ -72,7 +73,9 @@ class SyncEngine:
 
     # --- Disparo ----------------------------------------------------------------------
 
-    async def _begin(self, trigger: str, pool: asyncpg.Pool | None) -> tuple[asyncpg.Pool, int]:
+    async def _begin(
+        self, trigger: SyncTrigger, pool: asyncpg.Pool | None
+    ) -> tuple[asyncpg.Pool, int]:
         pool = pool or await self._pool_provider()
         if self._lock.locked():
             raise SyncAlreadyRunning()
@@ -85,13 +88,15 @@ class SyncEngine:
         self.current_run_id = run_id
         return pool, run_id
 
-    async def trigger(self, trigger: str = "manual") -> int:
+    async def trigger(self, trigger: SyncTrigger = "manual") -> int:
         """Registra a execução e roda em segundo plano; devolve o id."""
         pool, run_id = await self._begin(trigger, None)
         self._task = asyncio.create_task(self._execute(pool, run_id))
         return run_id
 
-    async def run_once(self, trigger: str, *, pool: asyncpg.Pool | None = None) -> dict[str, Any]:
+    async def run_once(
+        self, trigger: SyncTrigger, *, pool: asyncpg.Pool | None = None
+    ) -> dict[str, Any]:
         pool, run_id = await self._begin(trigger, pool)
         return await self._execute(pool, run_id)
 
@@ -244,6 +249,24 @@ class SyncEngine:
             return True
         reference = last["finished_at"] or last["started_at"]
         return (datetime.now(UTC) - reference).total_seconds() >= interval_minutes * 60
+
+
+async def sync_after_write(engine: SyncEngine | None, trigger: SyncTrigger) -> None:
+    """Depois de uma escrita no Bitbucket, o espelho do PR é do sync: ele roda agora (em
+    segundo plano) e grava a mudança — e o evento — como sempre.
+
+    A escrita já entrou quando isto roda. Sync que não dispara (outro no meio do caminho, o
+    banco recusando o registro) não pode virar erro na tela: foi assim que um reviewer posto
+    com sucesso no Bitbucket aparecia como "500". O próximo sync pega.
+    """
+    if engine is None:
+        return
+    try:
+        await engine.trigger(trigger)
+    except SyncAlreadyRunning:
+        pass
+    except Exception:  # noqa: BLE001 — sync que falha ao disparar não desfaz a escrita
+        logger.exception("Sync depois da escrita (%s) não disparou", trigger)
 
 
 _engine: SyncEngine | None = None

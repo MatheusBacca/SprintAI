@@ -4,11 +4,14 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 RunStatus = Literal["running", "success", "partial", "failed"]
+# Os mesmos do CHECK de `sync_run.trigger` (migration 0013): o "Concluir" e a troca de
+# reviewers chamam o sync depois da escrita, cada um com o seu.
+SyncTrigger = Literal["manual", "scheduled", "concluir", "reviewers"]
 
 
 class SyncRunOut(BaseModel):
     id: int
-    trigger: Literal["manual", "scheduled"]
+    trigger: SyncTrigger
     status: RunStatus
     started_at: datetime
     finished_at: datetime | None = None

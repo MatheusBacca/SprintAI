@@ -1,8 +1,11 @@
 import asyncio
+from typing import get_args
 
 import pytest
 import respx
 
+from repositories import sync_repo
+from schemas.sync_schemas import SyncTrigger
 from services.sync.engine import SyncAlreadyRunning, SyncEngine, get_sync_engine, save_scope
 from services.sync.scope import SyncScope
 from tests.sync_fakes import SITE, FakeBitbucket, FakeIssue, FakeJira
@@ -161,6 +164,17 @@ async def test_sprints_do_escopo_com_contagem(sync_client, db_pool):
         ("Sprint 73 - Growth", 1),
         ("🚨BUGS-ANALISADOS", 2),
     ]
+
+
+async def test_banco_e_status_aceitam_todo_gatilho_do_sync(sync_client, db_pool):
+    # O CHECK de `sync_run.trigger` só tinha manual/scheduled: o sync depois de pôr um
+    # reviewer estourava no INSERT, com o reviewer já no Bitbucket.
+    for trigger in get_args(SyncTrigger):
+        run_id = await sync_repo.start_run(db_pool, trigger)
+        await sync_repo.finish_run(db_pool, run_id, status="success", stats={}, errors=[])
+        status = await sync_client.get("/api/sync/status")
+        assert status.status_code == 200, status.text
+        assert status.json()["last_run"]["trigger"] == trigger
 
 
 async def test_escopo_invalido_da_422(sync_client):
