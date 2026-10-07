@@ -7,6 +7,9 @@
    O merge vem primeiro; o Jira só anda se todos os merges entraram — mover a tarefa para
    testes com o PR ainda aberto contaria uma história que não aconteceu.
 
+Tarefa com mais de um PR aberto conclui por partes: entram os PRs aprovados, e os outros ficam
+em `waiting`. Enquanto sobrar um, o Jira não anda — ele se move no Concluir do último PR.
+
 O repo da tarefa sai dos PRs e branches dela no espelho e do `[repo]` do título. Os avisos
 não barram: quem barra é o Bitbucket, pelas merge checks do repo. O espelho do PR não é
 escrito à mão — o sync roda logo depois do merge e grava a mudança (e o evento) como sempre.
@@ -28,6 +31,7 @@ from schemas.conclude_schemas import (
     ConcludeResultOut,
     ConcludeStepOut,
     ConcludeTargetOut,
+    ConcludeWaitingOut,
 )
 from security.credential_store import CredentialStore
 from services import card_colors, conclude_settings, issue_actions, pr_status_service
@@ -36,7 +40,7 @@ from services.issue_actions import IssueActionConflict, IssueNotInMirror, requir
 from services.pr_status import FAILED_BUILDS
 from services.progress.service import load_stages
 from services.progress.stages import normalize
-from services.sync.engine import SyncAlreadyRunning, SyncEngine
+from services.sync.engine import SyncEngine, sync_after_write
 
 logger = get_logger(__name__)
 
@@ -85,35 +89,34 @@ async def plan(pool: asyncpg.Pool, store: CredentialStore, key: str) -> Conclude
         await load_stages(pool),
     )
 
-    merges: list[ConcludeMergeOut] = []
-    notes: list[str] = []
-    for slug in repos:
-        rule = rules[slug]
-        if not rule.merge:
-            continue
-        open_prs = [
-            pr
-            for repo in summary.repos
-            if repo.repo_slug == slug
-            for pr in repo.pull_requests
-            if pr.state == "OPEN"
-        ]
-        if not open_prs:
-            notes.append(f"{slug} mergeia no Concluir, mas a tarefa não tem PR aberto lá.")
-        for pr in open_prs:
-            merges.append(
-                ConcludeMergeOut(
-                    repo_slug=slug,
-                    pr_id=pr.id,
-                    title=pr.title,
-                    url=pr.url,
-                    source_branch=pr.source_branch,
-                    destination_branch=pr.destination_branch,
-                    strategy=rule.strategy,
-                    close_source_branch=rule.close_source_branch,
-                    warnings=merge_warnings(pr),
-                )
-            )
+    split = conclude_settings.split_open_prs(rules, repos, summary)
+    merges = [
+        ConcludeMergeOut(
+            repo_slug=pr.repo_slug,
+            pr_id=pr.id,
+            title=pr.title,
+            url=pr.url,
+            source_branch=pr.source_branch,
+            destination_branch=pr.destination_branch,
+            strategy=rules[pr.repo_slug].strategy,
+            close_source_branch=rules[pr.repo_slug].close_source_branch,
+            warnings=merge_warnings(pr),
+        )
+        for pr in split.merge_now
+    ]
+    waiting = [
+        ConcludeWaitingOut(
+            repo_slug=w.pr.repo_slug, pr_id=w.pr.id, title=w.pr.title, url=w.pr.url,
+            reason=w.reason,
+        )
+        for w in split.waiting
+    ]
+    with_open_pr = {pr.repo_slug for pr in split.merge_now} | {w.repo_slug for w in waiting}
+    notes = [
+        f"{slug} mergeia no Concluir, mas a tarefa não tem PR aberto lá."
+        for slug in repos
+        if rules[slug].merge and slug not in with_open_pr
+    ]
 
     wanted: list[str] = []
     for slug in repos:
@@ -123,7 +126,7 @@ async def plan(pool: asyncpg.Pool, store: CredentialStore, key: str) -> Conclude
 
     current = row["status"]
     targets: list[ConcludeTargetOut] = []
-    if wanted:
+    if wanted and not waiting:
         # Lido agora: as transições são relativas ao status de agora, e o espelho pode estar
         # alguns minutos atrás do Jira.
         async with await factory.jira_client(store) as jira:
@@ -140,6 +143,9 @@ async def plan(pool: asyncpg.Pool, store: CredentialStore, key: str) -> Conclude
         targets=targets,
         notes=notes,
         blocked=blocked,
+        waiting=waiting,
+        # Com PR aberto sobrando, o Jira nem é consultado: o passo dele fica para depois.
+        held_statuses=wanted if waiting else [],
     )
 
 
@@ -195,7 +201,17 @@ async def run(
             )
         chosen.append(merge)
 
-    target = _chosen_target(fresh, payload.jira_status)
+    # Com PR aberto sobrando, o Jira fica para o Concluir do último — mesmo que uma tela velha
+    # tenha pedido o status.
+    held = bool(fresh.waiting)
+    target = None if held else _chosen_target(fresh, payload.jira_status)
+    picked = {(m.repo_slug, m.pr_id) for m in chosen}
+    missing = [m for m in fresh.merges if (m.repo_slug, m.pr_id) not in picked]
+    if missing:
+        # Um PR foi aprovado depois que o plano abriu: o merge dele não foi visto pelo dev, e
+        # sem ele o Jira andaria com o PR aberto.
+        ids = ", ".join(f"#{m.pr_id} de {m.repo_slug}" for m in missing)
+        raise IssueActionConflict(f"O PR {ids} entrou no plano do Concluir — abra de novo.")
     steps: list[ConcludeStepOut] = []
     merged_any = False
 
@@ -208,7 +224,7 @@ async def run(
                     break
                 merged_any = True
         if merged_any:
-            await _resync(engine)
+            await sync_after_write(engine, "concluir")
         if not steps[-1].ok:
             return ConcludeResultOut(
                 issue_key=key,
@@ -219,6 +235,8 @@ async def run(
 
     status = fresh.status
     write_id = None
+    if held and fresh.held_statuses:
+        steps.append(_hold_step(fresh))
     if target is not None and not target.current:
         try:
             # O id da transição é relido lá dentro: entre o plano e o clique, alguém pode ter
@@ -260,6 +278,16 @@ async def run(
         write_id = _announce(key)
     return ConcludeResultOut(
         issue_key=key, done=True, steps=steps, status=status, write_id=write_id
+    )
+
+
+def _hold_step(fresh: ConcludePlanOut) -> ConcludeStepOut:
+    remaining = "; ".join(f"#{w.pr_id} em {w.repo_slug} ({w.reason})" for w in fresh.waiting)
+    return ConcludeStepOut(
+        kind="hold",
+        label=f"O Jira fica em {fresh.status} até o último PR",
+        ok=True,
+        message=f"Ainda aberto: {remaining}.",
     )
 
 
@@ -332,16 +360,3 @@ def _announce(key: str) -> str:
     write_id = uuid.uuid4().hex
     bus.publish(bus.ISSUE_CHANGED, {"key": key, "field": "pr", "write_id": write_id})
     return write_id
-
-
-async def _resync(engine: SyncEngine | None) -> None:
-    """O espelho do PR é do sync: ele roda agora (em segundo plano) e grava o merge — e o
-    evento — como sempre. Com um sync no meio do caminho, o próximo pega."""
-    if engine is None:
-        return
-    try:
-        await engine.trigger("concluir")
-    except SyncAlreadyRunning:
-        pass
-    except Exception:  # noqa: BLE001 — sync que falha ao disparar não desfaz o merge
-        logger.exception("Sync depois do Concluir não disparou")

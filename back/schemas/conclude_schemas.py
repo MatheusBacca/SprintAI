@@ -59,6 +59,17 @@ class ConcludeTargetOut(BaseModel):
     reason: str | None = None
 
 
+class ConcludeWaitingOut(BaseModel):
+    """PR aberto que este Concluir não mergeia — enquanto houver um, o Jira não anda."""
+
+    repo_slug: str
+    pr_id: int
+    title: str
+    url: str | None
+    # "sem a aprovação da regra", "com ajustes pedidos", "aprovado, mas o repo não tem receita"…
+    reason: str
+
+
 class ConcludePlanOut(BaseModel):
     issue_key: str
     # Status atual, lido agora no Jira.
@@ -70,6 +81,10 @@ class ConcludePlanOut(BaseModel):
     targets: list[ConcludeTargetOut]
     # Repo que mergeia sem PR aberto da tarefa, e afins.
     notes: list[str]
+    # Tarefa com mais de um PR: os abertos que ficam para depois. Com algum, `targets` vem
+    # vazio e o status de destino vai em `held_statuses` — o Jira anda no Concluir do último.
+    waiting: list[ConcludeWaitingOut] = []
+    held_statuses: list[str] = []
     # Por que o card não está apto (PR sem a aprovação da regra, tarefa já em testes...). Com
     # ele, a execução recusa.
     blocked: str | None = None
@@ -88,7 +103,8 @@ class ConcludeIn(BaseModel):
 
 
 class ConcludeStepOut(BaseModel):
-    kind: Literal["merge", "transition"]
+    # `hold`: o Jira ficou onde estava porque ainda há PR aberto da tarefa.
+    kind: Literal["merge", "transition", "hold"]
     label: str
     ok: bool
     message: str | None = None
@@ -133,6 +149,7 @@ class PrReviewerOut(BaseModel):
     name: str | None
     approved: bool
     state: str | None
+    avatar_url: str | None = None
 
 
 class PrReviewersOut(BaseModel):

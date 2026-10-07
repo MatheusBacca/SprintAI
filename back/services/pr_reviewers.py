@@ -30,7 +30,8 @@ from schemas.conclude_schemas import (
 from security.credential_store import CredentialStore
 from services.issue_actions import IssueActionConflict
 from services.progress.stages import normalize
-from services.sync.engine import SyncAlreadyRunning, SyncEngine
+from services.sync.engine import SyncEngine, sync_after_write
+from services.sync.mappers import bitbucket_avatar
 
 MEMBERS_TTL_SECONDS = 30 * 60
 
@@ -107,6 +108,7 @@ def reviewers_of(pr: dict[str, Any]) -> list[PrReviewerOut]:
                 name=user.get("display_name") or user.get("nickname"),
                 approved=bool(participant.get("approved")),
                 state=participant.get("state"),
+                avatar_url=bitbucket_avatar(user),
             )
         )
     return out
@@ -162,11 +164,7 @@ async def update(
                 400,
             ) from exc
 
-    if engine is not None:
-        try:
-            await engine.trigger("reviewers")
-        except SyncAlreadyRunning:
-            pass
+    await sync_after_write(engine, "reviewers")
     return PrReviewersOut(repo_slug=repo_slug, pr_id=pr_id, reviewers=reviewers_of(updated))
 
 

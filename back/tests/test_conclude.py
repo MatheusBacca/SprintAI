@@ -383,6 +383,11 @@ async def test_concluir_confere_o_pedido_contra_o_plano(db_app, client, seeded, 
     assert "escolha" in response.json()["detail"]
     response = await client.post("/api/issues/WAI-124/conclude", json={"jira_status": "Cruzeiro"})
     assert response.status_code == 409
+    # Pedido sem o merge que o plano de agora traz: o plano mudou, o dev abre de novo.
+    response = await client.post("/api/issues/WAI-124/conclude", json={"jira_status": "Concluído"})
+    assert response.status_code == 409
+    assert "#412 de monitoria" in response.json()["detail"]
+    assert engine.triggers == []
 
 
 @respx.mock
@@ -542,7 +547,155 @@ async def test_reviewers_so_em_pr_aberto_do_espelho(db_app, client, seeded, engi
     assert engine.triggers == []
 
 
-async def test_reviewer_do_espelho_leva_o_account_id(db_app, client, seeded):
+async def test_reviewer_do_espelho_leva_o_account_id_e_a_foto(db_app, client, seeded):
+    photo = "https://avatar-management.example/RS-2.png"
+    await _set_participants(seeded, [{**APPROVED, "avatar_url": photo}])
     detail = (await client.get("/api/issues/WAI-124")).json()
     pr = detail["pull_requests"]["repos"][0]["pull_requests"][0]
     assert pr["reviewers"][0]["account_id"] == "acc-rafa"
+    assert pr["reviewers"][0]["avatar_url"] == photo
+
+
+# --- Vários PRs abertos: um de cada vez, o Jira no último ----------------------------------------
+
+
+async def _second_pr(pool, *, approved, repo="monitoria", pr_id=413):
+    participants = [APPROVED] if approved else [{**APPROVED, "approved": False, "state": None}]
+    await bitbucket_repo.upsert_pull_requests(pool, [_pr(repo, pr_id, participants=participants)])
+
+
+@respx.mock
+async def test_pr_sem_aprovacao_ao_lado_de_um_aprovado_nao_barra_e_segura_o_jira(
+    db_app, client, seeded, engine
+):
+    jira = respx.get(f"{SITE}/rest/api/3/issue/WAI-124/transitions")
+    move = respx.post(f"{SITE}/rest/api/3/issue/WAI-124/transitions")
+    respx.post(f"{BB}/monitoria/pullrequests/412/merge").mock(
+        return_value=httpx.Response(200, json={"id": 412, "state": "MERGED"})
+    )
+    await _second_pr(seeded, approved=False)
+    await _rules(seeded, monitoria={"jira_status": "DISPONIVEL PARA TESTES", "merge": True})
+
+    assert (await client.get("/api/issues/WAI-124")).json()["conclude"] is True
+    plan = (await client.get("/api/issues/WAI-124/conclude")).json()
+    assert plan["blocked"] is None
+    assert [m["pr_id"] for m in plan["merges"]] == [412]
+    assert [(w["pr_id"], w["reason"]) for w in plan["waiting"]] == [(413, "sem a aprovação da regra")]
+    # Com PR sobrando, o passo do Jira fica para depois — nem se consulta o Jira.
+    assert plan["targets"] == []
+    assert plan["held_statuses"] == ["DISPONIVEL PARA TESTES"]
+    assert not jira.called
+
+    # Uma tela velha pedindo o status também não move: o Jira espera o último PR.
+    body = (
+        await client.post(
+            "/api/issues/WAI-124/conclude",
+            json={"jira_status": "DISPONIVEL PARA TESTES",
+                  "merges": [{"repo_slug": "monitoria", "pr_id": 412}]},
+        )
+    ).json()
+    assert body["done"] is True
+    assert [(s["kind"], s["ok"]) for s in body["steps"]] == [("merge", True), ("hold", True)]
+    assert "#413 em monitoria" in body["steps"][1]["message"]
+    assert not move.called
+    assert engine.triggers == ["concluir"]
+    assert await seeded.fetchval("SELECT status FROM jira_issue WHERE key = 'WAI-124'") == (
+        "Em Review"
+    )
+
+
+@respx.mock
+async def test_concluir_do_ultimo_pr_move_o_jira(db_app, client, seeded, engine):
+    _mock_jira()
+    respx.post(f"{BB}/monitoria/pullrequests/413/merge").mock(
+        return_value=httpx.Response(200, json={"id": 413, "state": "MERGED"})
+    )
+    move = respx.post(f"{SITE}/rest/api/3/issue/WAI-124/transitions").mock(
+        return_value=httpx.Response(204)
+    )
+    # O primeiro PR já entrou num Concluir anterior; o segundo foi aprovado depois.
+    await seeded.execute("UPDATE bb_pull_request SET state = 'MERGED' WHERE id = 412")
+    await _second_pr(seeded, approved=True)
+    await _rules(seeded, monitoria={"jira_status": "DISPONIVEL PARA TESTES", "merge": True})
+
+    plan = (await client.get("/api/issues/WAI-124/conclude")).json()
+    assert [m["pr_id"] for m in plan["merges"]] == [413]
+    assert plan["waiting"] == []
+    assert [t["status"] for t in plan["targets"]] == ["DISPONIVEL PARA TESTES"]
+
+    body = (
+        await client.post(
+            "/api/issues/WAI-124/conclude",
+            json={"jira_status": "DISPONIVEL PARA TESTES",
+                  "merges": [{"repo_slug": "monitoria", "pr_id": 413}]},
+        )
+    ).json()
+    assert [s["kind"] for s in body["steps"]] == ["merge", "transition"]
+    assert move.called
+
+
+@respx.mock
+async def test_pr_aberto_em_repo_sem_receita_tambem_segura_o_jira(db_app, client, seeded, engine):
+    respx.post(f"{BB}/monitoria/pullrequests/412/merge").mock(
+        return_value=httpx.Response(200, json={"id": 412, "state": "MERGED"})
+    )
+    await _second_pr(seeded, approved=True, repo="qualificai", pr_id=9)
+    await _rules(seeded, monitoria={"jira_status": "DISPONIVEL PARA TESTES", "merge": True})
+
+    plan = (await client.get("/api/issues/WAI-124/conclude")).json()
+    assert [m["pr_id"] for m in plan["merges"]] == [412]
+    assert [w["reason"] for w in plan["waiting"]] == [
+        "aprovado, mas qualificai não tem receita no Concluir"
+    ]
+
+    # Depois do merge, sobra só o PR que o Concluir não mergeia: nada a fazer, o card sai.
+    await seeded.execute("UPDATE bb_pull_request SET state = 'MERGED' WHERE id = 412")
+    assert (await client.get("/api/issues/WAI-124")).json()["conclude"] is False
+    plan = (await client.get("/api/issues/WAI-124/conclude")).json()
+    assert "#9 em qualificai" in plan["blocked"]
+
+
+@respx.mock
+async def test_receita_sem_merge_com_pr_aprovado_nao_segura_o_jira(db_app, client, seeded, engine):
+    _mock_jira(targets=("DISPONIVEL PARA TESTES", "Concluído"))
+    await _second_pr(seeded, approved=True, repo="qualificai", pr_id=9)
+    await _rules(
+        seeded,
+        monitoria={"jira_status": "DISPONIVEL PARA TESTES", "merge": True},
+        qualificai={"jira_status": "Concluído"},
+    )
+    plan = (await client.get("/api/issues/WAI-124/conclude")).json()
+    assert plan["waiting"] == []
+    assert [t["status"] for t in plan["targets"]] == ["DISPONIVEL PARA TESTES", "Concluído"]
+
+
+class BrokenEngine:
+    """O registro do sync recusado (era o CHECK de `sync_run.trigger`)."""
+
+    async def trigger(self, trigger: str = "manual") -> int:
+        raise RuntimeError("sync_run_trigger_check")
+
+
+@respx.mock
+async def test_reviewer_posto_no_bitbucket_nao_vira_500_se_o_sync_nao_dispara(
+    db_app, client, seeded
+):
+    db_app.dependency_overrides[get_sync_engine] = BrokenEngine
+    respx.get("https://api.bitbucket.org/2.0/workspaces/weonrepo/members").mock(
+        return_value=httpx.Response(200, json={"values": []})
+    )
+    respx.get(f"{BB}/monitoria/pullrequests/412").mock(
+        return_value=httpx.Response(200, json={"id": 412, "state": "OPEN", "title": "x"})
+    )
+    photo = "https://avatar-management.example/RS-2.png"
+    respx.put(f"{BB}/monitoria/pullrequests/412").mock(
+        return_value=httpx.Response(
+            200,
+            json={"id": 412, "reviewers": [
+                {**_user("{c}", "acc-carla", "Carla"), "links": {"avatar": {"href": photo}}}
+            ]},
+        )
+    )
+    response = await client.put("/api/pull-requests/monitoria/412/reviewers", json={"add": ["acc-carla"]})
+    assert response.status_code == 200, response.text
+    assert response.json()["reviewers"][0]["avatar_url"] == photo

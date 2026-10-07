@@ -10,7 +10,12 @@ dado do espelho. O que vem de lá é validado na leitura — um valor estranho v
 nunca um merge com estratégia inventada.
 
 Ter receita não basta para o botão aparecer: o card precisa estar **apto** (`blocked_reason`)
-— PR aprovado pela regra de Configurações › Pull requests e a tarefa ainda antes de testes.
+— algum PR aprovado pela regra de Configurações › Pull requests para mergear (ou só o Jira
+faltando) e a tarefa ainda antes de testes.
+
+Tarefa com vários PRs abertos conclui um PR de cada vez: o Concluir mergeia os aprovados e o
+Jira só anda no Concluir que deixa a tarefa sem PR aberto (`split_open_prs`). Mover para
+testes com um PR ainda aberto contaria uma história que não aconteceu.
 """
 
 from dataclasses import dataclass
@@ -20,7 +25,7 @@ import asyncpg
 
 from repositories import settings_repo
 from services import card_colors
-from services.pr_status import IssuePrSummary, PrStatus
+from services.pr_status import IssuePrSummary, PrStatus, PullRequestLink
 from services.progress.service import load_stages
 from services.progress.stages import TESTS, ProgressStages
 
@@ -117,6 +122,56 @@ class ConcludeTask:
     status_category: str | None
 
 
+@dataclass(frozen=True)
+class WaitingPr:
+    """PR aberto da tarefa que o Concluir de agora não resolve — e que segura o Jira."""
+
+    pr: PullRequestLink
+    reason: str
+
+
+@dataclass(frozen=True)
+class ConcludeSplit:
+    # Abertos, aprovados pela regra, em repo cuja receita mergeia: entram neste Concluir.
+    merge_now: list[PullRequestLink]
+    # O resto dos abertos: enquanto houver um, o Jira não anda.
+    waiting: list[WaitingPr]
+
+
+WAITING_REASONS = {
+    PrStatus.RASCUNHO: "em rascunho",
+    PrStatus.AJUSTES_REQUISITADOS: "com ajustes pedidos",
+}
+
+
+def split_open_prs(
+    rules: dict[str, RepoConclusion], repos: list[str], summary: IssuePrSummary | None
+) -> ConcludeSplit:
+    """Os PRs abertos da tarefa — de todos os repos dela, não só os com receita: o Jira anda
+    com o último PR, e um PR aberto num repo sem receita também é trabalho por entrar.
+
+    Aprovado em repo cuja receita não mergeia conta como resolvido: a receita diz que o merge é
+    de outra pessoa, e o Jira anda com ele aberto — como sempre foi.
+    """
+    merge_now: list[PullRequestLink] = []
+    waiting: list[WaitingPr] = []
+    for repo in summary.repos if summary else []:
+        rule = rules.get(repo.repo_slug) if repo.repo_slug in repos else None
+        for pr in repo.pull_requests:
+            if pr.state != "OPEN":
+                continue
+            if pr.status == PrStatus.APROVADA and rule is not None:
+                if rule.merge:
+                    merge_now.append(pr)
+                continue
+            if pr.status == PrStatus.APROVADA:
+                reason = f"aprovado, mas {repo.repo_slug} não tem receita no Concluir"
+            else:
+                reason = WAITING_REASONS.get(pr.status, "sem a aprovação da regra")
+            waiting.append(WaitingPr(pr, reason))
+    return ConcludeSplit(merge_now, waiting)
+
+
 def blocked_reason(
     rules: dict[str, RepoConclusion],
     task: ConcludeTask,
@@ -130,9 +185,11 @@ def blocked_reason(
     - algum repo da tarefa tem receita;
     - a tarefa ainda não chegou a testes nem foi concluída (etapas de Configurações ›
       Progresso; sem a etapa de testes no mapa, vale só a categoria "done" do Jira);
-    - ela tem PR nesses repos, e todo PR aberto está **aprovado pela regra** de Configurações ›
-      Pull requests — o que já deixa de fora rascunho e ajuste pedido. PR já mergeado conta:
-      falta só o Jira andar.
+    - ela tem PR nesses repos, e há o que fazer agora: algum PR aberto **aprovado pela
+      regra** de Configurações › Pull requests para mergear (rascunho e ajuste pedido ficam
+      de fora), ou nenhum PR aberto segurando o Jira — PR já mergeado conta: falta só o Jira
+      andar. PR sem aprovação ao lado de um aprovado não barra: o aprovado entra, e o Jira
+      espera o último.
     """
     repos = concludable(rules, task_repos(summary, title_repos))
     if not repos:
@@ -152,13 +209,17 @@ def blocked_reason(
     ]
     if not prs:
         return "A tarefa não tem PR nos repos do Concluir."
-    pending = [pr for pr in prs if pr.state == "OPEN" and pr.status != PrStatus.APROVADA]
+    split = split_open_prs(rules, repos, summary)
+    if split.merge_now or not split.waiting:
+        return None
+    pending = [w.pr for w in split.waiting if w.pr.status != PrStatus.APROVADA]
     if pending:
         ids = ", ".join(f"#{pr.id}" for pr in pending)
         return (
             f"PR {ids} ainda não está aprovado pela regra de Configurações › Pull requests."
         )
-    return None
+    ids = ", ".join(f"#{w.pr.id} em {w.pr.repo_slug}" for w in split.waiting)
+    return f"PR {ids} ainda está aberto sem receita de merge — o Jira anda com o último PR."
 
 
 async def with_conclusion(
