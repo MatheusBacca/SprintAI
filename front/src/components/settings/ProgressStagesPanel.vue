@@ -9,6 +9,9 @@ import { useProgressStore } from '@/stores/progress'
  * A categoria do Jira não serve para este workflow: `DISPONIVEL PARA REVIEW` e
  * `DISPONIVEL PARA TESTES` chegam como `new` e contariam como "nem começou". Aqui o dev
  * ordena as etapas, dá peso a cada uma e diz em qual etapa cai cada status do espelho.
+ *
+ * A tabela vem do back com todo status que tem etapa salva, mesmo sem tarefa nele agora: o
+ * Salvar manda o mapa inteiro, e o status que não estava na tela perdia a etapa.
  */
 const store = useProgressStore()
 
@@ -124,7 +127,8 @@ async function save() {
         <tbody>
           <tr v-for="status in store.statuses" :key="status.status">
             <td class="statuses__name">{{ status.status }}</td>
-            <td><span class="statuses__category" :data-category="status.status_category">{{ status.status_category }}</span></td>
+            <!-- Sem categoria: o status só existe no mapa salvo, sem tarefa nem transição no espelho. -->
+            <td><span class="statuses__category" :data-category="status.status_category">{{ status.status_category ?? '—' }}</span></td>
             <td>{{ status.issue_count }}</td>
             <td>
               <select v-model="statuses[status.status]" class="field__input" :aria-label="`Etapa de ${status.status}`">
