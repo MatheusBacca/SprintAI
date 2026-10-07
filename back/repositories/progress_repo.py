@@ -20,7 +20,12 @@ TIMELINE_COLUMNS = """
 
 
 async def distinct_statuses(conn: Executor) -> list[dict[str, Any]]:
-    """Status que existem no espelho — a tela de Configurações ordena e dá peso a eles."""
+    """Status que existem no espelho — a tela de Configurações ordena e dá peso a eles.
+
+    Primeiro os das tarefas de agora, com a contagem; depois os que só aparecem no histórico
+    de transições (`issue_count` 0). Sem o histórico, um status que nenhuma tarefa ocupa nesta
+    semana (um "AJUSTE" sem ninguém em ajuste) sumia da tela — e com ele a etapa dele.
+    """
     rows = await conn.fetch(
         """
         SELECT status, status_category, count(*)::int AS issue_count
@@ -29,7 +34,27 @@ async def distinct_statuses(conn: Executor) -> list[dict[str, Any]]:
         ORDER BY count(*) DESC, status
         """
     )
-    return [dict(r) for r in rows]
+    found = [dict(r) for r in rows]
+    seen = {r["status"] for r in found}
+    history = await conn.fetch(
+        """
+        SELECT status, max(category) AS status_category
+        FROM (
+            SELECT to_status AS status, to_category AS category FROM jira_status_transition
+            UNION ALL
+            SELECT from_status, from_category FROM jira_status_transition
+            WHERE from_status IS NOT NULL
+        ) t
+        GROUP BY status
+        ORDER BY status
+        """
+    )
+    found += [
+        {"status": r["status"], "status_category": r["status_category"], "issue_count": 0}
+        for r in history
+        if r["status"] not in seen
+    ]
+    return found
 
 
 async def sprint_issues(

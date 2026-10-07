@@ -7,7 +7,7 @@ from database.pool import get_pool
 from repositories import progress_repo
 from schemas.progress_schemas import ProgressStagesIn, ProgressStagesOut, StageOut, StatusStageOut
 from services import progress
-from services.progress.stages import ProgressStages, Stage
+from services.progress.stages import ProgressStages, Stage, normalize
 
 router = APIRouter(tags=["progress"])
 
@@ -16,6 +16,14 @@ Pool = Annotated[asyncpg.Pool, Depends(get_pool)]
 
 async def _payload(pool: asyncpg.Pool, stages: ProgressStages) -> ProgressStagesOut:
     rows = await progress_repo.distinct_statuses(pool)
+    # Status com etapa salva fica na lista mesmo sem tarefa nem histórico no espelho: a tela
+    # manda o mapa inteiro de volta ao salvar, e o que não estava nela era apagado.
+    listed = {normalize(row["status"]) for row in rows}
+    rows += [
+        {"status": status, "status_category": None, "issue_count": 0}
+        for status in stages.statuses
+        if normalize(status) not in listed
+    ]
     return ProgressStagesOut(
         stages=[StageOut(**vars(s)) for s in stages.stages],
         statuses=[

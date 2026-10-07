@@ -25,7 +25,9 @@ class StageRefOut(BaseModel):
 
 class StatusStageOut(BaseModel):
     status: str
-    status_category: str
+    # Nulo para o status que só existe no mapa salvo (nenhuma tarefa nem transição no
+    # espelho para dizer a categoria).
+    status_category: str | None
     issue_count: int
     stage_id: str | None
 

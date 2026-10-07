@@ -190,3 +190,39 @@ async def test_salvar_pesos_muda_o_que_a_proxima_leitura_devolve(api):
     assert by_status["Status exótico"] == "feito"
     # A etapa "review" sumiu: o status que apontava para ela volta para a categoria.
     assert by_status["DISPONIVEL PARA REVIEW"] is None
+
+
+async def test_status_com_etapa_salva_fica_na_lista_mesmo_sem_tarefa(api, db_pool):
+    # Semana sem ninguém em "AJUSTE": a tela listava só os status das tarefas, mandava o mapa
+    # sem ele ao salvar — e a etapa dele sumia.
+    payload = {
+        "stages": [
+            {"id": "analise", "label": "Análise", "order": 0, "weight": 0.0, "color": "#94a3b8"},
+            {"id": "dev", "label": "Dev", "order": 1, "weight": 0.5, "color": "#2f7cf6"},
+        ],
+        "statuses": {"AJUSTE": "dev", "Em Desenvolvimento": "dev"},
+    }
+    assert (await api.put("/api/progress/stages", json=payload)).status_code == 200
+
+    statuses = (await api.get("/api/progress/stages")).json()["statuses"]
+    ajuste = next(s for s in statuses if s["status"] == "AJUSTE")
+    assert ajuste == {"status": "AJUSTE", "status_category": None, "issue_count": 0, "stage_id": "dev"}
+
+
+async def test_status_do_historico_de_transicoes_entra_na_lista(api, db_pool):
+    await db_pool.execute(
+        """
+        INSERT INTO jira_status_transition (changelog_id, issue_key, from_status, to_status,
+            from_category, to_category, changed_at)
+        VALUES ('1:status', 'WAI-1', 'AJUSTE', 'Em Desenvolvimento', 'indeterminate',
+            'indeterminate', now())
+        """
+    )
+    statuses = (await api.get("/api/progress/stages")).json()["statuses"]
+    by_status = {s["status"]: s for s in statuses}
+    assert by_status["AJUSTE"]["issue_count"] == 0
+    assert by_status["AJUSTE"]["status_category"] == "indeterminate"
+    # O padrão manda AJUSTE para desenvolvimento.
+    assert by_status["AJUSTE"]["stage_id"] == "desenvolvimento"
+    # Quem já está numa tarefa não repete.
+    assert [s["status"] for s in statuses].count("Em Desenvolvimento") == 1
