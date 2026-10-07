@@ -202,8 +202,23 @@ def test_pull_request_row_extrai_chaves_e_participantes():
         "state": "changes_requested",
         "name": "Revisor",
         "account_id": None,
+        "avatar_url": None,
     }
     assert row["url"].endswith("/pull-requests/412")
+
+
+def test_foto_do_participante_so_por_https():
+    raw = load("bitbucket/pullrequests.json")["values"][0]
+    photo = "https://avatar-management.example/initials/RV-2.png"
+    raw["participants"] = [
+        {"role": "REVIEWER", "user": {"display_name": "Rafa", "links": {"avatar": {"href": photo}}}},
+        {"role": "REVIEWER", "user": {"display_name": "Ju", "links": {"avatar": {"href": "javascript:x"}}}},
+        {"role": "REVIEWER", "user": {"display_name": "Sem"}},
+    ]
+
+    row = pull_request_row("monitoria", raw, project_keys=["WAI"])
+
+    assert [p["avatar_url"] for p in row["participants"]] == [photo, None, None]
 
 
 @pytest.mark.parametrize(

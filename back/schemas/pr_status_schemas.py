@@ -14,17 +14,29 @@ class ReviewerOut(BaseModel):
     approved: bool
     state: str | None
     account_id: str | None = None
+    avatar_url: str | None = None
+
+
+class ReviewPersonOut(BaseModel):
+    name: str | None
+    # Ajuste pedido com a correção já no ar volta a `pending`: a vez é do revisor.
+    state: Literal["approved", "changes_requested", "pending"]
+    account_id: str | None = None
+    avatar_url: str | None = None
 
 
 class ReviewProgressOut(BaseModel):
-    """Andamento da review de um PR aberto: o badge mostra a barra e o "N/X"."""
+    """Andamento da review de um PR aberto: o badge mostra a foto de cada revisor, pintada
+    com o estado dele, e o "N/X"."""
 
     approvals: int
     reviewers: int
-    # Pedidos de ajuste ainda sem correção (o amarelo da barra).
+    # Pedidos de ajuste ainda sem correção.
     changes_requested: int
     # Aprovações que a regra de Configurações › Pull requests pede.
     required: int
+    # Quem revisa, na ordem: aprovou, pediu ajuste, falta revisar.
+    people: list[ReviewPersonOut] = []
 
 
 class ApprovalRuleSettings(BaseModel):

@@ -11,6 +11,7 @@ from schemas.pr_status_schemas import (
     PullRequestOut,
     RepoPrStatusOut,
     ReviewerOut,
+    ReviewPersonOut,
     ReviewProgressOut,
 )
 from services.pr_status import (
@@ -67,7 +68,10 @@ async def summaries(
 
 
 def review_out(review: ReviewProgress | None) -> ReviewProgressOut | None:
-    return ReviewProgressOut(**vars(review)) if review else None
+    if review is None:
+        return None
+    people = [ReviewPersonOut(**vars(person)) for person in review.people]
+    return ReviewProgressOut(**{**vars(review), "people": people})
 
 
 def badge_links(summary: IssuePrSummary) -> list[PrLinkOut]:

@@ -6,6 +6,7 @@ from services.pr_status import (
     ApprovalRule,
     PrStatus,
     RepoPrStatus,
+    ReviewPerson,
     ReviewProgress,
     aggregate_status,
     derive_pr_status,
@@ -181,7 +182,19 @@ def test_andamento_da_review_conta_aprovacoes_e_ajustes_pendentes():
         rule=ALL,
     )
 
-    assert review == ReviewProgress(approvals=1, reviewers=3, changes_requested=1, required=3)
+    # As fotos na ordem da barra que elas substituem: aprovou, pediu ajuste, falta revisar.
+    # Quem só comentou não entra.
+    assert review == ReviewProgress(
+        approvals=1,
+        reviewers=3,
+        changes_requested=1,
+        required=3,
+        people=(
+            ReviewPerson("Aprovador", "approved"),
+            ReviewPerson("Crítico", "changes_requested"),
+            ReviewPerson("Revisor", "pending"),
+        ),
+    )
 
 
 def test_correcao_enviada_tira_o_amarelo_da_barra():
@@ -190,6 +203,20 @@ def test_correcao_enviada_tira_o_amarelo_da_barra():
     )
 
     assert (review.approvals, review.changes_requested) == (1, 0)
+    # A foto de quem pediu o ajuste volta a "aguardando": a vez é dele.
+    assert [(p.name, p.state) for p in review.people] == [
+        ("Aprovador", "approved"), ("Crítico", "pending"),
+    ]
+
+
+def test_foto_do_revisor_vem_do_participante():
+    photo = "https://avatar-management.example/AP-2.png"
+    review = review_progress(
+        state="OPEN",
+        draft=False,
+        participants=[{**APPROVED, "account_id": "acc-ap", "avatar_url": photo}],
+    )
+    assert review.people == (ReviewPerson("Aprovador", "approved", "acc-ap", photo),)
 
 
 @pytest.mark.parametrize(
@@ -221,7 +248,11 @@ def test_review_do_card_e_a_do_pr_que_decide_o_status():
     # pid 11 já está aprovado (1/1), pid 10 não (1/2): o card fica em "PR aberta" pelo 10.
     assert summary.status is PrStatus.PR_ABERTA
     assert summary.review == ReviewProgress(
-        approvals=1, reviewers=2, changes_requested=0, required=2
+        approvals=1,
+        reviewers=2,
+        changes_requested=0,
+        required=2,
+        people=(ReviewPerson("Aprovador", "approved"), ReviewPerson("Revisor", "pending")),
     )
     supervisor = summary.repos[0]
     assert (supervisor.repo_slug, supervisor.review) == ("supervisor-web", summary.review)
@@ -509,10 +540,13 @@ def test_badge_leva_a_review_do_card_e_a_de_cada_link():
     badge = to_badge(summary)
 
     assert badge.status is PrStatus.AJUSTES_REQUISITADOS
-    assert badge.review.model_dump() == {
+    assert badge.review.model_dump(exclude={"people"}) == {
         "approvals": 1,
         "reviewers": 3,
         "changes_requested": 1,
         "required": 2,
     }
+    assert [(p.name, p.state) for p in badge.review.people] == [
+        ("Aprovador", "approved"), ("Crítico", "changes_requested"), ("Revisor", "pending"),
+    ]
     assert [link.review.approvals if link.review else None for link in badge.links] == [1, None]

@@ -101,8 +101,24 @@ DEFAULT_RULE = ApprovalRule()
 
 
 @dataclass(frozen=True)
+class ReviewPerson:
+    """Um revisor na review andando: a foto que o badge mostra no lugar da barra."""
+
+    name: str | None
+    # `approved`, `changes_requested` ou `pending`. Ajuste pedido com a correção já no ar é
+    # `pending`: a vez é do revisor, como no status do PR.
+    state: str
+    account_id: str | None = None
+    avatar_url: str | None = None
+
+
+# A ordem das fotos é a da barra que elas substituem: quem aprovou, quem pediu ajuste, quem falta.
+PERSON_ORDER = {"approved": 0, "changes_requested": 1, "pending": 2}
+
+
+@dataclass(frozen=True)
 class ReviewProgress:
-    """Andamento da review de um PR aberto — o badge vira a barra e o "N/X"."""
+    """Andamento da review de um PR aberto — o badge mostra as fotos e o "N/X"."""
 
     approvals: int
     reviewers: int
@@ -111,6 +127,7 @@ class ReviewProgress:
     changes_requested: int
     # Aprovações que a regra pede para o PR contar como aprovado.
     required: int
+    people: tuple[ReviewPerson, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -121,6 +138,9 @@ class Reviewer:
     state: str | None
     # `account_id` do Bitbucket (ou o `uuid`, sem ele): é por ele que a tela tira o reviewer.
     account_id: str | None = None
+    # A foto do Bitbucket, para o painel da tarefa (só https; PR espelhado antes dela vem sem,
+    # até a próxima varredura dos abertos).
+    avatar_url: str | None = None
 
 
 @dataclass
@@ -255,12 +275,33 @@ def review_progress(
     if state != "OPEN" or draft or not reviewers:
         return None
     changes = sum(1 for p in reviewers if p.get("state") == "changes_requested")
+    people = sorted(
+        (
+            ReviewPerson(
+                name=p.get("name"),
+                state=_person_state(p, fix_pushed),
+                account_id=p.get("account_id"),
+                avatar_url=p.get("avatar_url"),
+            )
+            for p in reviewers
+        ),
+        key=lambda person: PERSON_ORDER[person.state],
+    )
     return ReviewProgress(
         approvals=sum(1 for p in reviewers if p.get("approved")),
         reviewers=len(reviewers),
         changes_requested=0 if fix_pushed else changes,
         required=rule.required(len(reviewers)),
+        people=tuple(people),
     )
+
+
+def _person_state(participant: dict[str, Any], fix_pushed: bool) -> str:
+    if participant.get("approved"):
+        return "approved"
+    if participant.get("state") == "changes_requested" and not fix_pushed:
+        return "changes_requested"
+    return "pending"
 
 
 def pull_request_link(
@@ -304,6 +345,7 @@ def pull_request_link(
                 approved=bool(p.get("approved")),
                 state=p.get("state"),
                 account_id=p.get("account_id"),
+                avatar_url=p.get("avatar_url"),
             )
             for p in participants
             if _is_reviewer(p)

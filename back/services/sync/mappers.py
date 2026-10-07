@@ -144,6 +144,13 @@ def _bitbucket_identity(user: dict[str, Any] | None) -> str | None:
     return user.get("account_id") or user.get("uuid")
 
 
+def bitbucket_avatar(user: dict[str, Any] | None) -> str | None:
+    """Foto do usuário (`links.avatar`), só por https: ela vira `src` de imagem na tela, e um
+    esquema qualquer vindo de fora não entra ali."""
+    href = (((user or {}).get("links") or {}).get("avatar") or {}).get("href")
+    return href if isinstance(href, str) and href.startswith("https://") else None
+
+
 def pull_request_row(
     repo_slug: str, raw: dict[str, Any], *, project_keys: list[str]
 ) -> dict[str, Any]:
@@ -156,6 +163,7 @@ def pull_request_row(
             "state": p.get("state"),
             "name": (p.get("user") or {}).get("display_name"),
             "account_id": _bitbucket_identity(p.get("user")),
+            "avatar_url": bitbucket_avatar(p.get("user")),
         }
         for p in raw.get("participants") or []
     ]

@@ -91,7 +91,8 @@ async def test_detalhe_da_tarefa_multi_repo(db_app, client, seeded):
     ]
     pr = body["repos"][0]["pull_requests"][0]
     assert pr["changes_requested"] == 1
-    # Sem `account_id` no participante (espelho antigo), o revisor só não ganha o "tirar".
+    # Sem `account_id` no participante (espelho antigo), o revisor só não ganha o "tirar"; sem
+    # a foto, o painel mostra as iniciais.
     assert pr["reviewers"] == [
         {
             "name": "Revisor",
@@ -99,6 +100,7 @@ async def test_detalhe_da_tarefa_multi_repo(db_app, client, seeded):
             "approved": False,
             "state": "changes_requested",
             "account_id": None,
+            "avatar_url": None,
         }
     ]
     assert pr["match"] == "branch"
@@ -187,7 +189,16 @@ async def test_lote_para_os_cards(db_app, client, seeded):
         "pr_count": 2,
         "open_pr_count": 1,
         "build_failed": True,
-        "review": {"approvals": 0, "reviewers": 1, "changes_requested": 1, "required": 1},
+        "review": {
+            "approvals": 0,
+            "reviewers": 1,
+            "changes_requested": 1,
+            "required": 1,
+            "people": [
+                {"name": "Revisor", "state": "changes_requested", "account_id": None,
+                 "avatar_url": None},
+            ],
+        },
     }
     # O badge abre primeiro o PR que decide o status do card.
     assert [(link["repo_slug"], link["id"], link["status"]) for link in links] == [
@@ -237,7 +248,11 @@ async def test_regra_de_aprovacao_decide_quando_o_pr_esta_aprovado(db_app, clien
     assert (await client.get("/api/preferences/pr-approval")).json() == {"min_percent": 100}
     result = await badge()
     assert result["status"] == "pr_aberta"
-    assert result["review"] == {"approvals": 1, "reviewers": 2, "changes_requested": 0, "required": 2}
+    review = {k: v for k, v in result["review"].items() if k != "people"}
+    assert review == {"approvals": 1, "reviewers": 2, "changes_requested": 0, "required": 2}
+    assert [(p["name"], p["state"]) for p in result["review"]["people"]] == [
+        ("Felipe", "approved"), ("Rafael", "pending"),
+    ]
     assert result["links"][0]["review"]["required"] == 2
 
     await client.put("/api/preferences/pr-approval", json={"min_percent": 50})
