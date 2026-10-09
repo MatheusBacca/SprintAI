@@ -5,9 +5,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import asyncpg
 
 from repositories import week_repo
-from schemas.week_schemas import WeekIssueOut, WeekOut
+from schemas.week_schemas import WeekIssueOut, WeekOut, WeekSummaryOut
 from security.credential_store import CredentialStore
-from services import notes_service, pr_status_service
+from services import notes_service, pr_status_service, week_summary
+from services.progress.service import load_stages, stage_ref
 from services.sprint_service import jira_identity
 
 DEFAULT_TIMEZONE = "America/Sao_Paulo"
@@ -67,6 +68,20 @@ async def get_week(
     reminders = await week_repo.reminders_between(pool, since, until)
     pending = await week_repo.pending_reminders_before(pool, since)
 
+    stages = await load_stages(pool)
+    summary = WeekSummaryOut(
+        stages=[stage_ref(s) for s in sorted(stages.stages, key=lambda s: s.order)],
+        delivery_stage=stage_ref(week_summary.delivery_stage(stages)),
+        days=week_summary.summarize(
+            await week_repo.status_moves(pool, account_id, since, until),
+            stages,
+            tz=tz,
+            start=start,
+            # Dia que ainda não chegou não tem o que resumir.
+            last=min(end, today),
+        ),
+    )
+
     return WeekOut(
         start=start,
         end=end,
@@ -79,4 +94,5 @@ async def get_week(
         slicing=issues(slicing),
         reminders=await notes_service.hydrate(pool, store, reminders),
         pending_reminders=await notes_service.hydrate(pool, store, pending),
+        summary=summary,
     )

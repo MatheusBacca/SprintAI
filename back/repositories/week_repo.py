@@ -119,6 +119,35 @@ async def slicing_cards(
     return [dict(r) for r in rows]
 
 
+async def status_moves(
+    conn: Executor, account_id: str | None, since: datetime, until: datetime
+) -> list[dict[str, Any]]:
+    """Mudanças de status das minhas tarefas na janela, da mais antiga para a mais nova.
+
+    Quem fez sai do evento do feed gravado junto com a transição (a mesma entrada do
+    changelog): `jira_status_transition` só guarda o nome do autor, não o accountId.
+    Depois da retenção do feed o evento some, e `by_me` vem nulo.
+    """
+    rows = await conn.fetch(
+        f"""
+        SELECT t.issue_key, t.from_status, t.to_status, t.author_name, t.changed_at,
+               e.actor_is_me AS by_me,
+               i.summary, i.issue_type, i.story_points
+        FROM jira_status_transition t
+        JOIN jira_issue i ON i.key = t.issue_key
+        LEFT JOIN activity_event e ON e.dedupe_key = 'jira:changelog:' || t.changelog_id
+        WHERE {MINE} AND t.changed_at >= $2 AND t.changed_at < $3
+          AND NOT (i.issue_type = ANY($4::text[]))
+        ORDER BY t.changed_at, t.id
+        """,
+        account_id,
+        since,
+        until,
+        EPIC_TYPES,
+    )
+    return [dict(r) for r in rows]
+
+
 async def reminders_between(
     conn: Executor, since: datetime, until: datetime
 ) -> list[dict[str, Any]]:

@@ -550,13 +550,14 @@ Os atalhos mudam em **Configurações › Atalhos** (gravados no banco, `GET/PUT
 
 Segunda a domingo no fuso do navegador, com navegação entre semanas (`?dia=AAAA-MM-DD`). Duas colunas:
 
-- **Com data:** *Prazo nesta semana* (campo "Data limite" do Jira, por dia, com as **atrasadas** em cima) e *Lembretes da semana* (por dia, com os pendentes de semanas anteriores e "Concluir").
+- **Com data:** *Prazo nesta semana* (campo "Data limite" do Jira, por dia, com as **atrasadas** em cima), *Lembretes da semana* (por dia, com os pendentes de semanas anteriores e "Concluir").
+- **Resumo da semana** (largura toda, abaixo das duas colunas): um kanban das mudanças de status das suas tarefas. As colunas são as etapas de Configurações › Progresso — só as que receberam card na semana, mais "Outros status" para status sem etapa —, e cada dia é uma faixa, um embaixo do outro (dia útil aparece mesmo vazio; sábado e domingo só com movimento; na semana corrente, até hoje). A tarefa vira um card na coluna da etapa em que terminou o dia, com o status exato, quem mexeu por último quando não foi você e de onde veio; o caminho inteiro do dia, com hora e autor, fica no title do card. **Entrega** é terminar o dia numa etapa à frente da que começou, da etapa de Review em diante: o card ganha a borda e o ✓ na cor da etapa, e a faixa do dia conta as entregas. "Só entregas" esconde o resto sem mexer nas colunas. Em tela estreita o quadro rola de lado por dentro, com o dia preso à esquerda. Sai de `jira_status_transition`, então o histórico começa no primeiro sync.
 - **Sem data:** *Analisar e fatiar* (cards em aberto + concluídos na semana) e *Minhas sem sprint* (em aberto, fora de sprint ativa/futura; o que **sobrou de sprint fechada** vem primeiro).
 - "Minhas" = Responsável é você (accountId salvo na conexão). Cada tarefa mostra status, sprint, pai, pontos em aberto dos contextos e o badge de PR; clicar abre o painel.
 
 | Rota | O que faz |
 |---|---|
-| `GET /api/week?day=&tz=America/Sao_Paulo` | os quatro blocos da semana que contém `day` (padrão: hoje) |
+| `GET /api/week?day=&tz=America/Sao_Paulo` | os blocos da semana que contém `day` (padrão: hoje), com o resumo dia a dia em `summary` |
 
 ## Contextos (`/contextos`)
 

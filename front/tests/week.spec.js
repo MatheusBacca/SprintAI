@@ -51,6 +51,55 @@ const note = (id, remindAt, extra = {}) => ({
   ...extra,
 })
 
+const REVIEW = { id: 'review', label: 'Review', color: '#f59e0b' }
+const DONE = { id: 'concluido', label: 'Concluído', color: '#10b981' }
+const DEV = { id: 'desenvolvimento', label: 'Desenvolvimento', color: '#2f7cf6' }
+const move = (status, stage, at, extra = {}) => ({ status, stage, at, author_name: 'Matheus Bacca', by_me: true, ...extra })
+const STAGES = [
+  { id: 'analise', label: 'Análise', color: '#94a3b8' },
+  DEV,
+  REVIEW,
+  { id: 'testes', label: 'Testes', color: '#8a4fff' },
+  DONE,
+]
+const dayIssue = (key, outcome, [fromStatus, fromStage], moves) => ({
+  key,
+  summary: `Resumo ${key}`,
+  issue_type: 'Tarefa',
+  story_points: 3,
+  from_status: fromStatus,
+  from_stage: fromStage,
+  moves,
+  outcome,
+})
+
+const SUMMARY = {
+  stages: STAGES,
+  delivery_stage: REVIEW,
+  days: [
+    {
+      day: '2026-09-14',
+      issues: [
+        dayIssue('WAI-1', 'entregue', ['Em Review', REVIEW], [move('Concluído', DONE, '2026-09-14T15:00:00Z', { by_me: false, author_name: 'Poliane Melo' })]),
+        dayIssue('WAI-3', 'entregue', ['Em Desenvolvimento', DEV], [
+          move('DISPONIVEL PARA REVIEW', REVIEW, '2026-09-14T16:00:00Z'),
+          move('Em Review', REVIEW, '2026-09-14T17:00:00Z', { by_me: false, author_name: 'Felipe Queirolo' }),
+        ]),
+        dayIssue('WAI-2', 'avancou', ['Disponivel para análise', STAGES[0]], [move('Em Desenvolvimento', DEV, '2026-09-14T12:00:00Z')]),
+      ],
+    },
+    {
+      day: '2026-09-15',
+      issues: [
+        dayIssue('WAI-6', 'voltou', ['Em Review', REVIEW], [move('AJUSTE', DEV, '2026-09-15T12:00:00Z', { by_me: null, author_name: 'Rodrigo Vianna' })]),
+        // Status fora de Configurações › Progresso: sem etapa, vai para "Outros status".
+        dayIssue('WAI-7', 'mexeu', ['Em Desenvolvimento', DEV], [move('Cruzeiro', null, '2026-09-15T13:00:00Z')]),
+      ],
+    },
+    { day: '2026-09-16', issues: [] },
+  ],
+}
+
 const WEEK = {
   start: '2026-09-14',
   end: '2026-09-20',
@@ -69,6 +118,7 @@ const WEEK = {
   ],
   reminders: [note(1, '2026-09-16T12:00:00-03:00', { reminder_due: true }), note(2, '2026-09-19T09:30:00-03:00', { issues: [{ key: 'WAI-1' }] })],
   pending_reminders: [note(3, '2026-09-08T09:00:00-03:00', { reminder_due: true })],
+  summary: SUMMARY,
 }
 
 let calls
@@ -112,7 +162,7 @@ describe('WeekView', () => {
 
     expect(calls[0].url).toMatch(/^\/api\/week\?tz=/)
     expect(wrapper.find('.week__label').text()).toBe('Esta semana')
-    expect(wrapper.findAll('.block').map((b) => b.attributes('data-block'))).toEqual(['due', 'reminders', 'slicing', 'without-sprint'])
+    expect(wrapper.findAll('.block').map((b) => b.attributes('data-block'))).toEqual(['due', 'reminders', 'slicing', 'without-sprint', 'summary'])
 
     const without = wrapper.find('[data-block="without-sprint"]')
     expect(without.findAll('.wrow').map((r) => r.attributes('data-key'))).toEqual(['WAI-2', 'WAI-1'])
@@ -168,6 +218,68 @@ describe('WeekView', () => {
     expect(router.currentRoute.value.query).toEqual({ dia: '2026-09-21', tarefa: 'WAI-2' })
   })
 
+  it('resumo em kanban: etapas em colunas, uma faixa por dia e só entregas', async () => {
+    routeFetch()
+    const { wrapper, router } = await mountWeek()
+    const block = wrapper.find('[data-block="summary"]')
+    const cell = (day, stage) => block.findAll('.board__cell').filter((c) => c.attributes('data-stage') === stage)[day]
+    const keys = (el) => el.findAll('.scard').map((c) => c.attributes('data-key'))
+
+    expect(block.find('.block__title small').text()).toBe('2')
+    expect(block.find('.block__hint').text()).toContain('avançou até Review')
+    // Só as etapas que receberam card na semana; Análise e Testes ficam de fora.
+    expect(block.findAll('.board__col').map((c) => c.text())).toEqual(['Desenvolvimento 2', 'Review 1', 'Concluído 1', 'Outros status 1'])
+    expect(block.findAll('.board__day').map((d) => d.find('strong').text())).toEqual(['segunda-feira', 'terça-feira', 'quarta-feira'])
+    expect(block.find('.board__day[data-today]').text()).toMatch(/quarta/)
+    expect(block.findAll('.board__day')[0].find('.board__delivered').text()).toBe('2 entregas')
+
+    // A tarefa cai na coluna da etapa em que terminou o dia.
+    expect(keys(cell(0, 'concluido'))).toEqual(['WAI-1'])
+    expect(keys(cell(0, 'review'))).toEqual(['WAI-3'])
+    expect(keys(cell(0, 'desenvolvimento'))).toEqual(['WAI-2'])
+    expect(keys(cell(1, 'desenvolvimento'))).toEqual(['WAI-6'])
+    expect(keys(cell(1, 'outros'))).toEqual(['WAI-7'])
+
+    const card = (key) => block.find(`.scard[data-key="${key}"]`)
+    expect(card('WAI-1').attributes('data-outcome')).toBe('entregue')
+    expect(card('WAI-1').find('.scard__done').exists()).toBe(true)
+    // Onde parou (com quem mexeu, quando não fui eu) e de onde veio.
+    expect(card('WAI-1').find('.scard__status').text()).toBe('Concluído · Poliane')
+    expect(card('WAI-1').find('.scard__from').text()).toBe('de Review')
+    expect(card('WAI-3').find('.scard__status').text()).toBe('Em Review · Felipe')
+    expect(card('WAI-3').find('.scard__from').text()).toBe('de Desenvolvimento')
+    expect(card('WAI-2').find('.scard__status').text()).toBe('Em Desenvolvimento')
+    expect(card('WAI-6').find('.scard__from').text()).toBe('voltou de Review')
+    expect(card('WAI-6').find('.scard__status').text()).toBe('AJUSTE · Rodrigo')
+    // O caminho inteiro do dia vai no title do card.
+    const trail = card('WAI-3').find('.scard__main').attributes('title')
+    expect(trail).toContain('Começou o dia em Em Desenvolvimento')
+    expect(trail).toMatch(/DISPONIVEL PARA REVIEW \(você\)/)
+    expect(trail).toMatch(/Em Review \(Felipe Queirolo\)/)
+    expect(block.findAll('.board__none').map((p) => p.text())).toEqual(['Nenhuma tarefa sua mudou de status.'])
+
+    await block.find('.block__action').trigger('click')
+    expect(block.find('.block__action').attributes('aria-pressed')).toBe('true')
+    expect(keys(block)).toEqual(['WAI-3', 'WAI-1'])
+    // As colunas são da semana, não do filtro.
+    expect(block.findAll('.board__col')).toHaveLength(4)
+    expect(block.findAll('.board__none').map((p) => p.text())).toEqual(['Nenhuma entrega neste dia.', 'Nenhuma tarefa sua mudou de status.'])
+
+    await card('WAI-3').find('.scard__main').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.tarefa).toBe('WAI-3')
+  })
+
+  it('resumo: semana sem nenhuma mudança de status', async () => {
+    routeFetch({ ...WEEK, summary: { stages: STAGES, delivery_stage: REVIEW, days: [{ day: '2026-09-14', issues: [] }, { day: '2026-09-15', issues: [] }] } })
+    const { wrapper } = await mountWeek()
+    const block = wrapper.find('[data-block="summary"]')
+
+    expect(block.find('.block__empty').text()).toContain('Nenhuma tarefa sua mudou de status nesta semana')
+    expect(block.find('.board').exists()).toBe(false)
+    expect(block.find('.block__action').exists()).toBe(false)
+  })
+
   it('outra semana, vazios e aviso sem accountId', async () => {
     routeFetch({
       ...WEEK,
@@ -180,13 +292,15 @@ describe('WeekView', () => {
       slicing: [],
       reminders: [],
       pending_reminders: [],
+      summary: { stages: STAGES, delivery_stage: REVIEW, days: [] },
     })
     const { wrapper } = await mountWeek('/semana?dia=2026-09-30')
 
     expect(calls[0].url).toMatch(/^\/api\/week\?day=2026-09-30&tz=/)
     expect(wrapper.find('.week__label').text()).toBe('Daqui a 2 semanas')
     expect(wrapper.find('.week__warn').exists()).toBe(true)
-    expect(wrapper.findAll('.block__empty')).toHaveLength(4)
+    expect(wrapper.findAll('.block__empty')).toHaveLength(5)
+    expect(wrapper.find('[data-block="summary"] .block__empty').text()).toBe('A semana ainda não começou.')
 
     await wrapper.find('[data-block="reminders"] .block__action').trigger('click')
     expect(useNotesStore().editor.draft.remind_at).toBe(new Date('2026-09-28T09:00:00').toISOString())

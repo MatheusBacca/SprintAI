@@ -35,7 +35,8 @@ export const useWeekStore = defineStore('week', {
     issueKeys: (state) => {
       const d = state.data
       if (!d) return []
-      return [...new Set([...d.without_sprint, ...d.due, ...d.overdue, ...d.slicing].map((i) => i.key))]
+      const summary = (d.summary?.days ?? []).flatMap((day) => day.issues)
+      return [...new Set([...d.without_sprint, ...d.due, ...d.overdue, ...d.slicing, ...summary].map((i) => i.key))]
     },
   },
   actions: {

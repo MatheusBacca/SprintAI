@@ -1,8 +1,9 @@
 <script setup>
-import { computed, onBeforeUnmount, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   BellRing,
+  CalendarCheck,
   CalendarClock,
   CalendarDays,
   ChevronLeft,
@@ -15,6 +16,7 @@ import {
 
 import IssueDrawer from '@/components/issue/IssueDrawer.vue'
 import WeekIssueRow from '@/components/week/WeekIssueRow.vue'
+import WeekSummaryCard from '@/components/week/WeekSummaryCard.vue'
 import { NOTE_COLORS } from '@/constants/noteColors'
 import { useContextsStore } from '@/stores/contexts'
 import { useNotesStore } from '@/stores/notes'
@@ -96,6 +98,47 @@ const dueDays = computed(() => byDay(data.value?.due ?? [], (i) => i.due_date))
 const reminderDays = computed(() => byDay(data.value?.reminders ?? [], (n) => isoDay(new Date(n.remind_at))))
 const openSlicing = computed(() => (data.value?.slicing ?? []).filter((i) => i.status_category !== 'done'))
 const doneSlicing = computed(() => (data.value?.slicing ?? []).filter((i) => i.status_category === 'done'))
+
+// Resumo em kanban: as colunas são as etapas, cada dia é uma faixa, e a tarefa cai na coluna
+// da etapa em que terminou o dia. "Só entregas" esconde o que só começou, voltou ou mexeu.
+const onlyDelivered = ref(false)
+const OTHER_STAGE = { id: 'outros', label: 'Outros status', color: null }
+const isDelivery = (issue) => issue.outcome === 'entregue'
+const columnOf = (issue) => issue.moves.at(-1).stage?.id ?? OTHER_STAGE.id
+const summaryAll = computed(() => (data.value?.summary?.days ?? []).flatMap((d) => d.issues))
+// Só as etapas onde alguma tarefa terminou um dia da semana: Análise quase nunca recebe card
+// (tarefa sai dela, não chega), e coluna sempre vazia só estreitava as outras. Status fora de
+// Configurações › Progresso não tem etapa e cai em "Outros status". A conta é sobre a semana
+// inteira, não sobre o filtro: ligar "só entregas" não mexe nas colunas.
+const summaryColumns = computed(() => {
+  const used = new Set(summaryAll.value.map(columnOf))
+  return [...(data.value?.summary?.stages ?? []), OTHER_STAGE].filter((c) => used.has(c.id))
+})
+const dayFormat = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' })
+const weekdayName = new Intl.DateTimeFormat('pt-BR', { weekday: 'long' })
+const summaryDays = computed(() =>
+  (data.value?.summary?.days ?? []).map((d) => {
+    const shown = onlyDelivered.value ? d.issues.filter(isDelivery) : d.issues
+    const cells = Object.fromEntries(summaryColumns.value.map((c) => [c.id, []]))
+    for (const issue of shown) cells[columnOf(issue)]?.push(issue)
+    return {
+      day: d.day,
+      weekday: weekdayName.format(asDate(d.day)),
+      date: dayFormat.format(asDate(d.day)),
+      moved: d.issues.length,
+      shown: shown.length,
+      delivered: d.issues.filter(isDelivery).length,
+      cells,
+    }
+  }),
+)
+const columnCounts = computed(() => {
+  const counts = {}
+  for (const d of summaryDays.value) for (const [id, list] of Object.entries(d.cells)) counts[id] = (counts[id] ?? 0) + list.length
+  return counts
+})
+const deliveredCount = computed(() => summaryAll.value.filter(isDelivery).length)
+const summaryEmpty = computed(() => !summaryAll.value.length)
 
 function openIssue(key) {
   setQuery({ tarefa: key })
@@ -233,6 +276,60 @@ function reminderState(note) {
             <p v-else class="block__empty">Nada solto: tudo que é seu está numa sprint.</p>
           </section>
         </div>
+
+        <!-- 5. Resumo da semana: kanban com uma faixa por dia. Ocupa a largura toda — cinco
+             colunas de etapa não cabem numa coluna da grade. -->
+        <section class="block card week__wide" data-block="summary">
+          <h2 class="block__title">
+            <CalendarCheck :size="16" /> Resumo da semana <small :title="`${deliveredCount} entrega(s) na semana`">{{ deliveredCount }}</small>
+            <button
+              v-if="!summaryEmpty"
+              type="button"
+              class="block__action"
+              :aria-pressed="onlyDelivered"
+              title="Esconde o que só começou, voltou ou mudou dentro da mesma etapa"
+              @click="onlyDelivered = !onlyDelivered"
+            >
+              só entregas
+            </button>
+          </h2>
+          <p class="block__hint">
+            Onde cada tarefa sua terminou o dia, por etapa. Entrega é o que avançou até {{ data.summary?.delivery_stage?.label ?? 'a etapa final' }} ou além; passe o mouse no card para ver o caminho do dia.
+          </p>
+          <p v-if="!summaryDays.length" class="block__empty">A semana ainda não começou.</p>
+          <p v-else-if="summaryEmpty" class="block__empty">
+            Nenhuma tarefa sua mudou de status nesta semana. (O histórico vem do sync: antes do primeiro, não há registro.)
+          </p>
+          <div v-else class="board">
+            <div class="board__grid" :style="{ gridTemplateColumns: `var(--board-day) repeat(${summaryColumns.length}, minmax(170px, 1fr))` }">
+              <span class="board__corner" aria-hidden="true" />
+              <h3
+                v-for="col in summaryColumns"
+                :key="col.id"
+                class="board__col"
+                :data-stage="col.id"
+                :style="{ '--tone': col.color ?? 'var(--color-border-strong)' }"
+              >
+                <span class="board__dot" aria-hidden="true" />{{ col.label }} <small>{{ columnCounts[col.id] ?? 0 }}</small>
+              </h3>
+              <template v-for="group in summaryDays" :key="group.day">
+                <div class="board__day" :data-today="group.day === data.today || null">
+                  <strong>{{ group.weekday }}</strong>
+                  <span>{{ group.date }}</span>
+                  <span v-if="group.delivered" class="board__delivered">{{ group.delivered }} {{ group.delivered === 1 ? 'entrega' : 'entregas' }}</span>
+                </div>
+                <template v-if="group.shown">
+                  <ul v-for="col in summaryColumns" :key="col.id" class="board__cell" :data-stage="col.id" :aria-label="`${col.label} · ${group.weekday}`">
+                    <WeekSummaryCard v-for="issue in group.cells[col.id]" :key="issue.key" :issue="issue" :selected="issue.key === issueKey" @open="openIssue" />
+                  </ul>
+                </template>
+                <p v-else class="board__none" :style="{ gridColumn: `span ${summaryColumns.length}` }">
+                  {{ group.moved ? 'Nenhuma entrega neste dia.' : 'Nenhuma tarefa sua mudou de status.' }}
+                </p>
+              </template>
+            </div>
+          </div>
+        </section>
       </div>
 
       <p v-else class="week__loading">Carregando a semana…</p>
@@ -339,6 +436,10 @@ function reminderState(note) {
   min-width: 0;
 }
 
+.week__wide {
+  grid-column: 1 / -1;
+}
+
 .block {
   display: flex;
   flex-direction: column;
@@ -382,9 +483,14 @@ function reminderState(note) {
   color: var(--color-text-secondary);
 }
 
-.block__action:hover {
+.block__action:hover,
+.block__action[aria-pressed='true'] {
   border-color: var(--color-primary);
   color: var(--color-primary);
+}
+
+.block__action[aria-pressed='true'] {
+  background: var(--color-primary-soft);
 }
 
 .block__hint,
@@ -420,6 +526,116 @@ function reminderState(note) {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* Kanban do resumo: a primeira coluna é o dia, as outras são as etapas. Em tela estreita
+   o quadro rola de lado dentro do card, com o dia grudado à esquerda. */
+.board {
+  overflow-x: auto;
+  margin: 0 calc(-1 * var(--space-1));
+  padding: 0 var(--space-1) var(--space-1);
+}
+
+.board__grid {
+  --board-day: 116px;
+  display: grid;
+  gap: 6px;
+  min-width: min-content;
+}
+
+.board__corner,
+.board__day {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--color-surface);
+}
+
+.board__col {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 8px;
+  border-bottom: 2px solid var(--tone);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.board__col small {
+  margin-left: auto;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.board__dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+
+.board__day {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 4px;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.board__day strong {
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.board__day[data-today] strong,
+.board__day[data-today] span:not(.board__delivered) {
+  color: var(--color-primary);
+}
+
+.board__delivered {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--color-success-surface);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--color-success-text);
+}
+
+.board__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  list-style: none;
+}
+
+.board__none {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
 }
 
 .reminder {
