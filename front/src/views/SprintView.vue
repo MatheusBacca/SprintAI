@@ -117,6 +117,15 @@ onMounted(() => {
   }
 })
 
+// Cada sprint volta com os filtros com que o dev a deixou. Vem antes do watch que carrega
+// a árvore: o "Só minhas" restaurado entra na mesma carga, sem buscar a sprint duas vezes.
+watch(sprintId, (id) => board.enterSprint(id), { immediate: true })
+watch(
+  () => [board.stageFilter, board.onlyMine, board.highlightStatus],
+  () => board.rememberFilters(),
+  { deep: true },
+)
+
 watch(
   [sprintId, () => board.onlyMine],
   ([id]) => {
@@ -206,15 +215,11 @@ function onFindShortcut(event) {
 
 // --- Destaque por status (Alt + clique num card) -----------------------------
 
-const highlightStatus = ref(null)
-
-// O mesmo Alt + clique no mesmo status desfaz, como um interruptor.
+// O mesmo Alt + clique no mesmo status desfaz, como um interruptor. Fica nos filtros da
+// sprint (`board`): voltar a ela traz o destaque de volta.
 function toggleHighlight(status) {
-  highlightStatus.value = highlightStatus.value === status ? null : status
+  board.highlightStatus = board.highlightStatus === status ? null : status
 }
-
-// Outra sprint tem outros cards: o destaque da anterior não vale mais.
-watch(sprintId, () => (highlightStatus.value = null))
 
 // Sync concluído ou Recarregar: árvore e painel aberto se refazem.
 watch(() => refresh.revision, () => {
@@ -286,7 +291,7 @@ function selectIssue(key) {
         :selected-key="selectedKey"
         :match-keys="matches"
         :focus-key="focusKey"
-        :highlight-status="highlightStatus"
+        :highlight-status="board.highlightStatus"
         :right-inset="rightInset"
         @select="selectIssue"
         @highlight="toggleHighlight"
@@ -372,9 +377,9 @@ function selectIssue(key) {
 
         <label v-if="showMineFilter" class="sprint__mine"><input v-model="board.onlyMine" type="checkbox"> Só minhas</label>
 
-        <p v-if="highlightStatus" class="sprint__highlight">
-          Destacando <strong>{{ highlightStatus }}</strong>
-          <button type="button" aria-label="Limpar destaque" title="Limpar destaque" @click="highlightStatus = null"><X :size="12" /></button>
+        <p v-if="board.highlightStatus" class="sprint__highlight">
+          Destacando <strong>{{ board.highlightStatus }}</strong>
+          <button type="button" aria-label="Limpar destaque" title="Limpar destaque" @click="board.highlightStatus = null"><X :size="12" /></button>
         </p>
       </header>
 

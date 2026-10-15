@@ -2,6 +2,32 @@ import { defineStore } from 'pinia'
 import { api } from '@/services/api'
 import { useNotificationsStore } from '@/stores/notifications'
 
+/**
+ * Filtros de cada sprint (etapas, "Só minhas" e o destaque de status), lembrados por
+ * sprint: voltar a uma sprint traz os filtros com que o dev a deixou, e a que nunca foi
+ * filtrada abre limpa. É conveniência da máquina, não dado — vai no localStorage.
+ */
+const FILTERS_KEY = 'sprintai.sprint.filters'
+/** As sprints são semanais: as filtradas há mais tempo que isso saem da memória. */
+const MAX_REMEMBERED = 40
+
+function readSavedFilters() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(FILTERS_KEY) ?? '{}')
+    return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeSavedFilters(saved) {
+  try {
+    localStorage.setItem(FILTERS_KEY, JSON.stringify(saved))
+  } catch {
+    // Sem armazenamento, a memória vale só até recarregar a página.
+  }
+}
+
 export const useSprintBoardStore = defineStore('sprintBoard', {
   state: () => ({
     sprints: [],
@@ -10,10 +36,15 @@ export const useSprintBoardStore = defineStore('sprintBoard', {
     tree: null,
     treeLoading: false,
     treeError: null,
+    // Os filtros da sprint em tela; trocar de sprint (`enterSprint`) traz os da que entra.
     onlyMine: false,
-    // Etapas ligadas nos chips. Fica na troca de sprint, ao contrário do destaque de
-    // status: etapa é a mesma em toda sprint, status do Alt + clique é daquele card.
+    /** Etapas ligadas nos chips. */
     stageFilter: [],
+    /** Status destacado pelo Alt + clique num card. */
+    highlightStatus: null,
+    /** A sprint dona dos filtros acima — é nela que `rememberFilters` grava. */
+    filtersSprintId: null,
+    savedFilters: readSavedFilters(),
     _requestId: 0,
   }),
   getters: {
@@ -28,6 +59,39 @@ export const useSprintBoardStore = defineStore('sprintBoard', {
     },
   },
   actions: {
+    /** Troca de sprint: os filtros passam a ser os que a que entra tinha da última vez. */
+    enterSprint(sprintId) {
+      this.filtersSprintId = sprintId ?? null
+      const saved = sprintId ? this.savedFilters[sprintId] : null
+      this.stageFilter = Array.isArray(saved?.stages) ? saved.stages.filter((id) => typeof id === 'string') : []
+      this.onlyMine = saved?.onlyMine === true
+      this.highlightStatus = typeof saved?.highlight === 'string' ? saved.highlight : null
+    },
+
+    /**
+     * Grava os filtros de agora na sprint em tela. Sem filtro nenhum, a sprint sai da
+     * memória — é o mesmo que nunca ter filtrado.
+     */
+    rememberFilters() {
+      const id = this.filtersSprintId
+      if (!id) return
+      const saved = { ...this.savedFilters }
+      delete saved[id]
+      if (this.stageFilter.length || this.onlyMine || this.highlightStatus) {
+        saved[id] = {
+          stages: [...this.stageFilter],
+          onlyMine: this.onlyMine,
+          highlight: this.highlightStatus,
+          at: Date.now(),
+        }
+      }
+      const recent = Object.entries(saved)
+        .sort(([, a], [, b]) => (b.at ?? 0) - (a.at ?? 0))
+        .slice(0, MAX_REMEMBERED)
+      this.savedFilters = Object.fromEntries(recent)
+      writeSavedFilters(this.savedFilters)
+    },
+
     async loadSprints() {
       this.sprintsLoading = true
       this.sprintsError = null

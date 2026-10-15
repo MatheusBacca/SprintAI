@@ -78,6 +78,11 @@ function sampleTree() {
   }
 }
 
+
+// A tela Sprints lembra os filtros de cada sprint no localStorage, e o do jsdom atravessa os
+// testes do arquivo: sem limpar, o filtro ligado num teste reapareceria no seguinte.
+beforeEach(() => localStorage.clear())
+
 describe('layout da árvore', () => {
   it('raiz centralizada sobre as suas filhas, todas lado a lado numa linha só', () => {
     const tree = sampleTree()
@@ -1256,14 +1261,65 @@ describe('SprintView: filtro por etapa', () => {
     expect(wrapper.findComponent({ name: 'SprintCanvas' }).props('matchKeys')).toEqual(['WAI-6797'])
   })
 
-  it('o filtro continua ligado na troca de sprint', async () => {
+  it('cada sprint volta com os filtros com que foi deixada; a nunca filtrada abre limpa', async () => {
     const { wrapper, router } = await mountView()
+    const pressed = () => wrapper.findAll('.stages__chip[aria-pressed="true"]').map((c) => c.text().replace(/ \d+$/, ''))
     await chip(wrapper, 'Review').trigger('click')
+    await flushPromises()
+
+    await router.replace({ query: { sprint: '3995' } })
+    await flushPromises()
+    expect(pressed()).toEqual([])
+    expect(canvasKeys(wrapper)).toHaveLength(12)
+
+    await chip(wrapper, 'Desenvolvimento').trigger('click')
+    await router.replace({ query: { sprint: '4031' } })
+    await flushPromises()
+    expect(pressed()).toEqual(['Review'])
+    expect(canvasKeys(wrapper)).toEqual(['WAI-6797'])
+
+    await router.replace({ query: { sprint: '3995' } })
+    await flushPromises()
+    expect(pressed()).toEqual(['Desenvolvimento'])
+  })
+
+  it('o destaque de status também é da sprint, e a memória sobrevive a recarregar a página', async () => {
+    localStorage.setItem(
+      'sprintai.sprint.filters',
+      JSON.stringify({ 4031: { stages: ['review'], onlyMine: false, highlight: 'DISPONIVEL PARA REVIEW', at: 1 } }),
+    )
+    const { wrapper, router } = await mountView()
+
+    expect(chip(wrapper, 'Review').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.findComponent({ name: 'SprintCanvas' }).props('highlightStatus')).toBe('DISPONIVEL PARA REVIEW')
+
+    await router.replace({ query: { sprint: '3995' } })
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'SprintCanvas' }).props('highlightStatus')).toBeNull()
+    expect(wrapper.find('.sprint__highlight').exists()).toBe(false)
+  })
+
+  it('"Só minhas" lembrado entra na mesma carga da sprint, sem buscar a árvore duas vezes', async () => {
+    localStorage.setItem('sprintai.sprint.filters', JSON.stringify({ 3995: { stages: [], onlyMine: true, highlight: null, at: 1 } }))
+    const { router } = await mountView()
+    fetch.mockClear()
 
     await router.replace({ query: { sprint: '3995' } })
     await flushPromises()
 
-    expect(chip(wrapper, 'Review').attributes('aria-pressed')).toBe('true')
-    expect(canvasKeys(wrapper)).toEqual(['WAI-6797'])
+    const trees = fetch.mock.calls.map(([url]) => url).filter((url) => url.startsWith('/api/sprints/3995/tree'))
+    expect(trees).toEqual(['/api/sprints/3995/tree?only_mine=true'])
+    expect(useSprintBoardStore().onlyMine).toBe(true)
+  })
+
+  it('tirar todos os filtros de uma sprint a tira da memória', async () => {
+    const { wrapper } = await mountView()
+    await chip(wrapper, 'Review').trigger('click')
+    await flushPromises()
+    expect(JSON.parse(localStorage.getItem('sprintai.sprint.filters'))).toHaveProperty('4031')
+
+    await chip(wrapper, 'Review').trigger('click')
+    await flushPromises()
+    expect(JSON.parse(localStorage.getItem('sprintai.sprint.filters'))).toEqual({})
   })
 })

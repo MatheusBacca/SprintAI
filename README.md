@@ -264,6 +264,11 @@ com todo o histórico de PRs de uma vez. Rodar o sync de novo não duplica nada.
   crescem um pouco e os do desligado perdem cor; `Alt+clique` isola um status e desligar o
   último volta a mostrar todos. Pai e card fora da sprint nunca são apagados — sem eles a
   árvore perde a estrutura.
+- **Cada sprint lembra os seus filtros**: as etapas ligadas nos chips, o "Só minhas" e o
+  destaque de status (`Alt+clique`). Trocar de sprint — pelas setas, pelo seletor ou por um
+  link — traz os filtros com que a outra foi deixada; a sprint nunca filtrada abre limpa, e
+  tirar todos os filtros de uma a tira da memória. Fica neste navegador e sobrevive a
+  recarregar a página (as 40 sprints filtradas mais recentes).
 - Clique no card abre o **painel lateral da tarefa** (`?tarefa=WAI-XXXX`, Esc fecha) e
   **centraliza o card** quando ele está cortado ou atrás do painel — valendo também para a
   tarefa aberta de fora do canvas, pela busca global ou pelo sino:
