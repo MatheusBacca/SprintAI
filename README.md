@@ -118,12 +118,12 @@ do que subir na porta seguinte e tomar 403 da guarda no primeiro request.
 
 ## Sincronização (espelho local)
 
-A API sincroniza sozinha a cada `interval_minutes` (padrão 5) e sob demanda pelo indicador no topo.
+A API sincroniza sozinha a cada `interval_minutes` (padrão 5) e sob demanda pelo indicador no topo (ou `Alt+S`).
 O escopo é configurado em **Configurações › Sincronização**:
 
 - **Jira:** board (padrão Engenharia/144), squads pelo sufixo da sprint (`Sprint 73 - Growth`), baldes sem squad, quantas sprints fechadas espelhar (congeladas depois da primeira carga) e as minhas tarefas fora das sprints.
 - **Dono (padrão "só o que é meu"):** no Jira, tarefas em que você é o Responsável + os épicos/enhancements pais delas; no Bitbucket, PRs em que você é autor ou revisor, ou ligados a tarefas suas. Dá para ampliar para "sprint inteira" / "todos os PRs" — ampliar recarrega o que foi pulado; restringir poda o espelho.
-- **Bitbucket:** só os repositórios **escolhidos pelo dev**, agrupados por projeto. PRs incrementais a cada ciclo, varredura dos PRs abertos a cada 30 min (aprovações), build só quando o commit muda, branches só quando há push.
+- **Bitbucket:** só os repositórios **escolhidos pelo dev**, agrupados por projeto — o projeto de cada um (OrganIA, weon) fica no espelho e segmenta o [menu de WAIs](#wais-por-repositório-menu-do-topo) e as [abas fixas do Workspace](#workspace-workspace). PRs incrementais a cada ciclo, varredura dos PRs abertos a cada 30 min (aprovações), build só quando o commit muda, branches só quando há push.
 
 | Rota | O que faz |
 |---|---|
@@ -164,7 +164,7 @@ mostra se o stream está de pé). O stream vale para todas as telas: ver
 
 Regras que valem a pena saber:
 
-- A **etapa** de cada status é configurável em **Configurações › Progresso** (padrão: análise
+- A **etapa** de cada status é configurável em **Configurações › Fluxo de trabalho › Progresso** (padrão: análise
   0 · desenvolvimento 0.4 · review 0.7 · testes 0.85 · concluído 1). A categoria do Jira só é
   usada para status que ninguém mapeou — ela mente para `DISPONIVEL PARA REVIEW` e
   `DISPONIVEL PARA TESTES`, que chegam como `new`. A tabela lista os status das tarefas do
@@ -282,13 +282,18 @@ com todo o histórico de PRs de uma vez. Rodar o sync de novo não duplica nada.
 
 ## Ações no Jira e no Bitbucket
 
+O que estas ações seguem mora numa aba só, **Configurações › Fluxo de trabalho**: o
+Progresso (a etapa de cada status) à esquerda e, à direita, Pull requests (quando o PR conta
+como aprovado) com o Concluir embaixo — o Concluir depende das outras duas. Link salvo das
+abas de antes (`?aba=progresso`, `pull-requests`, `concluir`) abre essa.
+
 Onde a tarefa aparece — card do canvas, painel lateral, Semana, dependências, Contextos e a
 timeline da Home — três peças deixam de ser só rótulo:
 
 - **Selo de status** (com a setinha): abre a **linha de fluxo** do Jira ancorada no selo.
   **Clique escolhe, duplo clique move** — o duplo clique é a confirmação; um clique perdido
   não muda nada. No teclado, Enter escolhe e o segundo Enter no mesmo passo move.
-  - A linha segue as **etapas de Configurações › Progresso** (análise → desenvolvimento →
+  - A linha segue as **etapas de Configurações › Fluxo de trabalho › Progresso** (análise → desenvolvimento →
     review → testes → concluído), com o status atual marcado. O workflow de Tarefa da WAI é
     global e tem 17 status, então os que não têm etapa ficam em **"Outros status"**,
     recolhidos — mapear um status numa etapa o traz para a linha.
@@ -305,12 +310,12 @@ timeline da Home — três peças deixam de ser só rótulo:
   tudo o que há; "Sem PR" e "Branch sem PR" continuam só rótulo.
 - **Concluir** (à direita do badge de PR, no card e no painel da tarefa): aparece quando o
   repo da tarefa — o dos PRs e branches dela, ou o `[repo]` do título — tem uma receita em
-  **Configurações › Concluir**: para que status do Jira ela vai (ou não mexe no Jira) e se o
+  **Configurações › Fluxo de trabalho › Concluir**: para que status do Jira ela vai (ou não mexe no Jira) e se o
   PR aberto é mergeado, com a estratégia (merge commit, squash, fast-forward) e se fecha a
   branch de origem. Um repo pode ir direto a "Concluído"; outro, mergear e ir a "DISPONIVEL
   PARA TESTES".
   - **Só em card apto:** a tarefa tem PR nesses repos, há o que fazer agora — algum PR aberto
-    **aprovado pela regra** de Configurações › Pull requests para mergear (rascunho e ajuste
+    **aprovado pela regra** de Configurações › Fluxo de trabalho › Pull requests para mergear (rascunho e ajuste
     pedido ficam de fora), ou nenhum PR aberto sobrando e só o Jira por andar (PR já mergeado
     conta) —, e ela ainda não chegou a testes nem foi concluída (etapas de Configurações ›
     Progresso). O back confere de novo na hora de rodar: um card que deixou de estar apto
@@ -373,6 +378,14 @@ sem tarefa — só os repositórios escolhidos, para ter terminal à mão.
 - **Abas no topo da tela** com os workspaces abertos. Fechar a aba não apaga o workspace: ele
   vai para "Abertos antes", e abrir de novo a mesma tarefa reabre o dela. As abas ficam na
   tela, e não no topo do app — lá moram os lembretes fixados.
+- **Uma aba fixa por projeto do Bitbucket** (OrganIA, weon), primeiro na fileira e sem o "x":
+  sai dos repositórios escolhidos em Configurações › Sincronização, com os repos do projeto
+  (fonte "projeto"), linha do tempo e terminais — a pré-seleção que antes se montava à mão com
+  um workspace livre. O livre que já tinha o nome do projeto (`WeON` para o `weon` do
+  Bitbucket) é que vira a aba, com o título e os repos fixados ou escondidos que tinha. Repo
+  escolhido no sync entra sozinho; dá para esconder um. Projeto que sai do sync devolve a aba
+  como workspace livre e fechada, em "Abertos antes" — os repos dela vinham do projeto. Sem workspace na URL, a tela abre na
+  primeira aba — a do primeiro projeto.
 - **Conjunto da feature.** Raiz Épico, Enhancements ou Feature desce até três níveis: filhas
   pelo `parent`, quem aponta para ela por link de hierarquia (a Tarefa fatiada que "Relates"
   o Enhancements) e o que ela própria liga — é assim que a fatia de outro dev aparece,
@@ -468,10 +481,11 @@ rodar git): vínculo com o Bitbucket pelo remote `origin` e a branch base (do Bi
 | `POST /api/workspace/repos/{slug}/branches/switch` | abre a branch no clone (`{ "name" }`; `origin/x` cria a `x`); 409 com `code` (`dirty`, `checked_out`, `exists`…) |
 | `POST /api/workspace/heads` | a branch aberta em cada pasta (`{ "paths" }`, até 24), lida do `HEAD` sem rodar git |
 | `POST /api/workspace/open` | abre a pasta no VS Code (`ide`) ou no Windows Terminal (`terminal`) |
-| `GET/POST /api/workspaces` | lista; abre o da tarefa (reabre se existe) ou cria um livre |
-| `GET/PATCH/DELETE /api/workspaces/{id}` | detalhe com os repos envolvidos; aba aberta/fechada; apagar |
+| `GET/POST /api/workspaces` | lista (criando a aba fixa de cada projeto do Bitbucket do sync); abre o da tarefa (reabre se existe) ou cria um livre |
+| `GET/PATCH/DELETE /api/workspaces/{id}` | detalhe com os repos envolvidos; aba aberta/fechada; apagar (aba de projeto: 409) |
 | `GET /api/workspaces/{id}/tree` | árvore da feature, no formato do canvas da Sprint |
 | `PUT /api/workspaces/{id}/repos/{slug}` | fixa (`add`), esconde (`hide`) ou volta ao automático (`auto`) |
+| `GET /api/workspace/repo-issues` | WAIs de cada repo na sprint próxima, atual e anterior, com o projeto do Bitbucket do repo — o [menu do topo](#wais-por-repositório-menu-do-topo) |
 
 Terminal host (`:8766`, pelo proxy do Vite em `/api/terminal`):
 
@@ -484,6 +498,30 @@ Terminal host (`:8766`, pelo proxy do Vite em `/api/terminal`):
 | `DELETE /api/terminal/sessions/{id}` | encerra o shell (e a árvore de processos dele) |
 | `GET /api/terminal/stream?since=<id>:<offset>,…` | saída de todas as sessões, num stream só |
 
+### WAIs por repositório (menu do topo)
+
+O botão de branch no topo (ou `Alt+R`) abre, de qualquer tela, as tarefas de cada repositório:
+os repos à esquerda, com a cor de Configurações › Cores dos cards e a contagem, e as WAIs do
+escolhido à direita, **só da sprint atual, da anterior e da próxima** da squad (a próxima em
+cima). As sprints mais antigas, os baldes sem squad (🛠️BUG-SUPORT) e as tarefas sem sprint
+ficam de fora; repo sem WAI nessas três não aparece.
+
+- **Cada linha leva a cor da etapa do status** (Configurações › Fluxo de trabalho › Progresso) — a mesma do card
+  no canvas —, com o status escrito à direita. Dentro da sprint, o que falta fazer vem antes.
+- A tarefa que rolou de sprint aparece uma vez só, na mais nova das três.
+- O repo de cada tarefa sai das mesmas fontes dos "Repositórios envolvidos": branch com a
+  chave, PR/branch do espelho do Bitbucket e o `[repo]` do começo do título. Tarefa em dois
+  repos aparece nos dois.
+- Clicar numa WAI leva ao canvas da sprint dela com o card em foco e o painel aberto. Aberto,
+  o painel acompanha o espelho como as telas; o repo escolhido fica lembrado nesta máquina.
+- A sprint atual é a ativa de cada squad do escopo (sem nenhuma, a última fechada) — com duas
+  squads, são duas atuais; as vizinhas são do escopo, do mesmo board e da mesma squad, pela
+  ordem de criação no Jira — a próxima ainda não tem data.
+- **Segmentos por projeto do Bitbucket** no topo do painel — *Todos*, um por projeto e
+  *Outros* para repo fora do sync (só pela branch ou pelo título) —, com a contagem de WAIs.
+  Em *Todos* a lista de repos vem agrupada pelo projeto. O nome é o da aba fixa do projeto no
+  Workspace (`WeON`), e o segmento escolhido fica lembrado nesta máquina.
+
 ## Lembretes (`/lembretes`)
 
 - Post-its com título, texto, cor, tags, fixar, arquivar e **horário de lembrete** (atalhos "em 1 hora", "amanhã 9h", "segunda 9h").
@@ -494,6 +532,8 @@ Terminal host (`:8766`, pelo proxy do Vite em `/api/terminal`):
   modal do lembrete. Na modal o botão salva o que está na tela antes de concluir — o PATCH
   reenvia o horário e no back isso rearma a notificação, então a ordem inversa desfaria o
   concluir. Mexeu no horário, o lembrete volta a ficar em aberto (é a mesma regra do back).
+  Concluir também **tira o lembrete dos Fixados** do mural: o fixar era para não perder a
+  cobrança de vista, e ela acabou.
 
 | Rota | O que faz |
 |---|---|
@@ -511,7 +551,7 @@ mais cartão flutuante em cima da tela.
 
 - **Selo abaixo do sino** com quantas notificações ainda não foram vistas. Abrir o painel
   zera a contagem; um lembrete que vence depois (ou que volta de um "adiar") e uma mexida
-  nova somam de novo. Fecha com `Esc` ou clique fora.
+  nova somam de novo. Abre e fecha também com `Alt+N`; fecha com `Esc` ou clique fora.
 - **Lembretes** (os amarelos) trazem horário, tarefas ligadas e as ações
   *Abrir · Adiar 10 min · 1 h · Concluir* — as mesmas de antes. Vêm primeiro na lista: são
   cobrança, e ficariam enterrados embaixo do que acabou de acontecer.
@@ -544,6 +584,12 @@ Em qualquer tela (inclusive com o foco num campo de texto):
 - **`Ctrl+Shift+L`** abre a busca de lembretes já preenchida com o **texto selecionado**; sem seleção, com a tarefa aberta no painel. Se nenhuma nota tem todas as palavras da seleção, mostra as que têm alguma. Teclado: ↑/↓, Enter abre, Ctrl+Enter cria, Esc fecha. Também pelo botão ao lado da busca no topo.
 - **`Ctrl+Shift+A`** abre um lembrete novo com a seleção no texto e as tarefas citadas (ou a aberta) vinculadas.
 
+Os controles à direita do topo **não mostram o atalho no botão**: ele aparece na dica, ao
+passar o mouse (ou chegar pelo Tab) — a do botão de lembretes ensina os dois acima. Além da
+busca (`Ctrl+K`) e dos lembretes, têm atalho as **Notificações** (`Alt+N`), o **Sincronizar
+agora** (`Alt+S`) e as **WAIs por repositório** (`Alt+R`); abrir um painel do topo pelo
+teclado fecha o outro que estava aberto.
+
 Os atalhos mudam em **Configurações › Atalhos** (gravados no banco, `GET/PUT /api/preferences/shortcuts`). A tela recusa atalho repetido entre ações, `Ctrl`+tecla (edição/navegador), `Ctrl+Alt` (é o AltGr) e os que o navegador não entrega à página — por isso o padrão não é `Ctrl+Shift+N`, que no Chrome/Edge abre a janela anônima.
 
 ## Semana (`/semana`)
@@ -551,7 +597,7 @@ Os atalhos mudam em **Configurações › Atalhos** (gravados no banco, `GET/PUT
 Segunda a domingo no fuso do navegador, com navegação entre semanas (`?dia=AAAA-MM-DD`). Duas colunas:
 
 - **Com data:** *Prazo nesta semana* (campo "Data limite" do Jira, por dia, com as **atrasadas** em cima), *Lembretes da semana* (por dia, com os pendentes de semanas anteriores e "Concluir").
-- **Resumo da semana** (largura toda, abaixo das duas colunas): um kanban das mudanças de status das suas tarefas. As colunas são as etapas de Configurações › Progresso — só as que receberam card na semana, mais "Outros status" para status sem etapa —, e cada dia é uma faixa, um embaixo do outro (dia útil aparece mesmo vazio; sábado e domingo só com movimento; na semana corrente, até hoje). A tarefa vira um card na coluna da etapa em que terminou o dia, com o status exato, quem mexeu por último quando não foi você e de onde veio; o caminho inteiro do dia, com hora e autor, fica no title do card. **Entrega** é terminar o dia numa etapa à frente da que começou, da etapa de Review em diante: o card ganha a borda e o ✓ na cor da etapa, e a faixa do dia conta as entregas. "Só entregas" esconde o resto sem mexer nas colunas. Em tela estreita o quadro rola de lado por dentro, com o dia preso à esquerda. Sai de `jira_status_transition`, então o histórico começa no primeiro sync.
+- **Resumo da semana** (largura toda, abaixo das duas colunas): um kanban das mudanças de status das suas tarefas. As colunas são as etapas de Configurações › Fluxo de trabalho › Progresso — só as que receberam card na semana, mais "Outros status" para status sem etapa —, e cada dia é uma faixa, um embaixo do outro (dia útil aparece mesmo vazio; sábado e domingo só com movimento; na semana corrente, até hoje). A tarefa vira um card na coluna da etapa em que terminou o dia, com o status exato, quem mexeu por último quando não foi você e de onde veio; o caminho inteiro do dia, com hora e autor, fica no title do card. **Entrega** é terminar o dia numa etapa à frente da que começou, da etapa de Review em diante: o card ganha a borda e o ✓ na cor da etapa, e a faixa do dia conta as entregas. "Só entregas" esconde o resto sem mexer nas colunas. Em tela estreita o quadro rola de lado por dentro, com o dia preso à esquerda. Sai de `jira_status_transition`, então o histórico começa no primeiro sync.
 - **Sem data:** *Analisar e fatiar* (cards em aberto + concluídos na semana) e *Minhas sem sprint* (em aberto, fora de sprint ativa/futura; o que **sobrou de sprint fechada** vem primeiro).
 - "Minhas" = Responsável é você (accountId salvo na conexão). Cada tarefa mostra status, sprint, pai, pontos em aberto dos contextos e o badge de PR; clicar abre o painel.
 
@@ -591,7 +637,7 @@ Segunda a domingo no fuso do navegador, com navegação entre semanas (`?dia=AAA
 Regras em `back/services/pr_status.py` (funções puras, 100% de cobertura):
 
 - **Por PR:** Mergeada · Recusada · Substituída · Rascunho (draft) · Ajustes requisitados (algum *changes requested* ainda sem correção) · Aprovada (as aprovações que a regra pede) · PR aberta.
-- **Regra de aprovação** em **Configurações › Pull requests**: *Uma aprovação* (a regra de
+- **Regra de aprovação** em **Configurações › Fluxo de trabalho › Pull requests**: *Uma aprovação* (a regra de
   sempre, e o padrão), *Pelo menos 50%* ou *Todos* os revisores — gravada em
   `app_setting.pr_approval` como porcentagem, com teto (50% de 3 revisores são 2 aprovações).
   Revisor é quem foi designado ou se manifestou; quem só comentou não conta. Pedido de ajuste
@@ -605,7 +651,7 @@ Regras em `back/services/pr_status.py` (funções puras, 100% de cobertura):
   o lugar da barra e do "N/X"; o nome de cada um fica no *title* da foto. O status segue na
   borda, no ícone e no *title* do badge ("1/2 aprovações", quem é quem e quantas aprovações
   faltam). Vale para todo lugar que mostra o badge: card, painel da tarefa, Home, Semana,
-  Workspace e a prévia de Configurações › Pull requests. No card do canvas, uma aprovação nova
+  Workspace e a prévia de Configurações › Fluxo de trabalho › Pull requests. No card do canvas, uma aprovação nova
   acende a bolinha mesmo sem mudar a etapa.
 - **Correção enviada devolve o PR a "PR aberta":** o Bitbucket mantém o *changes requested* do
   revisor até ele mexer de novo, então quem diz que a correção subiu é o histórico do espelho —

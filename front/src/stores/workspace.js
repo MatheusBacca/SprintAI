@@ -26,8 +26,19 @@ export const useWorkspaceStore = defineStore('workspace', {
     _treeRequest: 0,
   }),
   getters: {
-    /** Abas abertas, na ordem em que foram abertas. */
-    tabs: (state) => state.list.filter((w) => w.is_open).sort((a, b) => a.tab_order - b.tab_order),
+    /**
+     * Abas abertas: as fixas dos projetos do Bitbucket primeiro (pelo nome), e as outras na
+     * ordem em que foram abertas.
+     */
+    tabs: (state) =>
+      state.list
+        .filter((w) => w.is_open)
+        .sort((a, b) => {
+          const fixed = (b.kind === 'project') - (a.kind === 'project')
+          if (fixed) return fixed
+          if (a.kind === 'project') return a.title.localeCompare(b.title, 'pt-BR', { sensitivity: 'base' })
+          return a.tab_order - b.tab_order
+        }),
     closed: (state) => state.list.filter((w) => !w.is_open),
     current: (state) => state.list.find((w) => w.id === state.currentId) ?? state.detail?.workspace ?? null,
     /** Repos que a tela mostra: os escondidos ficam à parte, para poder trazer de volta. */

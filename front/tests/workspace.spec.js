@@ -135,6 +135,8 @@ describe('WorkspaceView', () => {
         if (url === '/api/workspaces/1/tree') return json(structuredClone(TREE))
         if (url === '/api/workspaces/2') return json({ workspace: list[1], keys: [], repos: [repo('qualificai', { sources: ['pin'], branches: [], issue_keys: [] })] })
         if (url === '/api/workspaces/2/tree') return json({ workspace_id: 2, frame: null, counters: {}, nodes: [], edges: [], groups: [] })
+        if (url === '/api/workspaces/4') return json({ workspace: list.find((w) => w.id === 4), keys: [], repos: [repo('monitoria', { sources: ['project'], branches: [], issue_keys: [] })] })
+        if (url === '/api/workspaces/4/tree') return json({ workspace_id: 4, frame: null, counters: {}, nodes: [], edges: [], groups: [] })
         if (url.startsWith('/api/workspaces/1/repos/')) return NO_CONTENT
         if (url === '/api/workspace/repos') return json({ root: 'C:\\projects', repos: [] })
         if (url === '/api/workspace/open') return NO_CONTENT
@@ -363,6 +365,29 @@ describe('WorkspaceView', () => {
 
     await wrapper.find('.ws-free__close').trigger('click')
     expect(wrapper.find('.ws-free').exists()).toBe(false)
+  })
+
+  it('aba de projeto do Bitbucket: vem primeiro, não fecha e diz que os repos são do projeto', async () => {
+    list = [
+      ...list,
+      workspace(4, { kind: 'project', project_key: 'ORGANIA', root_issue_key: null, title: 'OrganIA', issue_type: null, status: null, tab_order: 9 }),
+    ]
+    const { wrapper, router } = await mountView()
+
+    // Sem workspace na URL, a primeira aba é a do projeto.
+    expect(router.currentRoute.value.query.ws).toBe('4')
+    expect(wrapper.findAll('.tabs__item').map((t) => t.attributes('data-id'))).toEqual(['4', '1'])
+    const fixa = wrapper.find('.tabs__item[data-id="4"]')
+    expect(fixa.classes()).toContain('tabs__item--fixed')
+    expect(fixa.find('.tabs__close').exists()).toBe(false)
+    expect(wrapper.find('.tabs__item[data-id="1"] .tabs__close').exists()).toBe(true)
+
+    expect(wrapper.find('.ws-main__free').text()).toBe('Projeto do Bitbucket')
+    await wrapper.find('.ws-main__view').trigger('click')
+    const panel = wrapper.find('.ws-free')
+    expect(panel.find('.ws-free__type').text()).toBe('PROJETO DO BITBUCKET')
+    expect(panel.find('.ws-free__desc').text()).toContain('Sincronização')
+    expect(panel.find('.repo[data-repo="monitoria"]').text()).toContain('projeto')
   })
 
   it('o começo abre pela chave e lista os fechados', async () => {

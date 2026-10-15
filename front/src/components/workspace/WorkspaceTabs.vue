@@ -5,12 +5,20 @@ import { FolderGit2, Plus, X } from 'lucide-vue-next'
  * As abas dos workspaces abertos, no topo da tela Workspace. Ficam aqui, e não no topo do
  * app: lá já moram os lembretes fixados, e uma fileira de abas em toda tela comeria o
  * espaço da busca. Fechar a aba não apaga o workspace.
+ *
+ * As abas dos projetos do Bitbucket (OrganIA, weon) vêm primeiro e não fecham: elas saem dos
+ * repositórios escolhidos em Configurações › Sincronização, não de um clique aqui.
  */
 defineProps({
   tabs: { type: Array, required: true },
   currentId: { type: Number, default: null },
 })
 const emit = defineEmits(['select', 'close', 'new'])
+
+function tabTitle(tab) {
+  if (tab.kind === 'project') return `${tab.title} — projeto do Bitbucket, fixo pelos repositórios escolhidos na Sincronização`
+  return tab.root_issue_key ? `${tab.root_issue_key} — ${tab.title}` : tab.title
+}
 </script>
 
 <template>
@@ -20,7 +28,7 @@ const emit = defineEmits(['select', 'close', 'new'])
         v-for="tab in tabs"
         :key="tab.id"
         class="tabs__item"
-        :class="{ 'tabs__item--active': tab.id === currentId }"
+        :class="{ 'tabs__item--active': tab.id === currentId, 'tabs__item--fixed': tab.kind === 'project' }"
         :data-id="tab.id"
       >
         <button
@@ -28,14 +36,21 @@ const emit = defineEmits(['select', 'close', 'new'])
           role="tab"
           class="tabs__open"
           :aria-selected="tab.id === currentId"
-          :title="tab.root_issue_key ? `${tab.root_issue_key} — ${tab.title}` : tab.title"
+          :title="tabTitle(tab)"
           @click="emit('select', tab.id)"
         >
           <FolderGit2 :size="13" />
           <span v-if="tab.root_issue_key" class="tabs__key">{{ tab.root_issue_key }}</span>
           <span class="tabs__title">{{ tab.title }}</span>
         </button>
-        <button type="button" class="tabs__close" title="Fechar aba" aria-label="Fechar aba" @click="emit('close', tab.id)">
+        <button
+          v-if="tab.kind !== 'project'"
+          type="button"
+          class="tabs__close"
+          title="Fechar aba"
+          aria-label="Fechar aba"
+          @click="emit('close', tab.id)"
+        >
           <X :size="12" />
         </button>
       </li>
@@ -93,6 +108,16 @@ const emit = defineEmits(['select', 'close', 'new'])
 
 .tabs__item--active .tabs__open {
   color: var(--color-text);
+}
+
+/* Sem o "x", a aba fixa fecha o respiro do lado direito. */
+.tabs__item--fixed .tabs__open {
+  padding-right: 10px;
+}
+
+/* Um respiro a mais separa as abas fixas dos projetos das que o dev abre e fecha. */
+.tabs__item--fixed + .tabs__item:not(.tabs__item--fixed) {
+  margin-left: var(--space-2);
 }
 
 .tabs__key {

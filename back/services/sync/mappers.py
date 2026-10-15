@@ -130,12 +130,16 @@ def issue_rows(
 
 
 def repository_row(raw: dict[str, Any]) -> dict[str, Any]:
+    project = raw.get("project") or {}
     return {
         "slug": raw["slug"],
         "name": raw.get("name") or raw["slug"],
         "is_private": raw.get("is_private"),
         "main_branch": (raw.get("mainbranch") or {}).get("name"),
         "updated_on": parse_dt(raw.get("updated_on")),
+        # O projeto do Bitbucket (OrganIA, weon) segmenta o menu do topo e o Workspace.
+        "project_key": project.get("key"),
+        "project_name": project.get("name"),
     }
 
 

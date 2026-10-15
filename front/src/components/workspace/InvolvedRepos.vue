@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { CodeXml, Eye, EyeOff, FolderGit2, GitBranch, Plus, SquareTerminal } from 'lucide-vue-next'
 
 /**
- * Repositórios envolvidos: cada um diz de onde veio (branch, PR, título ou fixado). Clicar
+ * Repositórios envolvidos: cada um diz de onde veio (projeto, branch, PR, título ou fixado). Clicar
  * num repo escolhe o repo da linha do tempo e do terminal. No Workspace mora na aba Detalhes
  * do painel da tarefa; no workspace livre, no painel de repositórios.
  *
@@ -23,7 +23,7 @@ defineProps({
 })
 const emit = defineEmits(['select-repo', 'pin', 'open-folder'])
 
-const SOURCE_LABELS = { branch: 'branch local', pr: 'PR no Bitbucket', title: 'título', pin: 'fixado' }
+const SOURCE_LABELS = { project: 'projeto', branch: 'branch local', pr: 'PR no Bitbucket', title: 'título', pin: 'fixado' }
 
 const adding = ref('')
 const showHidden = ref(false)

@@ -27,7 +27,7 @@ function title(note) {
         {{ title(entry.note) }}
       </button>
       <button type="button" class="pins__off" title="Desafixar" @click="store.togglePin(entry.id)">
-        <PinOff :size="12" />
+        <PinOff :size="14" />
       </button>
     </li>
   </ul>
@@ -45,10 +45,17 @@ function title(note) {
   overflow: hidden;
 }
 
+/*
+ * Mesma altura dos outros controles do topo, e o título e o pin dividem essa altura
+ * inteira: antes o pin era um quadradinho de 22px num chip de 30, com ícone menor que a
+ * letra, e parecia solto dentro do post-it.
+ */
 .pins__item {
   display: flex;
-  align-items: center;
+  align-items: stretch;
+  height: var(--topbar-control-height);
   min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--note-yellow-border);
   border-radius: var(--radius-md);
   background: var(--note-yellow-bg);
@@ -57,27 +64,31 @@ function title(note) {
 .pins__open {
   max-width: 220px;
   overflow: hidden;
-  padding: 4px 2px 4px 10px;
+  padding: 0 6px 0 10px;
   border: 0;
   background: none;
   color: var(--color-text);
   font-size: var(--text-xs);
+  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .pins__off {
+  flex-shrink: 0;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 22px;
+  width: calc(var(--topbar-control-height) - 2px);
+  padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-left: 1px solid var(--note-yellow-border);
   background: none;
-  color: var(--color-text-muted);
+  color: var(--note-yellow-accent);
 }
 
+.pins__open:hover,
 .pins__off:hover {
+  background: var(--note-scrim);
   color: var(--color-text);
 }
 

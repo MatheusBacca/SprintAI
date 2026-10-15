@@ -1,9 +1,13 @@
 <script setup>
 import { onBeforeUnmount, onMounted } from 'vue'
+import { useHealthStore } from '@/stores/health'
 import { useNotesStore } from '@/stores/notes'
+import { useNotificationsStore } from '@/stores/notifications'
+import { useRepoIssuesStore } from '@/stores/repoIssues'
 import { useScreenContextStore } from '@/stores/screenContext'
 import { useSearchStore } from '@/stores/search'
 import { useShortcutsStore } from '@/stores/shortcuts'
+import { useSyncStore } from '@/stores/sync'
 import { comboFromEvent, issueKeysIn, readSelection, searchTermFrom } from '@/utils/shortcuts'
 
 /**
@@ -16,9 +20,35 @@ const notes = useNotesStore()
 const screen = useScreenContextStore()
 const shortcuts = useShortcutsStore()
 const search = useSearchStore()
+const notifications = useNotificationsStore()
+const repoIssues = useRepoIssuesStore()
+const health = useHealthStore()
+const sync = useSyncStore()
 
 const MAX_BODY = 20_000
 const MAX_ISSUES = 30
+
+/**
+ * Painéis do topo abertos pelo teclado: abrir um fecha os outros. Pelo mouse quem fecha é
+ * o clique fora — que, com a tecla, não aconteceu.
+ */
+function closeTopPanels() {
+  if (notes.palette.open) notes.closePalette()
+  if (search.open) search.close()
+  notifications.closePanel()
+  repoIssues.closePanel()
+}
+
+/** Abre o painel ancorado ou, aberto, fecha — a mesma tecla vai e volta. */
+function togglePanel(store) {
+  if (notes.editor.open) return
+  if (store.open) {
+    store.closePanel()
+    return
+  }
+  closeTopPanels()
+  store.openPanel()
+}
 
 const handlers = {
   open_reminders() {
@@ -49,6 +79,20 @@ const handlers = {
     }
     if (notes.palette.open) notes.closePalette()
     search.openSearch(searchTermFrom(readSelection()) || null)
+  },
+
+  open_notifications() {
+    togglePanel(notifications)
+  },
+
+  open_repo_issues() {
+    togglePanel(repoIssues)
+  },
+
+  sync_now() {
+    // As travas do botão: sem API, sem status do sync ou com um sync já andando, nada.
+    if (health.level !== 'ok' || sync.statusError || sync.running || sync.triggering) return
+    sync.trigger()
   },
 }
 

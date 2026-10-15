@@ -21,6 +21,7 @@ from schemas.workspace_schemas import (
     FolderHeadsOut,
     GraphScope,
     RepoGraphOut,
+    RepoIssuesOut,
     RepoPinIn,
     RepoRefsOut,
     WorkspaceCreate,
@@ -40,6 +41,7 @@ from services.workspace import (
     feature_set,
     graph_service,
     launcher,
+    repo_issues,
     repos_service,
 )
 from services.workspace import workspace_service as service
@@ -58,6 +60,12 @@ RepoSlug = Annotated[str, Path(pattern=REPO_SLUG_PATTERN)]
 async def list_repos(pool: Pool, roots: RootsDep):
     """Pastas de `C:\\projects`, lidas do disco agora, com o vínculo e a branch base."""
     return await repos_service.list_repos(pool, roots)
+
+
+@router.get("/workspace/repo-issues", response_model=RepoIssuesOut)
+async def list_repo_issues(pool: Pool, roots: RootsDep):
+    """WAIs de cada repositório, por sprint (da mais nova para a mais antiga) — o menu do topo."""
+    return await repo_issues.list_repo_issues(pool, roots)
 
 
 @router.post("/workspace/heads", response_model=FolderHeadsOut)
@@ -232,6 +240,14 @@ def _not_found() -> HTTPException:
     return HTTPException(status.HTTP_404_NOT_FOUND, detail="Workspace não encontrado.")
 
 
+def _fixed() -> HTTPException:
+    return HTTPException(
+        status.HTTP_409_CONFLICT,
+        detail="A aba do projeto é fixa: ela sai dos repositórios escolhidos em "
+        "Configurações › Sincronização.",
+    )
+
+
 @router.get("/workspaces", response_model=list[WorkspaceOut])
 async def list_workspaces(pool: Pool):
     return await service.list_workspaces(pool)
@@ -280,6 +296,8 @@ async def update_workspace(pool: Pool, workspace_id: int, payload: WorkspaceUpda
         return await service.update_workspace(pool, workspace_id, payload)
     except service.WorkspaceNotFound as exc:
         raise _not_found() from exc
+    except service.WorkspaceFixed as exc:
+        raise _fixed() from exc
 
 
 @router.delete("/workspaces/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -288,6 +306,8 @@ async def delete_workspace(pool: Pool, workspace_id: int):
         await service.delete_workspace(pool, workspace_id)
     except service.WorkspaceNotFound as exc:
         raise _not_found() from exc
+    except service.WorkspaceFixed as exc:
+        raise _fixed() from exc
 
 
 @router.put("/workspaces/{workspace_id}/repos/{slug}", status_code=status.HTTP_204_NO_CONTENT)

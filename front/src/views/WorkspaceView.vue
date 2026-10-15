@@ -37,6 +37,11 @@ const workspaceId = computed(() => Number(route.query.ws) || null)
 const selectedKey = computed(() => route.query.tarefa ?? null)
 const current = computed(() => (workspaceId.value ? store.list.find((w) => w.id === workspaceId.value) ?? null : null))
 const isIssue = computed(() => current.value?.kind === 'issue')
+/**
+ * A aba de um projeto do Bitbucket é um workspace sem tarefa como o livre, mas os repos vêm
+ * sozinhos — os do projeto escolhidos na Sincronização —, e a tela diz isso.
+ */
+const isProject = computed(() => current.value?.kind === 'project')
 const rootKey = computed(() => current.value?.root_issue_key ?? null)
 
 // --- Área principal: a última escolhida fica salva neste navegador -------------------------
@@ -429,7 +434,7 @@ watch(view, async (value, previous) => {
           </button>
         </nav>
         <div v-else class="ws-main__views">
-          <span class="ws-main__free">Workspace livre</span>
+          <span class="ws-main__free">{{ isProject ? 'Projeto do Bitbucket' : 'Workspace livre' }}</span>
           <button
             type="button"
             class="ws-main__view"
@@ -556,14 +561,18 @@ watch(view, async (value, previous) => {
           <aside v-else-if="!isIssue && reposOpen" class="ws-body__panel ws-free card" aria-label="Repositórios do workspace">
             <header class="ws-free__head">
               <div class="ws-free__titles">
-                <p class="ws-free__type">WORKSPACE LIVRE</p>
+                <p class="ws-free__type">{{ isProject ? 'PROJETO DO BITBUCKET' : 'WORKSPACE LIVRE' }}</p>
                 <h2 class="ws-free__title">{{ current.title }}</h2>
               </div>
               <button type="button" class="ws-free__close" title="Fechar" aria-label="Fechar painel" @click="reposOpen = false">
                 <X :size="16" />
               </button>
             </header>
-            <p class="ws-free__desc">Sem tarefa: só os repositórios que você escolheu, com linha do tempo e terminal.</p>
+            <p v-if="isProject" class="ws-free__desc">
+              Os repositórios do projeto que você acompanha em Configurações › Sincronização, com linha
+              do tempo e terminal. Escolher outro repo lá traz ele para cá.
+            </p>
+            <p v-else class="ws-free__desc">Sem tarefa: só os repositórios que você escolheu, com linha do tempo e terminal.</p>
             <InvolvedRepos
               :repos="store.visibleRepos"
               :hidden-repos="store.hiddenRepos"

@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from schemas.pr_status_schemas import PrLinkOut
+from schemas.progress_schemas import StageRefOut
 from schemas.sprint_schemas import TreeEdgeOut, TreeGroupOut, TreeNodeOut
 from services.pr_status import PrStatus
 
@@ -268,8 +269,8 @@ class CommitDetailOut(BaseModel):
 
 # --- Workspace (B16) ---------------------------------------------------------------------------
 
-WorkspaceKind = Literal["issue", "free"]
-RepoSource = Literal["branch", "pr", "title", "pin"]
+WorkspaceKind = Literal["issue", "free", "project"]
+RepoSource = Literal["project", "branch", "pr", "title", "pin"]
 PinMode = Literal["add", "hide", "auto"]
 
 
@@ -277,6 +278,8 @@ class WorkspaceOut(BaseModel):
     id: int
     kind: WorkspaceKind
     root_issue_key: str | None
+    # Workspace de projeto: a aba fixa de um projeto do Bitbucket escolhido no sync.
+    project_key: str | None = None
     # Do espelho quando a tarefa está lá (o título do Jira muda); senão, o gravado ao abrir.
     title: str
     issue_type: str | None
@@ -318,8 +321,8 @@ class InvolvedRepoOut(BaseModel):
     base_branch: str | None
     current_branch: str | None
     sources: list[RepoSource] = Field(
-        description="De onde veio: branch local com a chave, PR/branch do espelho, colchete "
-        "do título ou fixado pelo dev"
+        description="De onde veio: projeto do workspace, branch local com a chave, PR/branch do "
+        "espelho, colchete do título ou fixado pelo dev"
     )
     branches: list[str]
     issue_keys: list[str]
@@ -358,3 +361,41 @@ class WorkspaceTreeOut(BaseModel):
     nodes: list[TreeNodeOut]
     edges: list[TreeEdgeOut]
     groups: list[TreeGroupOut]
+
+
+class RepoIssueOut(BaseModel):
+    key: str
+    summary: str
+    issue_type: str
+    status: str
+    # Etapa do status em Configurações › Fluxo de trabalho › Progresso: a cor da linha. Nula =
+    # status sem etapa.
+    stage: StageRefOut | None
+
+
+class RepoIssueSprintOut(BaseModel):
+    id: int
+    name: str
+    state: Literal["active", "future", "closed"]
+    position: Literal["anterior", "atual", "proxima"] = Field(
+        description="Onde a sprint fica em relação à atual da squad"
+    )
+    issues: list[RepoIssueOut]
+
+
+class RepoIssuesRepoOut(BaseModel):
+    slug: str
+    bb_slug: str | None
+    local: bool
+    color: str | None = Field(description="Cor do repositório em Configurações › Cores dos cards")
+    # Projeto do Bitbucket (OrganIA, weon): segmenta o menu. Nulo = repo fora do sync.
+    project_key: str | None = None
+    project_name: str | None = None
+    issue_count: int
+    sprints: list[RepoIssueSprintOut] = Field(
+        description="Só a próxima, a atual e a anterior, nessa ordem — as que têm WAI do repo"
+    )
+
+
+class RepoIssuesOut(BaseModel):
+    repos: list[RepoIssuesRepoOut]

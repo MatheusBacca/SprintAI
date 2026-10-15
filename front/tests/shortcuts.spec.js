@@ -7,9 +7,13 @@ import ReminderPalette from '@/components/notes/ReminderPalette.vue'
 import ShortcutsPanel from '@/components/settings/ShortcutsPanel.vue'
 import GlobalShortcuts from '@/components/shell/GlobalShortcuts.vue'
 import { routes } from '@/router/routes'
+import { useHealthStore } from '@/stores/health'
 import { useNotesStore } from '@/stores/notes'
+import { useNotificationsStore } from '@/stores/notifications'
+import { useRepoIssuesStore } from '@/stores/repoIssues'
 import { useScreenContextStore } from '@/stores/screenContext'
 import { useShortcutsStore } from '@/stores/shortcuts'
+import { useSyncStore } from '@/stores/sync'
 import { highlightParts, snippetAround } from '@/utils/highlight'
 import {
   DEFAULT_BINDINGS,
@@ -100,7 +104,8 @@ describe('regras de atalho', () => {
   })
 
   it('padrões são válidos e não conflitam', () => {
-    expect(Object.values(DEFAULT_BINDINGS).map(validateCombo)).toEqual([null, null, null])
+    expect(Object.values(DEFAULT_BINDINGS).every((combo) => validateCombo(combo) === null)).toBe(true)
+    expect(new Set(Object.values(DEFAULT_BINDINGS)).size).toBe(Object.keys(DEFAULT_BINDINGS).length)
     expect(conflictingAction(DEFAULT_BINDINGS, 'Ctrl+Shift+L', 'new_reminder').id).toBe('open_reminders')
     expect(conflictingAction(DEFAULT_BINDINGS, 'Ctrl+Shift+L', 'open_reminders')).toBeNull()
   })
@@ -183,6 +188,43 @@ describe('GlobalShortcuts', () => {
     screen.focusIssue('WAI-8295')
     window.dispatchEvent(key('KeyL', { ctrlKey: true, shiftKey: true }))
     expect(notes.palette).toEqual({ open: true, query: 'WAI-8295', source: 'issue' })
+    wrapper.unmount()
+  })
+
+  it('Alt+N e Alt+R abrem os painéis do topo, um fechando o outro, e a mesma tecla fecha', async () => {
+    const wrapper = await mountShortcuts()
+    const notifications = useNotificationsStore()
+    const repoIssues = useRepoIssuesStore()
+
+    window.dispatchEvent(key('KeyN', { altKey: true }))
+    expect(notifications.open).toBe(true)
+
+    window.dispatchEvent(key('KeyR', { altKey: true }))
+    await flushPromises()
+    expect(repoIssues.open).toBe(true)
+    expect(notifications.open).toBe(false)
+    expect(calls.some((c) => c.url.includes('/workspace/repo-issues'))).toBe(true)
+
+    window.dispatchEvent(key('KeyR', { altKey: true }))
+    expect(repoIssues.open).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('Alt+S sincroniza só com a API de pé, como o botão', async () => {
+    const wrapper = await mountShortcuts()
+    const health = useHealthStore()
+    const sync = useSyncStore()
+    const posted = () => calls.some((c) => c.method === 'POST' && c.url.endsWith('/sync'))
+
+    window.dispatchEvent(key('KeyS', { altKey: true }))
+    await flushPromises()
+    expect(posted()).toBe(false)
+
+    health.api = 'up'
+    window.dispatchEvent(key('KeyS', { altKey: true }))
+    await flushPromises()
+    expect(posted()).toBe(true)
+    sync.stopPolling()
     wrapper.unmount()
   })
 
@@ -366,7 +408,7 @@ describe('ShortcutsPanel', () => {
     await wrapper.findAll('.shortcuts__footer button').at(-1).trigger('click')
     await flushPromises()
     const put = calls.find((c) => c.method === 'PUT')
-    expect(put.body).toEqual({ bindings: { open_reminders: 'Alt+J', new_reminder: null, global_search: 'Ctrl+K' } })
+    expect(put.body).toEqual({ bindings: { ...DEFAULT_BINDINGS, open_reminders: 'Alt+J', new_reminder: null } })
     expect(shortcuts.bindings.open_reminders).toBe('Alt+J')
     expect(wrapper.find('.shortcuts__feedback').text()).toContain('salvos')
     wrapper.unmount()

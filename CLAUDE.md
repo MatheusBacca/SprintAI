@@ -231,12 +231,18 @@ conta a decisão ou o caso real que levou àquilo.
   pai do merge.
 - **O espelho do Bitbucket não é lista de branches.** Só guarda branch com `WAI-`, dos repos
   escolhidos e "minhas". A linha do tempo lê o git local; o espelho só põe o selo do PR.
+- **O projeto do Bitbucket é o agrupamento do dev.** Os repos do sync são escolhidos por
+  projeto (OrganIA, weon), e o sync grava o projeto em `bb_repository`. Dele saem os
+  segmentos do menu "WAIs por repositório" e as abas fixas do Workspace (`kind = 'project'`,
+  criadas na leitura da lista): o workspace livre que já tinha o nome do projeto é adotado,
+  e o projeto que sai do sync devolve a aba como livre e fechada. Aba de projeto não fecha nem se apaga
+  (409) — quem tira é a Sincronização.
 - **Terminal é WinPTY, não ConPTY.** O ConPTY do pywinpty cria o processo com o Ctrl+C
   desligado para os filhos (spike W0, 02/10/2026) — sem ele não se para um `npm run dev`.
   Encerrar é `taskkill /T /F` no shell, senão o filho fica órfão.
 - **O workflow de Tarefa da WAI é global e compartilhado.** São 17 status (de "Cruzeiro" a
   "IMPLANTAÇÃO") e todos alcançáveis de qualquer um. A linha de fluxo mostra só os que têm
-  etapa em Configurações › Progresso e recolhe o resto em "Outros status".
+  etapa em Configurações › Fluxo de trabalho › Progresso e recolhe o resto em "Outros status".
 
 ## Escrita em disco
 

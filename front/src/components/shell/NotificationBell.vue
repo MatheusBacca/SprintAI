@@ -1,14 +1,18 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Bell, Pin, PinOff } from 'lucide-vue-next'
+import TopbarTip from './TopbarTip.vue'
 import ActivityKindIcon from '@/components/activity/ActivityKindIcon.vue'
 import { activityKindMeta, activityTab } from '@/constants/activityKinds'
 import { useIssueNavigation } from '@/composables/useIssueNavigation'
 import { NOTIFICATION_KINDS, useNotificationsStore } from '@/stores/notifications'
+import { useShortcutsStore } from '@/stores/shortcuts'
 import { formatDateTime } from '@/utils/datetime'
+import { ariaShortcut } from '@/utils/shortcuts'
 import { formatRelative } from '@/utils/time'
 
 const store = useNotificationsStore()
+const shortcuts = useShortcutsStore()
 const { openIssueInSprint } = useIssueNavigation()
 const root = ref(null)
 
@@ -58,18 +62,20 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="root" class="notif">
-    <button
-      type="button"
-      class="notif__bell"
-      :class="{ 'notif__bell--alert': store.unseenCount > 0 }"
-      :title="label"
-      :aria-label="label"
-      :aria-expanded="store.open"
-      @click="store.togglePanel()"
-    >
-      <Bell :size="16" />
-      <span v-if="store.unseenCount" class="notif__badge" aria-hidden="true">{{ store.unseenCount }}</span>
-    </button>
+    <TopbarTip :lines="[{ label, combo: shortcuts.bindings.open_notifications }]">
+      <button
+        type="button"
+        class="notif__bell"
+        :class="{ 'notif__bell--alert': store.unseenCount > 0 }"
+        :aria-label="label"
+        :aria-expanded="store.open"
+        :aria-keyshortcuts="ariaShortcut(shortcuts.bindings.open_notifications)"
+        @click="store.togglePanel()"
+      >
+        <Bell :size="16" />
+        <span v-if="store.unseenCount" class="notif__badge" aria-hidden="true">{{ store.unseenCount }}</span>
+      </button>
+    </TopbarTip>
 
     <section v-if="store.open" class="notif__panel" aria-label="Notificações">
       <header class="notif__head">
@@ -159,9 +165,10 @@ onBeforeUnmount(() => {
 
 .notif__bell {
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 8px;
+  display: grid;
+  place-items: center;
+  width: var(--topbar-control-height);
+  height: var(--topbar-control-height);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);

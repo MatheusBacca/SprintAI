@@ -4,11 +4,14 @@ import { useRoute } from 'vue-router'
 import { Search, StickyNote } from 'lucide-vue-next'
 import NotificationBell from './NotificationBell.vue'
 import NotificationPins from './NotificationPins.vue'
+import RepoIssuesMenu from './RepoIssuesMenu.vue'
 import SyncIndicator from './SyncIndicator.vue'
+import TopbarTip from './TopbarTip.vue'
 import { useHealthStore } from '@/stores/health'
 import { useNotesStore } from '@/stores/notes'
 import { useSearchStore } from '@/stores/search'
 import { useShortcutsStore } from '@/stores/shortcuts'
+import { ariaShortcut } from '@/utils/shortcuts'
 
 const HEALTH_INTERVAL_MS = 30_000
 
@@ -18,10 +21,11 @@ const notes = useNotesStore()
 const shortcuts = useShortcutsStore()
 const search = useSearchStore()
 
-const remindersTitle = computed(() => {
-  const combo = shortcuts.bindings.open_reminders
-  return combo ? `Buscar lembretes (${combo})` : 'Buscar lembretes'
-})
+/** O "novo lembrete" não tem botão no topo: a dica do botão de lembretes ensina os dois. */
+const reminderTips = computed(() => [
+  { label: 'Buscar lembretes', combo: shortcuts.bindings.open_reminders },
+  { label: 'Novo lembrete com a seleção', combo: shortcuts.bindings.new_reminder },
+])
 
 const statusLabel = computed(
   () =>
@@ -55,31 +59,48 @@ onBeforeUnmount(() => clearInterval(timer))
 
     <NotificationPins />
 
-    <button type="button" class="topbar__search" aria-label="Busca global" @click="search.openSearch()">
-      <Search :size="16" />
-      <span class="topbar__search-text">Buscar tarefas, contextos ou lembretes…</span>
-      <kbd v-if="shortcuts.bindings.global_search">{{ shortcuts.bindings.global_search }}</kbd>
-    </button>
+    <!-- À direita, cada controle mostra o atalho só na dica (hover ou Tab), não no botão. -->
+    <TopbarTip
+      class="topbar__search-tip"
+      :lines="[{ label: 'Busca global', combo: shortcuts.bindings.global_search }]"
+      detail="Tarefas, comentários, PRs, contextos e lembretes"
+    >
+      <button
+        type="button"
+        class="topbar__search"
+        aria-label="Busca global"
+        :aria-keyshortcuts="ariaShortcut(shortcuts.bindings.global_search)"
+        @click="search.openSearch()"
+      >
+        <Search :size="16" />
+        <span class="topbar__search-text">Buscar tarefas, lembretes…</span>
+      </button>
+    </TopbarTip>
 
-    <button type="button" class="topbar__notes" :title="remindersTitle" :aria-label="remindersTitle" @click="notes.openPalette()">
-      <StickyNote :size="16" />
-      <kbd v-if="shortcuts.bindings.open_reminders">{{ shortcuts.bindings.open_reminders }}</kbd>
-    </button>
+    <TopbarTip :lines="reminderTips">
+      <button
+        type="button"
+        class="topbar__notes"
+        aria-label="Buscar lembretes"
+        :aria-keyshortcuts="ariaShortcut(shortcuts.bindings.open_reminders)"
+        @click="notes.openPalette()"
+      >
+        <StickyNote :size="16" />
+      </button>
+    </TopbarTip>
+
+    <RepoIssuesMenu />
 
     <NotificationBell />
 
     <SyncIndicator v-if="health.level === 'ok'" />
 
-    <div
-      class="topbar__status"
-      :class="`topbar__status--${health.level}`"
-      :title="statusLabel"
-      role="status"
-      :aria-label="statusLabel"
-    >
-      <span class="topbar__dot" />
-      <span class="topbar__status-text">{{ statusShort }}</span>
-    </div>
+    <TopbarTip :lines="[{ label: statusLabel }]">
+      <div class="topbar__status" :class="`topbar__status--${health.level}`" role="status" :aria-label="statusLabel">
+        <span class="topbar__dot" />
+        <span class="topbar__status-text">{{ statusShort }}</span>
+      </div>
+    </TopbarTip>
   </header>
 </template>
 
@@ -114,14 +135,21 @@ onBeforeUnmount(() => clearInterval(timer))
   color: var(--color-text-muted);
 }
 
-.topbar__search {
+/* A dica embrulha a busca: o encolher e o empurrar para a direita ficam nela. */
+.topbar .topbar__search-tip {
   margin-left: auto;
+  flex: 0 1 230px;
+  min-width: 44px;
+}
+
+.topbar__search {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex: 0 1 340px;
-  min-width: 44px;
-  padding: 8px 12px;
+  width: 100%;
+  min-width: 0;
+  height: var(--topbar-control-height);
+  padding: 0 12px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   color: var(--color-text-muted);
@@ -144,24 +172,15 @@ onBeforeUnmount(() => clearInterval(timer))
   font-size: var(--text-sm);
 }
 
-.topbar__search kbd {
-  flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
 .topbar__notes {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  display: grid;
+  place-items: center;
+  width: var(--topbar-control-height);
+  height: var(--topbar-control-height);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text-secondary);
-  white-space: nowrap;
 }
 
 .topbar__notes:hover {
@@ -169,16 +188,8 @@ onBeforeUnmount(() => clearInterval(timer))
   color: var(--color-primary);
 }
 
-.topbar__notes kbd {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
 /* Tela estreita: some o texto de apoio, ficam os ícones (a busca vira só a lupa). */
 @media (max-width: 1100px) {
-  .topbar__notes kbd,
-  .topbar__search kbd,
   .topbar__status-text {
     display: none;
   }
@@ -191,9 +202,9 @@ onBeforeUnmount(() => clearInterval(timer))
 }
 
 .topbar__status {
-  flex-shrink: 0;
   display: flex;
   align-items: center;
+  height: var(--topbar-control-height);
   gap: var(--space-2);
   font-size: var(--text-xs);
   color: var(--color-text-secondary);

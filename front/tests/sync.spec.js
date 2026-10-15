@@ -194,13 +194,18 @@ describe('SyncIndicator', () => {
     const wrapper = mount(SyncIndicator)
     await flushPromises()
 
-    expect(wrapper.text()).toBe('Sincronizado agora mesmo')
-    await wrapper.trigger('click')
+    const button = wrapper.find('button.sync')
+    expect(button.text()).toBe('Sincronizado agora mesmo')
+    // O atalho fica na dica, não no botão.
+    expect(wrapper.find('[role="tooltip"]').text()).toContain('Sincronizar agora')
+    expect(wrapper.find('[role="tooltip"]').findAll('kbd').map((k) => k.text())).toEqual(['Alt', 'S'])
+    expect(button.attributes('aria-keyshortcuts')).toBe('Alt+S')
+    await button.trigger('click')
     await flushPromises()
     expect(calls.some((c) => c.key === 'POST /api/sync')).toBe(true)
   })
 
-  it('sinaliza sync parcial com os erros no título', async () => {
+  it('sinaliza sync parcial com os erros na dica', async () => {
     routeFetch({
       'GET /api/sync/status': json(200, {
         ...STATUS_OK,
@@ -210,8 +215,8 @@ describe('SyncIndicator', () => {
     const wrapper = mount(SyncIndicator)
     await flushPromises()
 
-    expect(wrapper.classes()).toContain('sync--warning')
-    expect(wrapper.attributes('title')).toContain('limite atingido')
+    expect(wrapper.find('button.sync').classes()).toContain('sync--warning')
+    expect(wrapper.find('.tip__detail').text()).toContain('limite atingido')
   })
 })
 

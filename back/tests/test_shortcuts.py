@@ -57,9 +57,9 @@ def test_conflito_entre_acoes_e_acao_desconhecida():
 
 def test_desativar_e_merge_com_padrao():
     assert validate_bindings({"open_reminders": None, "new_reminder": ""}) == {
+        **DEFAULT_BINDINGS,
         "open_reminders": None,
         "new_reminder": None,
-        "global_search": "Ctrl+K",
     }
     assert merge_with_defaults(None) == DEFAULT_BINDINGS
     assert merge_with_defaults({"open_reminders": "Alt+J"}) == {
@@ -68,6 +68,27 @@ def test_desativar_e_merge_com_padrao():
     }
     # Valor salvo que ficou inválido volta ao padrão em vez de quebrar a tela.
     assert merge_with_defaults({"open_reminders": "Ctrl+Shift+N"}) == DEFAULT_BINDINGS
+
+
+def test_acao_nova_com_padrao_ja_usado_nasce_desligada():
+    # Preferência salva antes de Notificações ganhar atalho, com o Alt+N noutra ação.
+    salvo = {"open_reminders": "Alt+N", "new_reminder": "Ctrl+Shift+A", "global_search": "Ctrl+K"}
+
+    assert merge_with_defaults(salvo) == {
+        **DEFAULT_BINDINGS,
+        "open_reminders": "Alt+N",
+        "open_notifications": None,
+    }
+
+
+def test_preferencia_antiga_ganha_os_atalhos_novos_do_header():
+    salvo = {"open_reminders": "Ctrl+Shift+L", "new_reminder": "Ctrl+Shift+A"}
+
+    merged = merge_with_defaults(salvo)
+
+    assert merged["open_notifications"] == "Alt+N"
+    assert merged["sync_now"] == "Alt+S"
+    assert merged["open_repo_issues"] == "Alt+R"
 
 
 async def test_api_le_salva_e_valida(db_app, client):
@@ -80,7 +101,7 @@ async def test_api_le_salva_e_valida(db_app, client):
         json={"bindings": {"open_reminders": "alt+j", "new_reminder": None}},
     )
     assert response.status_code == 200, response.text
-    saved = {"open_reminders": "Alt+J", "new_reminder": None, "global_search": "Ctrl+K"}
+    saved = {**DEFAULT_BINDINGS, "open_reminders": "Alt+J", "new_reminder": None}
     assert response.json()["bindings"] == saved
     assert (await client.get("/api/preferences/shortcuts")).json()["bindings"] == saved
 

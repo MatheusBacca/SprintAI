@@ -12,12 +12,26 @@ async def upsert_repositories(conn: Executor, rows: Iterable[dict[str, Any]]) ->
         return
     await conn.executemany(
         """
-        INSERT INTO bb_repository (slug, name, is_private, main_branch, updated_on, synced_at)
-        VALUES ($1, $2, $3, $4, $5, now())
+        INSERT INTO bb_repository (slug, name, is_private, main_branch, updated_on, project_key,
+                                   project_name, synced_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, now())
         ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, is_private = EXCLUDED.is_private,
-            main_branch = EXCLUDED.main_branch, updated_on = EXCLUDED.updated_on, synced_at = now()
+            main_branch = EXCLUDED.main_branch, updated_on = EXCLUDED.updated_on,
+            project_key = EXCLUDED.project_key, project_name = EXCLUDED.project_name,
+            synced_at = now()
         """,
-        [(r["slug"], r["name"], r["is_private"], r["main_branch"], r["updated_on"]) for r in rows],
+        [
+            (
+                r["slug"],
+                r["name"],
+                r["is_private"],
+                r["main_branch"],
+                r["updated_on"],
+                r.get("project_key"),
+                r.get("project_name"),
+            )
+            for r in rows
+        ],
     )
 
 

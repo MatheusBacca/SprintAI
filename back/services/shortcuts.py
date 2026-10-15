@@ -10,13 +10,24 @@ aqui é a validação que vale para o que é salvo.
 import re
 from typing import Final
 
-SHORTCUT_ACTIONS: Final = ("open_reminders", "new_reminder", "global_search")
+SHORTCUT_ACTIONS: Final = (
+    "open_reminders",
+    "new_reminder",
+    "global_search",
+    "open_notifications",
+    "sync_now",
+    "open_repo_issues",
+)
 
 DEFAULT_BINDINGS: Final[dict[str, str | None]] = {
     "open_reminders": "Ctrl+Shift+L",
     # Ctrl+Shift+N é reservado pelo Chrome/Edge (janela anônima): a página nunca recebe.
     "new_reminder": "Ctrl+Shift+A",
     "global_search": "Ctrl+K",
+    # Alt + inicial: o Chrome só usa Alt+D/E/F, e Alt + letra não digita nada no Windows.
+    "open_notifications": "Alt+N",
+    "sync_now": "Alt+S",
+    "open_repo_issues": "Alt+R",
 }
 
 MODIFIERS: Final = ("Ctrl", "Alt", "Shift")
@@ -117,9 +128,14 @@ def merge_with_defaults(stored: dict | None) -> dict[str, str | None]:
     Um valor salvo que deixou de ser válido (regra nova) volta ao padrão.
     """
     bindings = dict(DEFAULT_BINDINGS)
+    saved = {a: stored[a] for a in SHORTCUT_ACTIONS if stored and a in stored}
+    bindings.update(saved)
+    # Ação nova cujo padrão o dev já deu a outra nasce desligada: o conflito derrubaria
+    # tudo para o padrão, e ele perderia os atalhos que escolheu.
+    taken = {combo for combo in saved.values() if combo}
     for action in SHORTCUT_ACTIONS:
-        if stored and action in stored:
-            bindings[action] = stored[action]
+        if action not in saved and bindings[action] in taken:
+            bindings[action] = None
     try:
         return validate_bindings(bindings)
     except InvalidShortcut:

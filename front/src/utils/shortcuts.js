@@ -20,6 +20,21 @@ export const SHORTCUT_ACTIONS = [
     label: 'Busca global',
     description: 'Busca em tarefas, comentários, PRs, contextos e lembretes, já com o texto selecionado.',
   },
+  {
+    id: 'open_notifications',
+    label: 'Notificações',
+    description: 'Abre e fecha o painel do sino: lembretes vencidos e as tarefas em que alguém mexeu.',
+  },
+  {
+    id: 'sync_now',
+    label: 'Sincronizar agora',
+    description: 'Busca no Jira e no Bitbucket o que mudou, sem esperar o próximo ciclo automático.',
+  },
+  {
+    id: 'open_repo_issues',
+    label: 'WAIs por repositório',
+    description: 'Abre e fecha as tarefas de cada repositório na sprint anterior, na atual e na próxima, na cor do status.',
+  },
 ]
 
 export const DEFAULT_BINDINGS = {
@@ -27,6 +42,10 @@ export const DEFAULT_BINDINGS = {
   // Ctrl+Shift+N é reservado pelo Chrome/Edge (janela anônima): a página nunca recebe.
   new_reminder: 'Ctrl+Shift+A',
   global_search: 'Ctrl+K',
+  // Alt + inicial: o Chrome só usa Alt+D/E/F, e Alt + letra não digita nada no Windows.
+  open_notifications: 'Alt+N',
+  sync_now: 'Alt+S',
+  open_repo_issues: 'Alt+R',
 }
 
 const MODIFIERS = ['Ctrl', 'Alt', 'Shift']
@@ -112,6 +131,11 @@ export function conflictingAction(bindings, combo, exceptAction) {
 /** `Ctrl+Shift+L` → `['Ctrl', 'Shift', 'L']` para exibir como teclas. */
 export function comboKeys(combo) {
   return combo ? combo.split('+').map((k) => (k === 'Space' ? 'Espaço' : k)) : []
+}
+
+/** `Ctrl+Shift+L` → `Control+Shift+L`, a grafia do `aria-keyshortcuts`. */
+export function ariaShortcut(combo) {
+  return combo ? combo.replace(/^Ctrl/, 'Control') : null
 }
 
 const TEXT_INPUT_TYPES = new Set(['text', 'search', 'url', 'email', ''])
