@@ -10,6 +10,16 @@ import { useRealtimeStore } from '@/stores/realtime'
 import { useRefreshStore } from '@/stores/refresh'
 import { useUiStore } from '@/stores/ui'
 
+/**
+ * Todo App montado aqui é desmontado no fim do teste, e as asserções leem os stores pelo
+ * `pinia` dele, nunca pelo "ativo". Um App esquecido continua vivo — polling, stream, a view
+ * da rota que termina de carregar depois — e todo `useStore()` dentro de um componente dele
+ * reativa o pinia *dele*. Com a máquina carregada a view do teste anterior chegava atrasada,
+ * e o `useUiStore()` do teste seguinte lia o tema de outro App (ou o evento de sync ia para
+ * outra tela): dois testes falhavam de vez em quando na suíte cheia.
+ */
+const mounted = []
+
 async function mountApp(path = '/') {
   const router = createRouter({ history: createMemoryHistory(), routes })
   router.push(path)
@@ -17,9 +27,14 @@ async function mountApp(path = '/') {
   const pinia = createPinia()
   setActivePinia(pinia)
   const wrapper = mount(App, { global: { plugins: [router, pinia] } })
+  mounted.push(wrapper)
   await flushPromises()
-  return { wrapper, router }
+  return { wrapper, router, pinia }
 }
+
+afterEach(() => {
+  while (mounted.length) mounted.pop().unmount()
+})
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -49,9 +64,9 @@ describe('app shell', () => {
   })
 
   it('reflete o health da API no indicador', async () => {
-    const { wrapper } = await mountApp()
+    const { wrapper, pinia } = await mountApp()
 
-    expect(useHealthStore().level).toBe('ok')
+    expect(useHealthStore(pinia).level).toBe('ok')
     expect(wrapper.find('.topbar__status--ok').exists()).toBe(true)
   })
 })
@@ -111,25 +126,26 @@ describe('tema claro e escuro', () => {
   it('sem preferência salva, segue o tema escuro do sistema', async () => {
     stubSystemTheme(true)
 
-    await mountApp()
+    const { pinia } = await mountApp()
 
-    expect(useUiStore().theme).toBe('dark')
+    expect(useUiStore(pinia).theme).toBe('dark')
     expect(document.documentElement.dataset.theme).toBe('dark')
   })
 
   it('o botão da sidebar alterna o tema e guarda a escolha', async () => {
     stubSystemTheme(false)
-    const { wrapper } = await mountApp()
+    const { wrapper, pinia } = await mountApp()
+    const ui = useUiStore(pinia)
 
     await wrapper.find('.sidebar__theme').trigger('click')
 
-    expect(useUiStore().theme).toBe('dark')
+    expect(ui.theme).toBe('dark')
     expect(document.documentElement.dataset.theme).toBe('dark')
     expect(localStorage.getItem('sprintai.theme')).toBe('dark')
 
     await wrapper.find('.sidebar__theme').trigger('click')
 
-    expect(useUiStore().theme).toBe('light')
+    expect(ui.theme).toBe('light')
     expect(document.documentElement.dataset.theme).toBeUndefined()
     expect(localStorage.getItem('sprintai.theme')).toBe('light')
   })
@@ -138,23 +154,24 @@ describe('tema claro e escuro', () => {
     localStorage.setItem('sprintai.theme', 'light')
     const emitSystemChange = stubSystemTheme(true)
 
-    await mountApp()
-    expect(useUiStore().theme).toBe('light')
+    const { pinia } = await mountApp()
+    const ui = useUiStore(pinia)
+    expect(ui.theme).toBe('light')
 
     // Windows vira para o escuro: quem escolheu na mão continua no claro.
     emitSystemChange(true)
-    expect(useUiStore().theme).toBe('light')
+    expect(ui.theme).toBe('light')
     expect(document.documentElement.dataset.theme).toBeUndefined()
   })
 
   it('Shift+clique no botão volta a seguir o sistema', async () => {
     localStorage.setItem('sprintai.theme', 'light')
     stubSystemTheme(true)
-    const { wrapper } = await mountApp()
+    const { wrapper, pinia } = await mountApp()
 
     await wrapper.find('.sidebar__theme').trigger('click', { shiftKey: true })
 
-    expect(useUiStore().theme).toBe('dark')
+    expect(useUiStore(pinia).theme).toBe('dark')
     expect(document.documentElement.dataset.theme).toBe('dark')
     expect(localStorage.getItem('sprintai.theme')).toBeNull()
   })
@@ -172,8 +189,8 @@ describe('recarregar o app inteiro', () => {
         json: async () => ({ status: 'ok', version: '0.1.0', database: { status: 'up' } }),
       }
     })
-    const { wrapper } = await mountApp(path)
-    return { wrapper, calls }
+    const { wrapper, pinia } = await mountApp(path)
+    return { wrapper, pinia, calls }
   }
 
   it('o stream de eventos vale para o app todo, não só para a Home', async () => {
@@ -184,14 +201,14 @@ describe('recarregar o app inteiro', () => {
   })
 
   it('sync concluído recarrega a tela aberta mesmo fora da Home', async () => {
-    const { calls } = await mountAt('/semana')
+    const { calls, pinia } = await mountAt('/semana')
     const weekCalls = () => calls.filter((url) => url.startsWith('/api/week'))
     expect(weekCalls()).toHaveLength(1)
 
-    useRealtimeStore().record('sync.finished', { id: 371, status: 'success' })
+    useRealtimeStore(pinia).record('sync.finished', { id: 371, status: 'success' })
     await flushPromises()
 
     expect(weekCalls()).toHaveLength(2)
-    expect(useRefreshStore().reason).toBe('sync')
+    expect(useRefreshStore(pinia).reason).toBe('sync')
   })
 })
