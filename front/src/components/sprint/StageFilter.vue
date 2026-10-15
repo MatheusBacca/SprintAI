@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { X } from 'lucide-vue-next'
 
 /**
- * Chips das etapas de Configurações › Progresso, um por etapa, na ordem e na cor de lá.
+ * Chips das etapas de Configurações › Fluxo de trabalho › Progresso, um por etapa, na ordem e na cor de lá.
  * Liga mais de um de uma vez: o canvas fica com quem cai em qualquer um dos ligados.
  */
 const props = defineProps({

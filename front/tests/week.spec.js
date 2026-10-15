@@ -92,7 +92,7 @@ const SUMMARY = {
       day: '2026-09-15',
       issues: [
         dayIssue('WAI-6', 'voltou', ['Em Review', REVIEW], [move('AJUSTE', DEV, '2026-09-15T12:00:00Z', { by_me: null, author_name: 'Rodrigo Vianna' })]),
-        // Status fora de Configurações › Progresso: sem etapa, vai para "Outros status".
+        // Status fora de Configurações › Fluxo de trabalho › Progresso: sem etapa, vai para "Outros status".
         dayIssue('WAI-7', 'mexeu', ['Em Desenvolvimento', DEV], [move('Cruzeiro', null, '2026-09-15T13:00:00Z')]),
       ],
     },

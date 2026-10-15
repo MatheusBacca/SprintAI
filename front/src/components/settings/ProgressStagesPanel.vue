@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, GaugeCircle } from 'lucide-vue-next'
 import { useProgressStore } from '@/stores/progress'
 
 /**
- * Configurações › Progresso (B9).
+ * Configurações › Fluxo de trabalho › Progresso (B9).
  *
  * A categoria do Jira não serve para este workflow: `DISPONIVEL PARA REVIEW` e
  * `DISPONIVEL PARA TESTES` chegam como `new` e contariam como "nem começou". Aqui o dev

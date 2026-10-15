@@ -76,7 +76,7 @@ com todo o histórico de PRs de uma vez. Retenção de 90 dias, aplicada a cada 
 Dois passos, ambos em `services/progress/`:
 
 1. **etapa** — `stages.py` mapeia status → etapa (ordem, peso, cor), salvo em
-   `app_setting.progress_stages` e editável em Configurações › Progresso. A categoria do
+   `app_setting.progress_stages` e editável em Configurações › Fluxo de trabalho › Progresso. A categoria do
    Jira é só o plano B, porque ela mente para `REVIEW`/`TESTES` (chegam como `new`).
 2. **fonte** — `sources.py` define a interface `ProgressSource`. Hoje só existe `status`;
    `checklist` (itens do PROGRESS.md) entra na F13 e passa a ter prioridade.
@@ -206,7 +206,7 @@ depois da confirmação do dev na tela:
 | Reviewers do PR aberto | `GET` do PR (lista atual e título) e `PUT` com a lista inteira | sim: o mesmo PUT dá o mesmo PR |
 
 O **Concluir** (`services/conclude_service.py`) é plano e execução. O plano junta a receita
-do repo (Configurações › Concluir, `app_setting.conclude`), os PRs abertos da tarefa no
+do repo (Configurações › Fluxo de trabalho › Concluir, `app_setting.conclude`), os PRs abertos da tarefa no
 espelho, com os avisos, e o status de destino conferido contra as transições que o Jira
 oferece agora. A execução confere o pedido contra um plano novo, mergeia primeiro e só então
 move o Jira pela mesma `apply_transition` do painel de status. Tarefa com vários PRs abertos

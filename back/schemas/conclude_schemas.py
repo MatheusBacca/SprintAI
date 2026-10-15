@@ -8,7 +8,7 @@ REPO_SLUG_PATTERN = r"^[a-zA-Z0-9][\w.-]{0,98}$"
 MergeStrategy = Literal["merge_commit", "squash", "fast_forward"]
 
 
-# --- Configurações › Concluir -----------------------------------------------------------------
+# --- Configurações › Fluxo de trabalho › Concluir ----------------------------------------------
 
 
 class RepoConclusionIn(BaseModel):

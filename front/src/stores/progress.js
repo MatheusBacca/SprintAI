@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { api } from '@/services/api'
 
-/** Etapas do progresso (B9) — lidas pela Home e editadas em Configurações › Progresso. */
+/** Etapas do progresso (B9) — lidas pela Home e editadas em Configurações › Fluxo de trabalho › Progresso. */
 export const useProgressStore = defineStore('progress', {
   state: () => ({
     stages: [],

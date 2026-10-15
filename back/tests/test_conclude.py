@@ -133,7 +133,7 @@ async def _rules(pool, **rules):
     await conclude_settings.save_rules(pool, {slug: RepoConclusion(**r) for slug, r in rules.items()})
 
 
-# --- Configurações › Concluir --------------------------------------------------------------------
+# --- Configurações › Fluxo de trabalho › Concluir --------------------------------------------------------------------
 
 
 async def test_receita_por_repo_guarda_so_o_que_faz_algo(db_app, client, seeded):

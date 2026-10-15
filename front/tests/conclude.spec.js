@@ -197,7 +197,7 @@ describe('Concluir', () => {
   })
 
   it('card que deixou de estar apto mostra o motivo e não confirma', async () => {
-    const { panel } = await openPlan(plan({ blocked: 'PR #412 ainda não está aprovado pela regra de Configurações › Pull requests.' }))
+    const { panel } = await openPlan(plan({ blocked: 'PR #412 ainda não está aprovado pela regra de Configurações › Fluxo de trabalho › Pull requests.' }))
 
     expect(panel().querySelector('.conclude__error').textContent).toContain('ainda não está aprovado')
     expect(panel().querySelector('.conclude__confirm').disabled).toBe(true)
@@ -337,7 +337,7 @@ describe('reviewers do PR', () => {
   })
 })
 
-describe('Configurações › Concluir', () => {
+describe('Configurações › Fluxo de trabalho › Concluir', () => {
   it('lista os repos da Sincronização e salva só quem tem receita', async () => {
     routes['GET /api/preferences/conclude'] = json({
       repos: { monitoria: { jira_status: 'DISPONIVEL PARA TESTES', merge: true, strategy: 'squash', close_source_branch: true } },

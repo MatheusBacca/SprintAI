@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { api } from '@/services/api'
 
 /**
- * Configurações › Concluir: a receita de cada repositório — para que status do Jira a tarefa
+ * Configurações › Fluxo de trabalho › Concluir: a receita de cada repositório — para que status do Jira a tarefa
  * vai e se o PR aberto é mergeado (estratégia, fechar a branch). Repo sem receita não tem o
  * botão "Concluir" nos cards.
  */

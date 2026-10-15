@@ -85,9 +85,9 @@ def workflow_statuses(project_statuses: list[dict[str, Any]], issue_type: str | 
 
 
 def _flow_order(step: FlowStep, index: int) -> tuple:
-    """Ordem das etapas de progresso (Configurações › Progresso), que é a linha que o dev
-    já desenhou para o board. Status sem etapa ficam nas pontas pela categoria: o que é
-    "a fazer" abre a linha, o resto a fecha.
+    """Ordem das etapas de progresso (Configurações › Fluxo de trabalho › Progresso), que é a
+    linha que o dev já desenhou para o board. Status sem etapa ficam nas pontas pela
+    categoria: o que é "a fazer" abre a linha, o resto a fecha.
 
     Dentro de uma etapa, a categoria desempata antes da ordem do workflow —
     `DISPONIVEL PARA REVIEW` (`new`) vem antes de `Em Review` (`indeterminate`).

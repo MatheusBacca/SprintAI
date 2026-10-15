@@ -6,7 +6,7 @@ import { APPROVAL_RULES } from '@/constants/prStatus'
 import { usePrApprovalStore } from '@/stores/prApproval'
 
 /**
- * Configurações › Pull requests: quanto dos revisores precisa aprovar para o PR contar
+ * Configurações › Fluxo de trabalho › Pull requests: quanto dos revisores precisa aprovar para o PR contar
  * como "Aprovada". A regra é aplicada no back — os exemplos abaixo só mostram, com a
  * regra escolhida e ainda não salva, como o badge fica.
  */

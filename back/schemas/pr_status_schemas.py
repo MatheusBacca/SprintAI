@@ -33,7 +33,7 @@ class ReviewProgressOut(BaseModel):
     reviewers: int
     # Pedidos de ajuste ainda sem correção.
     changes_requested: int
-    # Aprovações que a regra de Configurações › Pull requests pede.
+    # Aprovações que a regra de Configurações › Fluxo de trabalho › Pull requests pede.
     required: int
     # Quem revisa, na ordem: aprovou, pediu ajuste, falta revisar.
     people: list[ReviewPersonOut] = []

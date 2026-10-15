@@ -21,15 +21,23 @@ const router = useRouter()
 const tabs = [
   { id: 'conexoes', label: 'Conexões' },
   { id: 'sincronizacao', label: 'Sincronização' },
-  { id: 'progresso', label: 'Progresso' },
-  { id: 'pull-requests', label: 'Pull requests' },
-  { id: 'concluir', label: 'Concluir' },
+  { id: 'fluxo', label: 'Fluxo de trabalho' },
   { id: 'cores', label: 'Cores dos cards' },
   { id: 'workspace', label: 'Workspace' },
   { id: 'atalhos', label: 'Atalhos' },
 ]
 
+/**
+ * Progresso, Pull requests e Concluir são uma aba só: as três dizem o caminho da tarefa —
+ * em que etapa cada status cai, quando o PR conta como aprovado e o que o Concluir faz
+ * com ele —, e o Concluir depende das outras duas. Em abas separadas, mudar uma pedia ir
+ * e voltar para conferir a outra. Link salvo de uma aba de antes (`?aba=concluir`) abre
+ * esta, onde as três se veem juntas.
+ */
+const FLOW_SECTIONS = ['progresso', 'pull-requests', 'concluir']
+
 const activeTab = computed(() => {
+  if (FLOW_SECTIONS.includes(route.query.aba)) return 'fluxo'
   const requested = tabs.find((t) => t.id === route.query.aba && !t.delivery)
   return requested?.id ?? 'conexoes'
 })
@@ -42,7 +50,7 @@ onMounted(() => store.load())
 </script>
 
 <template>
-  <section class="settings">
+  <section class="settings" :class="{ 'settings--wide': activeTab === 'fluxo' }">
     <header class="settings__header">
       <h1 class="settings__title">Configurações</h1>
       <nav class="settings__tabs" aria-label="Seções de configuração">
@@ -64,9 +72,21 @@ onMounted(() => store.load())
     </header>
 
     <SyncSettingsPanel v-if="activeTab === 'sincronizacao'" />
-    <ProgressStagesPanel v-else-if="activeTab === 'progresso'" />
-    <PrApprovalPanel v-else-if="activeTab === 'pull-requests'" />
-    <ConcludeSettingsPanel v-else-if="activeTab === 'concluir'" />
+    <!-- Progresso à esquerda; à direita, o que acontece com o PR: quando ele conta como
+         aprovado e, embaixo, o que o Concluir faz com ele. -->
+    <div v-else-if="activeTab === 'fluxo'" class="flow">
+      <div id="fluxo-progresso" class="flow__section flow__section--plain card">
+        <ProgressStagesPanel />
+      </div>
+      <div class="flow__column">
+        <div id="fluxo-pull-requests" class="flow__section">
+          <PrApprovalPanel />
+        </div>
+        <div id="fluxo-concluir" class="flow__section">
+          <ConcludeSettingsPanel />
+        </div>
+      </div>
+    </div>
     <CardColorsPanel v-else-if="activeTab === 'cores'" />
     <WorkspaceReposPanel v-else-if="activeTab === 'workspace'" />
     <ShortcutsPanel v-else-if="activeTab === 'atalhos'" />
@@ -100,6 +120,11 @@ onMounted(() => store.load())
 .settings {
   max-width: 1080px;
   margin: 0 auto;
+}
+
+/* Duas colunas de painéis que antes tinham a aba inteira: a tela abre mais. */
+.settings--wide {
+  max-width: 1360px;
 }
 
 .settings__header {
@@ -148,6 +173,40 @@ onMounted(() => store.load())
   border-bottom-color: var(--color-primary);
   color: var(--color-primary);
   font-weight: 600;
+}
+
+.flow {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.flow__column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+/* Cada painel tinha a largura de uma aba inteira; aqui ele ocupa a sua coluna. */
+.flow__section {
+  min-width: 0;
+}
+
+.flow__section > :deep(.card) {
+  max-width: none;
+}
+
+@media (max-width: 1100px) {
+  .flow {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* O painel de Progresso não tem cartão próprio como os outros dois. */
+.flow__section--plain {
+  padding: var(--space-5);
 }
 
 .settings__notice {

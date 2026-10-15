@@ -61,7 +61,7 @@ class WeekDayOut(BaseModel):
 
 
 class WeekSummaryOut(BaseModel):
-    # As colunas do kanban, na ordem de Configurações › Progresso.
+    # As colunas do kanban, na ordem de Configurações › Fluxo de trabalho › Progresso.
     stages: list[StageRefOut]
     # A partir de qual etapa um avanço conta como entrega.
     delivery_stage: StageRefOut | None

@@ -1,4 +1,5 @@
-"""O "Concluir" do card: a receita do repo da tarefa (Configurações › Concluir), em dois tempos.
+"""O "Concluir" do card: a receita do repo da tarefa (Configurações › Fluxo de trabalho ›
+Concluir), em dois tempos.
 
 1. **Plano** (`plan`): o que vai acontecer, lido agora — os PRs abertos que serão mergeados, com
    os avisos (rascunho, aprovações pela regra do SprintAI, ajustes, build), e o status do Jira

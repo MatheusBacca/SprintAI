@@ -2,8 +2,8 @@
 
 Uma linha por tarefa e dia, com o caminho que ela fez naquele dia: de onde saiu e cada
 status por onde passou. O desfecho compara a etapa em que o dia terminou com a etapa em
-que começou, pelo mapa de Configurações › Progresso — a categoria do Jira não serve
-(`DISPONIVEL PARA REVIEW` chega como `new`).
+que começou, pelo mapa de Configurações › Fluxo de trabalho › Progresso — a categoria do Jira
+não serve (`DISPONIVEL PARA REVIEW` chega como `new`).
 
 **Entrega** é avançar até a etapa de review ou além: é quando o trabalho sai da mão do
 dev (PR aberto, review aprovada, testes concluídos). Ir para review e voltar para AJUSTE

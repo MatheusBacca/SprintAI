@@ -40,7 +40,7 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('Configurações › Progresso', () => {
+describe('Configurações › Fluxo de trabalho › Progresso', () => {
   it('status sem tarefa agora continua na tabela e não perde a etapa ao salvar', async () => {
     const wrapper = mount(ProgressStagesPanel)
     await flushPromises()

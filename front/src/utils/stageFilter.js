@@ -1,5 +1,5 @@
 /**
- * Recorte da árvore da sprint pelas etapas ligadas nos chips (Configurações › Progresso):
+ * Recorte da árvore da sprint pelas etapas ligadas nos chips (Configurações › Fluxo de trabalho › Progresso):
  * ficam as tarefas da sprint que caem numa delas e a hierarquia acima de cada uma — pai,
  * co-pai (o Enhancements de uma fatia) e assim por diante até o topo. Bloqueador e origem
  * de outra etapa saem: o filtro responde "o que está nesta etapa", e a tarefa sobe de onda

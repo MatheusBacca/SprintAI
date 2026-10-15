@@ -4,7 +4,7 @@ import { CheckCheck } from 'lucide-vue-next'
 import { useConcludeSettingsStore } from '@/stores/concludeSettings'
 
 /**
- * Configurações › Concluir: o que o botão "Concluir" dos cards faz em cada repositório. Um
+ * Configurações › Fluxo de trabalho › Concluir: o que o botão "Concluir" dos cards faz em cada repositório. Um
  * repo pode levar a tarefa direto a "Concluído"; outro, mergear o PR e levar a "DISPONIVEL
  * PARA TESTES". Repo sem status e sem merge fica sem o botão.
  *
@@ -69,7 +69,7 @@ async function save() {
         <h2 class="conclude-settings__title">O que o "Concluir" faz em cada repositório</h2>
         <p class="conclude-settings__desc">
           O botão <strong>Concluir</strong> aparece no card (à direita do selo do PR) quando o repo da tarefa tem uma
-          receita aqui e o card está apto: o PR aprovado pela regra de Configurações › Pull requests e a tarefa
+          receita aqui e o card está apto: o PR aprovado pela regra de Configurações › Fluxo de trabalho › Pull requests e a tarefa
           ainda antes de testes. Ao clicar, o plano mostra o que vai acontecer e nada roda antes da confirmação. O
           merge vem primeiro; o Jira só anda se ele entrou. Mergear pede um token do Bitbucket com o escopo
           <code>write:pullrequest:bitbucket</code> (Configurações › Conexões).

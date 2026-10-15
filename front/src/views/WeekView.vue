@@ -108,7 +108,7 @@ const columnOf = (issue) => issue.moves.at(-1).stage?.id ?? OTHER_STAGE.id
 const summaryAll = computed(() => (data.value?.summary?.days ?? []).flatMap((d) => d.issues))
 // Só as etapas onde alguma tarefa terminou um dia da semana: Análise quase nunca recebe card
 // (tarefa sai dela, não chega), e coluna sempre vazia só estreitava as outras. Status fora de
-// Configurações › Progresso não tem etapa e cai em "Outros status". A conta é sobre a semana
+// Configurações › Fluxo de trabalho › Progresso não tem etapa e cai em "Outros status". A conta é sobre a semana
 // inteira, não sobre o filtro: ligar "só entregas" não mexe nas colunas.
 const summaryColumns = computed(() => {
   const used = new Set(summaryAll.value.map(columnOf))

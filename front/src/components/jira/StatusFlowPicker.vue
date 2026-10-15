@@ -9,7 +9,7 @@ import { safeUrl } from '@/utils/safeUrl'
  * move. O duplo clique é a confirmação que a regra de escrita pede — um clique perdido
  * não muda nada no Jira.
  *
- * Os passos vêm na ordem das etapas de Configurações › Progresso, com todos os status do
+ * Os passos vêm na ordem das etapas de Configurações › Fluxo de trabalho › Progresso, com todos os status do
  * workflow: os que não têm transição a partir do atual aparecem apagados, para a linha
  * mostrar onde a tarefa está e o que o workflow não deixa pular.
  *
@@ -123,7 +123,7 @@ watch(
             type="button"
             class="flow__toggle"
             :aria-expanded="showOthers"
-            title="Status do workflow sem etapa em Configurações › Progresso — mapeie lá para entrarem na linha"
+            title="Status do workflow sem etapa em Configurações › Fluxo de trabalho › Progresso — mapeie lá para entrarem na linha"
             @click="showOthers = !showOthers"
           >
             <ChevronRight :size="13" class="flow__toggle-icon" aria-hidden="true" />

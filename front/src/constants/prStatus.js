@@ -40,7 +40,7 @@ export const REVIEW_PERSON_LABEL = {
 }
 
 /**
- * Regras de Configurações › Pull requests (`min_percent` do back). 0 é a de antes — basta
+ * Regras de Configurações › Fluxo de trabalho › Pull requests (`min_percent` do back). 0 é a de antes — basta
  * uma aprovação — e continua sendo o padrão, para nenhum card mudar sozinho.
  */
 export const APPROVAL_RULES = [

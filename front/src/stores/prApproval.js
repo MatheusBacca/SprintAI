@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { api } from '@/services/api'
 
 /**
- * Regra de aprovação do PR (Configurações › Pull requests): quanto dos revisores precisa
+ * Regra de aprovação do PR (Configurações › Fluxo de trabalho › Pull requests): quanto dos revisores precisa
  * aprovar para o badge dizer "Aprovada". A conta é do back — as telas recebem o status
  * pronto; aqui só se lê e grava a regra.
  */

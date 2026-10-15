@@ -1,4 +1,5 @@
-"""O que o "Concluir" do card faz em cada repositório (Configurações › Concluir).
+"""O que o "Concluir" do card faz em cada repositório (Configurações › Fluxo de trabalho ›
+Concluir).
 
 Cada repo do Bitbucket tem a sua receita: para que status do Jira a tarefa vai (ou não mexe no
 Jira) e se o PR aberto é mergeado — com que estratégia e se a branch de origem fecha. Um repo
@@ -10,8 +11,8 @@ dado do espelho. O que vem de lá é validado na leitura — um valor estranho v
 nunca um merge com estratégia inventada.
 
 Ter receita não basta para o botão aparecer: o card precisa estar **apto** (`blocked_reason`)
-— algum PR aprovado pela regra de Configurações › Pull requests para mergear (ou só o Jira
-faltando) e a tarefa ainda antes de testes.
+— algum PR aprovado pela regra de Configurações › Fluxo de trabalho › Pull requests para
+mergear (ou só o Jira faltando) e a tarefa ainda antes de testes.
 
 Tarefa com vários PRs abertos conclui um PR de cada vez: o Concluir mergeia os aprovados e o
 Jira só anda no Concluir que deixa a tarefa sem PR aberto (`split_open_prs`). Mover para
@@ -186,14 +187,14 @@ def blocked_reason(
     - a tarefa ainda não chegou a testes nem foi concluída (etapas de Configurações ›
       Progresso; sem a etapa de testes no mapa, vale só a categoria "done" do Jira);
     - ela tem PR nesses repos, e há o que fazer agora: algum PR aberto **aprovado pela
-      regra** de Configurações › Pull requests para mergear (rascunho e ajuste pedido ficam
-      de fora), ou nenhum PR aberto segurando o Jira — PR já mergeado conta: falta só o Jira
-      andar. PR sem aprovação ao lado de um aprovado não barra: o aprovado entra, e o Jira
-      espera o último.
+      regra** de Configurações › Fluxo de trabalho › Pull requests para mergear (rascunho e
+      ajuste pedido ficam de fora), ou nenhum PR aberto segurando o Jira — PR já mergeado
+      conta: falta só o Jira andar. PR sem aprovação ao lado de um aprovado não barra: o
+      aprovado entra, e o Jira espera o último.
     """
     repos = concludable(rules, task_repos(summary, title_repos))
     if not repos:
-        return "Nenhum repo da tarefa tem receita em Configurações › Concluir."
+        return "Nenhum repo da tarefa tem receita em Configurações › Fluxo de trabalho › Concluir."
     if task.status_category == "done":
         return "A tarefa já está concluída."
     tests = stages.by_id.get(TESTS)
@@ -216,7 +217,8 @@ def blocked_reason(
     if pending:
         ids = ", ".join(f"#{pr.id}" for pr in pending)
         return (
-            f"PR {ids} ainda não está aprovado pela regra de Configurações › Pull requests."
+            f"PR {ids} ainda não está aprovado pela regra de "
+            "Configurações › Fluxo de trabalho › Pull requests."
         )
     ids = ", ".join(f"#{w.pr.id} em {w.pr.repo_slug}" for w in split.waiting)
     return f"PR {ids} ainda está aberto sem receita de merge — o Jira anda com o último PR."

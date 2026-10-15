@@ -4,7 +4,7 @@ import { useJiraActionsStore } from '@/stores/jiraActions'
 
 /**
  * "Concluir" do card e do painel da tarefa: abre o plano no painel único do AppShell — o que
- * o repo da tarefa faz no Concluir (Configurações › Concluir), com os avisos — e nada roda
+ * o repo da tarefa faz no Concluir (Configurações › Fluxo de trabalho › Concluir), com os avisos — e nada roda
  * antes da confirmação lá. Como os outros chips, não arrasta o canvas nem abre o card; com
  * Alt, o clique sobe para o destaque de status.
  *

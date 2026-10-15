@@ -108,6 +108,33 @@ describe('connections store', () => {
 })
 
 describe('SettingsView', () => {
+  it('Fluxo de trabalho junta Progresso, Pull requests e Concluir — e o link da aba antiga cai nela', async () => {
+    routeFetch({ 'GET /api/connections': jsonResponse(200, [JIRA_OK, BB_EMPTY]) })
+    const router = createRouter({ history: createMemoryHistory(), routes })
+    router.push('/configuracoes?aba=concluir')
+    await router.isReady()
+    const wrapper = mount(SettingsView, {
+      global: { plugins: [router], stubs: { ProgressStagesPanel: true, PrApprovalPanel: true, ConcludeSettingsPanel: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.findAll('.settings__tab').map((t) => t.text())).toEqual([
+      'Conexões',
+      'Sincronização',
+      'Fluxo de trabalho',
+      'Cores dos cards',
+      'Workspace',
+      'Atalhos',
+    ])
+    expect(wrapper.find('.settings__tab--active').text()).toBe('Fluxo de trabalho')
+    // Progresso à esquerda; à direita, Pull requests e Concluir embaixo dele.
+    expect(wrapper.find('.flow > #fluxo-progresso').exists()).toBe(true)
+    expect(wrapper.findAll('.flow__column > .flow__section').map((s) => s.attributes('id'))).toEqual([
+      'fluxo-pull-requests',
+      'fluxo-concluir',
+    ])
+  })
+
   it('salva o Jira, limpa o campo de token e mostra a conta conectada', async () => {
     let sentBody
     routeFetch({

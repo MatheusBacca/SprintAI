@@ -237,7 +237,7 @@ const updates = computed(() => {
         :review="issue.pr.review"
         size="sm"
       />
-      <!-- À direita do selo do PR: o repo da tarefa tem receita em Configurações › Concluir. -->
+      <!-- À direita do selo do PR: o repo da tarefa tem receita em Configurações › Fluxo de trabalho › Concluir. -->
       <ConcludeButton v-if="issue.in_sprint && issue.conclude" :issue-key="issue.key" :compact="Boolean(waitingBlocker)" pulse />
       <span v-if="issue.in_sprint && issue.pr && waitingBlocker" class="node__blocked">bloqueada por {{ issue.blockers_without_pr.join(', ') }}</span>
     </footer>
