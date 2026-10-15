@@ -215,8 +215,11 @@ async def due_reminders(conn: Executor) -> list[dict[str, Any]]:
 
 
 async def acknowledge(conn: Executor, note_id: int) -> bool:
+    # Concluído sai dos Fixados do mural: o fixar servia para não perder a cobrança de
+    # vista, e ela acabou. Vale para os três "Concluir" — o card, a modal e o sino.
     status = await conn.execute(
-        "UPDATE note SET reminded_at = now(), updated_at = now() WHERE id = $1", note_id
+        "UPDATE note SET reminded_at = now(), pinned = false, updated_at = now() WHERE id = $1",
+        note_id,
     )
     return status.endswith(" 1")
 

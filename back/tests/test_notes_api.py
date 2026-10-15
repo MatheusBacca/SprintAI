@@ -143,6 +143,17 @@ async def test_lembrete_vencido_aparece_e_some_depois_de_visto(api):
     assert [n["title"] for n in upcoming] == ["Amanhã"]
 
 
+async def test_concluir_lembrete_fixado_tira_dos_fixados_do_mural(api):
+    past = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+    note = await create(api, title="Cobrar o deploy", remind_at=past, pinned=True)
+
+    acked = (await api.post(f"/api/notes/{note['id']}/reminder/ack")).json()
+
+    assert acked["pinned"] is False
+    fixados = (await api.get("/api/notes", params={"pinned": "true"})).json()["items"]
+    assert note["id"] not in [n["id"] for n in fixados]
+
+
 async def test_adiar_e_remarcar_rearmam_a_notificacao(api):
     past = (datetime.now(UTC) - timedelta(minutes=1)).isoformat()
     note = await create(api, title="Daily", remind_at=past)
