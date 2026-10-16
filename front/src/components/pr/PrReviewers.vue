@@ -14,7 +14,7 @@ import { normalize } from '@/utils/highlight'
  * chamado pelo back, atualiza) chegar com ela.
  *
  * Cada revisor é uma pílula com a foto e o nome, pintada inteira com o estado: aprovou,
- * pediu ajustes ou ainda não revisou.
+ * pediu ajustes, pediu ajustes e a correção já subiu, ou ainda não revisou.
  */
 const props = defineProps({
   pr: { type: Object, required: true },
@@ -114,13 +114,23 @@ async function apply(change) {
   }
 }
 
+// O Bitbucket mantém o `changes_requested` do revisor até ele aprovar ou pedir outro ajuste,
+// nem a correção o limpa. Com ela no ar (`fix_pushed`, do histórico) a vez é dele de novo —
+// a mesma leitura da foto no badge, que já volta a "falta revisar".
 function stateOf(reviewer) {
-  return reviewer.approved ? 'approved' : reviewer.state || 'pending'
+  if (reviewer.approved) return 'approved'
+  if (reviewer.state === 'changes_requested') return props.pr.fix_pushed ? 'rereview' : 'changes_requested'
+  return reviewer.state || 'pending'
+}
+
+const STATE_TITLES = {
+  approved: 'Aprovou',
+  changes_requested: 'Pediu ajustes',
+  rereview: 'Pediu ajustes — correção enviada',
 }
 
 function stateTitle(reviewer) {
-  if (reviewer.approved) return 'Aprovou'
-  return reviewer.state === 'changes_requested' ? 'Pediu ajustes' : 'Aguardando'
+  return STATE_TITLES[stateOf(reviewer)] ?? 'Aguardando'
 }
 </script>
 
@@ -240,6 +250,12 @@ function stateTitle(reviewer) {
 
 .reviewers__chip[data-state='changes_requested'] {
   --chip: var(--pr-changes);
+}
+
+/* Aguardando nova revisão: o fundo é o da espera, como a foto no badge, e só a borda guarda
+   o pedido que ele fez — senão a pílula ficaria igual à de quem nunca revisou. */
+.reviewers__chip[data-state='rereview'] {
+  border-color: color-mix(in srgb, var(--pr-changes) 55%, transparent);
 }
 
 /* Sem o ×, a pílula fecha com o mesmo respiro do lado da foto. */

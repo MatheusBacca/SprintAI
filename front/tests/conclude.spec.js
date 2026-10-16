@@ -322,6 +322,19 @@ describe('reviewers do PR', () => {
     expect(ju.find('.avatar--initials').text()).toBe('J')
   })
 
+  it('quem pediu ajuste e já tem a correção no ar fica aguardando nova revisão, não em ajuste', () => {
+    const asked = { name: 'Rodrigo', role: 'REVIEWER', approved: false, state: 'changes_requested', account_id: 'acc-ro' }
+    const before = mount(PrReviewers, { props: { pr: { ...PR, reviewers: [asked], fix_pushed: false } } })
+    expect(chip(before, 'Rodrigo').attributes('data-state')).toBe('changes_requested')
+    expect(chip(before, 'Rodrigo').attributes('title')).toBe('Pediu ajustes')
+
+    // O Bitbucket segue com o `changes_requested` do revisor: quem diz que a correção veio é o PR.
+    const after = mount(PrReviewers, { props: { pr: { ...PR, reviewers: [PR.reviewers[0], asked], fix_pushed: true } } })
+    expect(chip(after, 'Rodrigo').attributes('data-state')).toBe('rereview')
+    expect(chip(after, 'Rodrigo').attributes('title')).toBe('Pediu ajustes — correção enviada')
+    expect(chip(after, 'Rafael').attributes('data-state')).toBe('approved')
+  })
+
   it('o erro do Bitbucket aparece no PR, e PR fechado não edita', async () => {
     routes['PUT /api/pull-requests/monitoria/412/reviewers'] = json({ detail: 'Bitbucket: sem permissão para mudar os reviewers' }, 502)
     const wrapper = mount(PrReviewers, { props: { pr: PR } })
