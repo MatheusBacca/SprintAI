@@ -241,7 +241,8 @@ com todo o histórico de PRs de uma vez. Rodar o sync de novo não duplica nada.
 - **Cor do fundo do card** (Configurações › Cores dos cards, `GET/PUT /api/preferences/card-colors`):
   um esfumaçado leve saindo do canto de cima, com o ícone, o tipo, a chave (`WAI-XXXX`) e o
   chip de SP / "N filhas" na mesma cor. Os pais vão pelo tipo — Épico roxo, Enhancements dourado e Feature
-  verde-escuro por padrão, cada um trocável ou sem cor —, e as outras tarefas pelo
+  verde-escuro por padrão, cada um trocável ou sem cor —, o Apoio também (fúcsia: o colchete
+  do título dele é o cliente, `[FUTURA]`, não um repositório), e as outras tarefas pelo
   repositório entre colchetes no começo do título (`[monitoria] Enviar a coleta…`), com a
   cor que o dev escolheu para cada repositório de Sincronização — e o nome de dentro do
   colchete sai na cor do repositório. A grafia do título não importa (`[MonitorIA]`,
@@ -603,7 +604,7 @@ Segunda a domingo no fuso do navegador, com navegação entre semanas (`?dia=AAA
 
 - **Com data:** *Prazo nesta semana* (campo "Data limite" do Jira, por dia, com as **atrasadas** em cima), *Lembretes da semana* (por dia, com os pendentes de semanas anteriores e "Concluir").
 - **Resumo da semana** (largura toda, abaixo das duas colunas): um kanban das mudanças de status das suas tarefas. As colunas são as etapas de Configurações › Fluxo de trabalho › Progresso — só as que receberam card na semana, mais "Outros status" para status sem etapa —, e cada dia é uma faixa, um embaixo do outro (dia útil aparece mesmo vazio; sábado e domingo só com movimento; na semana corrente, até hoje). A tarefa vira um card na coluna da etapa em que terminou o dia, com o status exato, quem mexeu por último quando não foi você e de onde veio; o caminho inteiro do dia, com hora e autor, fica no title do card. **Entrega** é terminar o dia numa etapa à frente da que começou, da etapa de Review em diante: o card ganha a borda e o ✓ na cor da etapa, e a faixa do dia conta as entregas. "Só entregas" esconde o resto sem mexer nas colunas. Em tela estreita o quadro rola de lado por dentro, com o dia preso à esquerda. Sai de `jira_status_transition`, então o histórico começa no primeiro sync.
-- **Sem data:** *Analisar e fatiar* (cards em aberto + concluídos na semana) e *Minhas sem sprint* (em aberto, fora de sprint ativa/futura; o que **sobrou de sprint fechada** vem primeiro).
+- **Sem data:** *Analisar e fatiar* (cards em aberto + concluídos na semana), *Apoio* (os cards do tipo Apoio do Jira — atividade paralela pedida por cliente ou outro time —, em aberto + concluídos na semana; o Apoio fora de sprint aparece também em *Minhas sem sprint*, porque ele nasce na sprint ativa) e *Minhas sem sprint* (em aberto, fora de sprint ativa/futura; o que **sobrou de sprint fechada** vem primeiro).
 - "Minhas" = Responsável é você (accountId salvo na conexão). Cada tarefa mostra status, sprint, pai, pontos em aberto dos contextos e o badge de PR; clicar abre o painel.
 
 | Rota | O que faz |

@@ -1,8 +1,10 @@
 """Cor de fundo dos cards do canvas (Configurações › Cores dos cards).
 
-Os pais — Épico, Enhancements e Feature — são pintados pelo tipo. Os outros cards, pelo
-repositório entre colchetes no começo do título (`[monitoria] Enviar a coleta…`), que é
-como as Tarefas fatiadas nascem. Card sem nenhum dos dois fica como sempre foi.
+Os pais — Épico, Enhancements e Feature — são pintados pelo tipo, e o Apoio também: o
+colchete do título dele é o cliente (`[FUTURA] Acompanhamento…`), não um repositório, e
+sem a cor do tipo o card ficaria sem nenhuma. Os outros cards, pelo repositório entre
+colchetes no começo do título (`[monitoria] Enviar a coleta…`), que é como as Tarefas
+fatiadas nascem. Card sem nenhum dos dois fica como sempre foi.
 
 O título é digitado à mão e a grafia do repositório varia — `[Supervisor-Web]`,
 `[MonitorIA]`, `[weaction]` para o weaction-api —, por isso o nome do colchete é
@@ -55,15 +57,18 @@ class CardType:
     default_color: str
 
 
-# Os mesmos tipos de pai de `services/hierarchy.py`, com a grafia normalizada.
+# Os mesmos tipos de pai de `services/hierarchy.py`, com a grafia normalizada, mais o
+# Apoio — o tipo do Jira para atividade paralela pedida por outra área (WAI-9835), que
+# não é pai de nada.
 CARD_TYPES: tuple[CardType, ...] = (
     CardType("epico", "Épico", frozenset({"epico", "epic"}), "#7c3aed"),
     CardType("enhancements", "Enhancements", frozenset({"enhancements", "enhancement"}), "#c9a227"),
     CardType("feature", "Feature", frozenset({"feature"}), "#15803d"),
+    CardType("apoio", "Apoio", frozenset({"apoio"}), "#c026d3"),
 )
 
-# Sugestões para o "Definir cor" de um repositório: longe do roxo, do dourado e do verde
-# dos tipos, para a tarefa não se confundir com um pai.
+# Sugestões para o "Definir cor" de um repositório: longe do roxo, do dourado, do verde e
+# do fúcsia dos tipos, para a tarefa não se confundir com um pai ou com um Apoio.
 SUGGESTED_COLORS: tuple[str, ...] = (
     "#2f7cf6",
     "#0d9488",

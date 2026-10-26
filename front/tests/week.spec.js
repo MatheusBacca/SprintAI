@@ -116,6 +116,11 @@ const WEEK = {
     issue('WAI-8', { summary: 'Analisar e fatiar a: Nova regra', status: 'Em Desenvolvimento', status_category: 'indeterminate' }),
     issue('WAI-9', { summary: 'Analisar e Fatiar - Concluído', status: 'Concluído', status_category: 'done' }),
   ],
+  support: [
+    issue('WAI-9854', { issue_type: 'Apoio', summary: '[CONTABILISTA] Acompanhamento de IA', status: 'Em Desenvolvimento', status_category: 'indeterminate' }),
+    issue('WAI-9846', { issue_type: 'Apoio', summary: '[FUTURA] Casos da Carla', status: 'Concluído', status_category: 'done' }),
+    issue('WAI-9835', { issue_type: 'Apoio', summary: '[FUTURA] Acompanhamento de IA', status: 'Concluído', status_category: 'done' }),
+  ],
   reminders: [note(1, '2026-09-16T12:00:00-03:00', { reminder_due: true }), note(2, '2026-09-19T09:30:00-03:00', { issues: [{ key: 'WAI-1' }] })],
   pending_reminders: [note(3, '2026-09-08T09:00:00-03:00', { reminder_due: true })],
   summary: SUMMARY,
@@ -162,7 +167,7 @@ describe('WeekView', () => {
 
     expect(calls[0].url).toMatch(/^\/api\/week\?tz=/)
     expect(wrapper.find('.week__label').text()).toBe('Esta semana')
-    expect(wrapper.findAll('.block').map((b) => b.attributes('data-block'))).toEqual(['due', 'reminders', 'slicing', 'without-sprint', 'summary'])
+    expect(wrapper.findAll('.block').map((b) => b.attributes('data-block'))).toEqual(['due', 'reminders', 'slicing', 'support', 'without-sprint', 'summary'])
 
     const without = wrapper.find('[data-block="without-sprint"]')
     expect(without.findAll('.wrow').map((r) => r.attributes('data-key'))).toEqual(['WAI-2', 'WAI-1'])
@@ -179,6 +184,11 @@ describe('WeekView', () => {
     const slicing = wrapper.find('[data-block="slicing"]')
     expect(slicing.find('.block__title small').text()).toBe('1')
     expect(slicing.find('.block__sub').text()).toBe('Concluídos nesta semana 1')
+
+    const support = wrapper.find('[data-block="support"]')
+    expect(support.find('.block__title small').text()).toBe('1')
+    expect(support.findAll('.wrow').map((r) => r.attributes('data-key'))).toEqual(['WAI-9854', 'WAI-9846', 'WAI-9835'])
+    expect(support.find('.block__sub').text()).toBe('Concluídos nesta semana 2')
   })
 
   it('lembretes: pendentes de antes, por dia, concluir e abrir', async () => {
@@ -290,6 +300,7 @@ describe('WeekView', () => {
       due: [],
       overdue: [],
       slicing: [],
+      support: [],
       reminders: [],
       pending_reminders: [],
       summary: { stages: STAGES, delivery_stage: REVIEW, days: [] },
@@ -299,7 +310,8 @@ describe('WeekView', () => {
     expect(calls[0].url).toMatch(/^\/api\/week\?day=2026-09-30&tz=/)
     expect(wrapper.find('.week__label').text()).toBe('Daqui a 2 semanas')
     expect(wrapper.find('.week__warn').exists()).toBe(true)
-    expect(wrapper.findAll('.block__empty')).toHaveLength(5)
+    expect(wrapper.findAll('.block__empty')).toHaveLength(6)
+    expect(wrapper.find('[data-block="support"] .block__empty').text()).toBe('Nenhum card de Apoio seu nesta semana.')
     expect(wrapper.find('[data-block="summary"] .block__empty').text()).toBe('A semana ainda não começou.')
 
     await wrapper.find('[data-block="reminders"] .block__action').trigger('click')

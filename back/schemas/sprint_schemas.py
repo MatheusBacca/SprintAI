@@ -25,7 +25,7 @@ class SprintSummaryOut(BaseModel):
 
 
 class CardTintOut(BaseModel):
-    """Fundo esfumaçado do card: pelo tipo (pais) ou pelo `[repo]` do título."""
+    """Fundo esfumaçado do card: pelo tipo (pais e Apoio) ou pelo `[repo]` do título."""
 
     # Na ordem do título; a primeira vai no canto de cima à esquerda e pinta o cabeçalho.
     colors: list[str]

@@ -2,8 +2,8 @@ import { defineStore } from 'pinia'
 import { api } from '@/services/api'
 
 /**
- * Cores dos cards (Configurações › Cores dos cards): o fundo esfumaçado dos pais pelo tipo
- * e das tarefas pelo `[repo]` do título. Quem decide a cor de cada card é o back — a
+ * Cores dos cards (Configurações › Cores dos cards): o fundo esfumaçado dos pais e do Apoio
+ * pelo tipo e das tarefas pelo `[repo]` do título. Quem decide a cor de cada card é o back — a
  * árvore da sprint já chega com o `tint` —; aqui só se lê e grava a configuração.
  */
 export const useCardColorsStore = defineStore('cardColors', {

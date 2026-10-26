@@ -85,7 +85,7 @@ async def get_card_colors(pool: Pool):
 
 @router.put("/card-colors", response_model=CardColorsOut)
 async def put_card_colors(pool: Pool, payload: CardColorsIn):
-    """Cor do fundo dos cards do canvas: pelo tipo (pais) e pelo `[repo]` do título."""
+    """Cor do fundo dos cards do canvas: pelo tipo (pais e Apoio) e pelo `[repo]` do título."""
     known = (await card_colors.load_colors(pool)).known
     colors = CardColors.from_setting(payload.model_dump(), known)
     return _card_colors_out(await card_colors.save_colors(pool, colors))

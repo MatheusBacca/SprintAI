@@ -71,10 +71,18 @@ async def api(db_app, client, credential_store, db_pool):
         resolved=IN_WEEK,
     )
     await _issue(db_pool, "WAI-10", "Analisar e fatiar a: Antigo", category="done", resolved=BEFORE)
+    await _issue(db_pool, "WAI-11", "[CONTABILISTA] Acompanhamento de IA", type="Apoio")
+    await _issue(
+        db_pool, "WAI-12", "[FUTURA] Casos da Carla", type="Apoio", category="done", updated=IN_WEEK
+    )
+    await _issue(
+        db_pool, "WAI-13", "[FUTURA] Apoio antigo", type="Apoio", category="done", updated=BEFORE
+    )
+    await _issue(db_pool, "WAI-14", "[SPM] Apoio de outro dev", type="Apoio", assignee="acc-outro")
     await _sprint(
         db_pool, 1, "Sprint 72", "closed", ["WAI-2"], start=datetime(2026, 8, 1, tzinfo=UTC)
     )
-    await _sprint(db_pool, 2, "Sprint 73", "active", ["WAI-3", "WAI-8"])
+    await _sprint(db_pool, 2, "Sprint 73", "active", ["WAI-3", "WAI-8", "WAI-11", "WAI-14"])
     await db_pool.execute(
         "INSERT INTO task_context (issue_key, kind, title) VALUES ('WAI-1', 'open_point', 'x')"
     )
@@ -126,6 +134,9 @@ async def test_blocos_da_semana(api, db_pool):
     assert [i["key"] for i in data["overdue"]] == ["WAI-6"]
     assert [i["key"] for i in data["slicing"]] == ["WAI-8", "WAI-9"]
     assert data["slicing"][0]["sprint_name"] == "Sprint 73"
+    # Apoio: o aberto e o concluído na semana; o de antes e o de outro dev ficam de fora.
+    assert [i["key"] for i in data["support"]] == ["WAI-11", "WAI-12"]
+    assert data["support"][0]["sprint_name"] == "Sprint 73"
 
     assert [n["title"] for n in data["reminders"]] == ["Na semana", "Domingo à noite"]
     assert data["reminders"][0]["id"] == note.json()["id"]

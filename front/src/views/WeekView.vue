@@ -8,6 +8,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Handshake,
   Inbox,
   Plus,
   RefreshCw,
@@ -98,6 +99,8 @@ const dueDays = computed(() => byDay(data.value?.due ?? [], (i) => i.due_date))
 const reminderDays = computed(() => byDay(data.value?.reminders ?? [], (n) => isoDay(new Date(n.remind_at))))
 const openSlicing = computed(() => (data.value?.slicing ?? []).filter((i) => i.status_category !== 'done'))
 const doneSlicing = computed(() => (data.value?.slicing ?? []).filter((i) => i.status_category === 'done'))
+const openSupport = computed(() => (data.value?.support ?? []).filter((i) => i.status_category !== 'done'))
+const doneSupport = computed(() => (data.value?.support ?? []).filter((i) => i.status_category === 'done'))
 
 // Resumo em kanban: as colunas são as etapas, cada dia é uma faixa, e a tarefa cai na coluna
 // da etapa em que terminou o dia. "Só entregas" esconde o que só começou, voltou ou mexeu.
@@ -265,6 +268,21 @@ function reminderState(note) {
               </ul>
             </template>
             <p v-if="!data.slicing.length" class="block__empty">Nenhum card “Analisar e fatiar” seu nesta semana.</p>
+          </section>
+          <!-- 4b. Apoio -->
+          <section class="block card" data-block="support">
+            <h2 class="block__title"><Handshake :size="16" /> Apoio <small>{{ openSupport.length }}</small></h2>
+            <p class="block__hint">Atividades paralelas pedidas por cliente ou outro time — o tipo Apoio do Jira.</p>
+            <ul v-if="openSupport.length" class="block__list">
+              <WeekIssueRow v-for="issue in openSupport" :key="issue.key" :issue="issue" :today="data.today" :selected="issue.key === issueKey" @open="openIssue" />
+            </ul>
+            <template v-if="doneSupport.length">
+              <h3 class="block__sub">Concluídos nesta semana <small>{{ doneSupport.length }}</small></h3>
+              <ul class="block__list">
+                <WeekIssueRow v-for="issue in doneSupport" :key="issue.key" :issue="issue" :today="data.today" :selected="issue.key === issueKey" @open="openIssue" />
+              </ul>
+            </template>
+            <p v-if="!data.support.length" class="block__empty">Nenhum card de Apoio seu nesta semana.</p>
           </section>
           <!-- 1. Minhas sem sprint -->
           <section class="block card" data-block="without-sprint">

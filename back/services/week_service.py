@@ -50,8 +50,9 @@ async def get_week(
     due = await week_repo.due_between(pool, account_id, start, end)
     overdue = await week_repo.overdue_before(pool, account_id, start)
     slicing = await week_repo.slicing_cards(pool, account_id, since, until)
+    support = await week_repo.support_cards(pool, account_id, since, until)
 
-    issue_rows = without_sprint + due + overdue + slicing
+    issue_rows = without_sprint + due + overdue + slicing + support
     prs = await pr_status_service.summaries(pool, {r["key"] for r in issue_rows})
     browse = f"{site_url.rstrip('/')}/browse/" if site_url else None
 
@@ -92,6 +93,7 @@ async def get_week(
         due=issues(due),
         overdue=issues(overdue),
         slicing=issues(slicing),
+        support=issues(support),
         reminders=await notes_service.hydrate(pool, store, reminders),
         pending_reminders=await notes_service.hydrate(pool, store, pending),
         summary=summary,

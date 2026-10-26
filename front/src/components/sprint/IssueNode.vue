@@ -2,7 +2,7 @@
 import { computed, inject } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import { CANVAS_MARKS, nodeMarks } from './canvasMarks'
-import { Ban, CircleCheck, Layers, Link2, MessageSquareWarning, SquareCheck, StickyNote } from 'lucide-vue-next'
+import { Ban, CircleCheck, Handshake, Layers, Link2, MessageSquareWarning, SquareCheck, StickyNote } from 'lucide-vue-next'
 import ConcludeButton from '@/components/jira/ConcludeButton.vue'
 import StatusChip from '@/components/jira/StatusChip.vue'
 import StoryPointsChip from '@/components/jira/StoryPointsChip.vue'
@@ -28,7 +28,7 @@ const marks = computed(() => nodeMarks(issue.value, canvasMarks?.value))
 const tone = computed(() => issue.value.stage?.color ?? 'var(--color-border-strong)')
 
 /**
- * Fundo esfumaçado pelo tipo (pais) ou pelo `[repo]` do título — Configurações › Cores
+ * Fundo esfumaçado pelo tipo (pais e Apoio) ou pelo `[repo]` do título — Configurações › Cores
  * dos cards, com a regra no back. É só um tingido saindo do canto: o estado continua
  * dito pela cor da etapa, na borda e no selo de status. Sem `tint`, o card fica como era.
  *
@@ -54,6 +54,9 @@ const waitingBlocker = computed(() => (issue.value.blockers_without_pr ?? []).le
 const jiraUrl = computed(() => safeUrl(issue.value.url))
 
 const typeLabel = computed(() => issue.value.issue_type.toUpperCase())
+// Apoio é atividade paralela pedida por outra área (cliente, outro time), não código: o
+// ícone fica o mesmo depois de concluído — o estado já vai no selo de status.
+const support = computed(() => issue.value.issue_type.trim().toLowerCase() === 'apoio')
 const done = computed(() => issue.value.status_category === 'done')
 const initials = computed(() =>
   (issue.value.assignee_name ?? '')
@@ -171,6 +174,7 @@ const updates = computed(() => {
       <span class="node__icon" :class="{ 'node__icon--blocked': waitingBlocker }">
         <Ban v-if="waitingBlocker" :size="14" />
         <Layers v-else-if="issue.is_parent_type" :size="14" />
+        <Handshake v-else-if="support" :size="14" data-icon="apoio" />
         <CircleCheck v-else-if="done" :size="14" />
         <SquareCheck v-else :size="14" />
       </span>

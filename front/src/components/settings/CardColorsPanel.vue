@@ -6,7 +6,7 @@ import { useCardColorsStore } from '@/stores/cardColors'
 
 /**
  * Configurações › Cores dos cards: o fundo esfumaçado dos cards do canvas da sprint. Os
- * pais pelo tipo; as tarefas pelo repositório entre colchetes no começo do título. Quem
+ * pais e o Apoio pelo tipo; as tarefas pelo repositório entre colchetes no começo do título. Quem
  * aplica a regra é o back — a prévia de cada linha só mostra como o card fica com a cor
  * escolhida e ainda não salva.
  */
@@ -118,7 +118,8 @@ async function save() {
         <h2 class="colors__title">Cor do fundo dos cards</h2>
         <p class="colors__desc">
           O canvas da sprint pinta o fundo do card com um esfumaçado leve, a partir do canto de cima. Os pais
-          ganham a cor do tipo; as tarefas, a do repositório entre colchetes no começo do título —
+          e os cards de Apoio (o colchete deles é o cliente, não um repositório) ganham a cor do tipo; as
+          tarefas, a do repositório entre colchetes no começo do título —
           <code>[monitoria] Enviar a coleta…</code>, com o nome de dentro do colchete na cor do
           repositório. A grafia não importa (<code>[MonitorIA]</code> vale para <code>monitoria</code>), o
           começo do nome até um hífen também vale quando só um repositório começa assim

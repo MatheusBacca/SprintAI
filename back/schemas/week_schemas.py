@@ -79,6 +79,7 @@ class WeekOut(BaseModel):
     due: list[WeekIssueOut]
     overdue: list[WeekIssueOut]
     slicing: list[WeekIssueOut]
+    support: list[WeekIssueOut]
     reminders: list[NoteOut]
     pending_reminders: list[NoteOut]
     summary: WeekSummaryOut

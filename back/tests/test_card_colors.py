@@ -4,7 +4,7 @@ from services.card_colors import CardColors, TitlePart
 from services.sync.engine import save_scope
 from services.sync.scope import SyncScope
 
-EPICO, ENHANCEMENTS, FEATURE = "#7c3aed", "#c9a227", "#15803d"
+EPICO, ENHANCEMENTS, FEATURE, APOIO = "#7c3aed", "#c9a227", "#15803d", "#c026d3"
 AZUL, VERDE, ROSA, LARANJA = "#2f7cf6", "#0d9488", "#db2777", "#ea580c"
 
 # Os repositórios de Sincronização do dev.
@@ -40,6 +40,13 @@ def test_pais_tem_cor_pelo_tipo_por_padrao():
     assert tint(padrao, "Plano gratuito", "Enhancements").colors == (ENHANCEMENTS,)
     assert tint(padrao, "Chat SDR", "Feature").colors == (FEATURE,)
     assert tint(padrao, "Chat SDR", "Feature").source == "tipo"
+
+
+def test_apoio_tem_cor_pelo_tipo_e_o_cliente_do_colchete_nao_vira_repositorio():
+    found = colors(monitoria=AZUL).paint("Apoio", "[FUTURA] Acompanhamento de IA")
+
+    assert (found.tint.colors, found.tint.source, found.tint.label) == ((APOIO,), "tipo", "Apoio")
+    assert found.title == ()
 
 
 def test_tarefa_ganha_a_cor_do_repositorio_do_colchete_do_titulo():
@@ -210,7 +217,12 @@ def test_setting_invalido_volta_ao_padrao_e_descarta_o_que_nao_serve():
         }
     )
 
-    assert config.types == {"epico": EPICO, "enhancements": ENHANCEMENTS, "feature": None}
+    assert config.types == {
+        "epico": EPICO,
+        "enhancements": ENHANCEMENTS,
+        "feature": None,
+        "apoio": APOIO,
+    }
     assert config.repos == {"qualificai": "#db2777"}
     assert config.aliases == {"monitoria": ("painel",)}
 
@@ -235,6 +247,7 @@ async def test_padrao_lista_os_tipos_e_os_repositorios_da_sincronizacao(db_app, 
         ("epico", "Épico", EPICO),
         ("enhancements", "Enhancements", ENHANCEMENTS),
         ("feature", "Feature", FEATURE),
+        ("apoio", "Apoio", APOIO),
     ]
     assert [(r["slug"], r["color"], r["synced"]) for r in body["repos"]] == [
         ("monitoria", None, True),
@@ -263,6 +276,7 @@ async def test_salva_cores_e_apelidos_e_repositorio_fora_da_sincronizacao_contin
         "epico": "#5b21b6",
         "enhancements": ENHANCEMENTS,
         "feature": None,
+        "apoio": APOIO,
     }
     assert [(r["slug"], r["color"], r["synced"], r["aliases"]) for r in body["repos"]] == [
         ("monitoria", AZUL, True, ["MonitorIA Voz"]),

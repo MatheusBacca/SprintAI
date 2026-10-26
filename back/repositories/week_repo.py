@@ -1,4 +1,5 @@
-"""Visão Semana: tarefas minhas soltas, com prazo, cards "Analisar e fatiar" e lembretes.
+"""Visão Semana: tarefas minhas soltas, com prazo, cards "Analisar e fatiar", cards de Apoio
+e lembretes.
 
 "Minhas" = Responsável é o dev conectado (`account_id` da conexão). Sem `account_id`
 salvo, não filtra — com o escopo padrão ("só as minhas") o espelho já é só dele.
@@ -17,6 +18,8 @@ Executor = asyncpg.Connection | asyncpg.Pool
 SLICING_PATTERN = "analisar e fatiar%"
 # Épico é contêiner: não é trabalho a fazer na semana.
 EPIC_TYPES = ["Épico", "Epic"]
+# Atividade paralela pedida por outra área — cliente, outro time (WAI-9835).
+SUPPORT_TYPES = ["Apoio"]
 
 ISSUE_COLUMNS = """
     i.key, i.summary, i.issue_type, i.status, i.status_category, i.priority, i.story_points,
@@ -113,6 +116,33 @@ async def slicing_cards(
         """,
         account_id,
         SLICING_PATTERN,
+        since,
+        until,
+    )
+    return [dict(r) for r in rows]
+
+
+async def support_cards(
+    conn: Executor, account_id: str | None, since: datetime, until: datetime
+) -> list[dict[str, Any]]:
+    """Cards de Apoio: os em aberto e os concluídos dentro da semana.
+
+    Diferente do card de fatiar, o Apoio sem sprint continua também em "Minhas sem
+    sprint": ele nasce na sprint ativa, e fora dela é o aviso de que ficou para trás.
+    """
+    rows = await conn.fetch(
+        f"""
+        SELECT {ISSUE_COLUMNS} FROM jira_issue i {SPRINT_JOIN}
+        WHERE {MINE} AND i.issue_type = ANY($2::text[])
+          AND (i.status_category <> 'done'
+               OR coalesce(i.resolved_at, i.updated_at) >= $3
+                  AND coalesce(i.resolved_at, i.updated_at) < $4)
+        ORDER BY (i.status_category = 'done'),
+                 CASE i.status_category WHEN 'indeterminate' THEN 0 ELSE 1 END,
+                 i.updated_at DESC
+        """,
+        account_id,
+        SUPPORT_TYPES,
         since,
         until,
     )

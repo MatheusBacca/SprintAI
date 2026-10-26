@@ -725,6 +725,21 @@ describe('IssueNode', () => {
     expect(wrapper.find('.node__blocked').exists()).toBe(false)
   })
 
+  it('Apoio tem ícone próprio, também depois de concluído; o bloqueio ainda passa na frente', () => {
+    const aberto = mountNode(node('WAI-9854', { issue_type: 'Apoio', pr: null }))
+    expect(aberto.find('[data-icon="apoio"]').exists()).toBe(true)
+    expect(aberto.find('.node__type').text()).toBe('APOIO')
+
+    const concluido = mountNode(node('WAI-9835', { issue_type: 'Apoio', status_category: 'done', pr: null }))
+    expect(concluido.find('[data-icon="apoio"]').exists()).toBe(true)
+
+    const bloqueado = mountNode(node('WAI-9856', { issue_type: 'Apoio', blocked: true, blocked_by: ['WAI-2'], blockers_without_pr: ['WAI-2'] }))
+    expect(bloqueado.find('.node__icon--blocked').exists()).toBe(true)
+    expect(bloqueado.find('[data-icon="apoio"]').exists()).toBe(false)
+
+    expect(mountNode(node('WAI-8', {})).find('[data-icon="apoio"]').exists()).toBe(false)
+  })
+
   it('com dois bloqueadores, o texto lista só o que ainda não abriu PR', () => {
     const wrapper = mountNode(node('WAI-8', { blocked: true, blocked_by: ['WAI-2', 'WAI-3'], blockers_without_pr: ['WAI-3'] }))
 
