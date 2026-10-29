@@ -67,6 +67,13 @@ CLOSED_WITHOUT_MERGE = {PrStatus.RECUSADA, PrStatus.SUBSTITUIDA}
 FAILED_BUILDS = {"FAILED", "STOPPED"}
 
 
+MAX_MIN_APPROVALS = 10
+
+
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 @dataclass(frozen=True)
 class ApprovalRule:
     """Quanto dos revisores precisa aprovar para o PR contar como aprovado.
@@ -74,24 +81,33 @@ class ApprovalRule:
     `min_percent` 0 é a regra de antes da configuração — basta uma aprovação —; 50 é
     "pelo menos metade" e 100, "todos". Uma aprovação é o piso de qualquer regra: PR sem
     ninguém aprovando não está aprovado nem com 0%.
+
+    `min_approvals` é um piso em número, somado à porcentagem: vale o que pedir mais. Com 2,
+    um PR de dois revisores precisa dos dois, e um de um revisor só não fica "Aprovada" — o
+    time pede duas aprovações para mergear, e o Concluir não pode oferecer o merge antes.
     """
 
     min_percent: int = 0
+    min_approvals: int = 0
 
     @classmethod
     def from_setting(cls, value: Any) -> "ApprovalRule":
         """Sem configuração salva vale a regra de antes: nada muda sozinho no card."""
-        percent = value.get("min_percent") if isinstance(value, dict) else None
-        if isinstance(percent, int) and not isinstance(percent, bool) and 0 <= percent <= 100:
-            return cls(min_percent=percent)
-        return cls()
+        value = value if isinstance(value, dict) else {}
+        percent = value.get("min_percent")
+        if not (_is_int(percent) and 0 <= percent <= 100):
+            percent = 0
+        minimum = value.get("min_approvals")
+        if not (_is_int(minimum) and 0 <= minimum <= MAX_MIN_APPROVALS):
+            minimum = 0
+        return cls(min_percent=percent, min_approvals=minimum)
 
     def to_setting(self) -> dict[str, int]:
-        return {"min_percent": self.min_percent}
+        return {"min_percent": self.min_percent, "min_approvals": self.min_approvals}
 
     def required(self, reviewers: int) -> int:
         # Teto em inteiro: 50% de 3 revisores são 2 aprovações, não 1,5.
-        return max(1, -(-reviewers * self.min_percent // 100))
+        return max(1, self.min_approvals, -(-reviewers * self.min_percent // 100))
 
     def approved(self, approvals: int, reviewers: int) -> bool:
         return approvals >= self.required(reviewers)
@@ -165,6 +181,9 @@ class PullRequestLink:
     # Ajuste pedido e correção já subida — o PR voltou para a fila do revisor.
     fix_pushed: bool = False
     review: ReviewProgress | None = None
+    # Rascunho: o status que ele teria se fosse liberado agora — é o que o "Liberar e concluir"
+    # usa para saber se o merge entra logo depois.
+    released_status: PrStatus | None = None
 
     @property
     def build_failed(self) -> bool:
@@ -355,6 +374,9 @@ def pull_request_link(
         match="title" if issue_key and issue_key not in branch_keys else "branch",
         fix_pushed=fix_pushed,
         review=review_progress(**pr_state),
+        released_status=(
+            derive_pr_status(**{**pr_state, "draft": False}) if pr_state["draft"] else None
+        ),
     )
 
 

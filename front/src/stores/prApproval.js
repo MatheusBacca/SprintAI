@@ -9,6 +9,8 @@ import { api } from '@/services/api'
 export const usePrApprovalStore = defineStore('prApproval', {
   state: () => ({
     minPercent: null,
+    // Piso em número de aprovações, somado à porcentagem. 0: sem piso.
+    minApprovals: 0,
     loading: false,
     saving: false,
     error: null,
@@ -20,6 +22,7 @@ export const usePrApprovalStore = defineStore('prApproval', {
       try {
         const data = await api.get('/preferences/pr-approval')
         this.minPercent = data.min_percent
+        this.minApprovals = data.min_approvals ?? 0
         this.error = null
       } catch (error) {
         this.error = error.message
@@ -28,12 +31,13 @@ export const usePrApprovalStore = defineStore('prApproval', {
       }
     },
 
-    async save(minPercent) {
+    async save(minPercent, minApprovals = this.minApprovals) {
       this.saving = true
       this.feedback = null
       try {
-        const data = await api.put('/preferences/pr-approval', { min_percent: minPercent })
+        const data = await api.put('/preferences/pr-approval', { min_percent: minPercent, min_approvals: minApprovals })
         this.minPercent = data.min_percent
+        this.minApprovals = data.min_approvals ?? 0
         this.feedback = { type: 'success', text: 'Regra salva. Os cards já contam as aprovações por ela.' }
         return true
       } catch (error) {

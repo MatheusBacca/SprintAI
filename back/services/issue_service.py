@@ -126,6 +126,15 @@ async def get_detail(pool: asyncpg.Pool, store: CredentialStore, key: str) -> Is
     stages = await load_stages(pool)
     paint = (await card_colors.load_colors(pool)).paint(row["issue_type"], row["summary"])
     points = row["story_points"]
+    concludes = await conclude_settings.with_conclusion(
+        pool,
+        [
+            conclude_settings.ConcludeTask(
+                key, row["summary"], row["status"], row["status_category"]
+            )
+        ],
+        summaries,
+    )
     return IssueDetailOut(
         key=row["key"],
         url=_browse(site_url, row["key"]),
@@ -161,16 +170,7 @@ async def get_detail(pool: asyncpg.Pool, store: CredentialStore, key: str) -> Is
         stage=stage_ref(stages.stage_of(row["status"])),
         comments=[CommentOut(**c) for c in await issue_repo.comments(pool, key)],
         pull_requests=pr_status_service.to_detail(summaries[key]),
-        conclude=key
-        in await conclude_settings.with_conclusion(
-            pool,
-            [
-                conclude_settings.ConcludeTask(
-                    key, row["summary"], row["status"], row["status_category"]
-                )
-            ],
-            summaries,
-        ),
+        conclude=key in concludes,
     )
 
 

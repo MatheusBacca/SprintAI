@@ -212,6 +212,61 @@ describe('Concluir', () => {
     expect(panel().querySelector('.conclude__confirm').disabled).toBe(true)
   })
 
+  it('o Rascunho, à esquerda, devolve ao rascunho os PRs do merge — sem merge nem Jira', async () => {
+    routes['POST /api/issues/WAI-1/conclude/draft'] = json({
+      issue_key: 'WAI-1',
+      done: true,
+      write_id: 'w2',
+      steps: [{ kind: 'draft', label: 'PR #412 em monitoria foi para o rascunho', ok: true, url: MERGE.url }],
+    })
+    const { panel } = await openPlan(plan())
+
+    const buttons = [...panel().querySelectorAll('.conclude__actions button')].map((b) => b.textContent.trim())
+    expect(buttons).toEqual(['Rascunho', 'Confirmar e concluir'])
+    click(panel().querySelector('.conclude__draft'))
+    await flushPromises()
+
+    expect(calls.at(-1)).toEqual({
+      method: 'POST',
+      url: '/api/issues/WAI-1/conclude/draft',
+      body: { draft: true, prs: [{ repo_slug: 'monitoria', pr_id: 412 }] },
+    })
+    expect(panel().textContent).toContain('foi para o rascunho')
+    expect(panel().textContent).not.toContain('Concluída')
+    expect(useJiraActionsStore().lastWrite).toMatchObject({ id: 'w2', key: 'WAI-1' })
+  })
+
+  it('com PR em rascunho, a esquerda libera e a direita libera e conclui', async () => {
+    const DRAFT = { repo_slug: 'monitoria', pr_id: 412, title: 'WAI-1 trial', url: MERGE.url, approvals: 2, merges: true, reason: null }
+    routes['POST /api/issues/WAI-1/conclude'] = json({ issue_key: 'WAI-1', done: true, steps: [], write_id: null })
+    routes['POST /api/issues/WAI-1/conclude/draft'] = json({ issue_key: 'WAI-1', done: true, steps: [], write_id: null })
+    const { panel } = await openPlan(plan({ drafts: [DRAFT], merges: [{ ...MERGE, warnings: [], draft: true }] }))
+
+    expect(panel().textContent).toContain('Liberar o PR #412 em monitoria do rascunho')
+    expect(panel().textContent).toContain('2 aprovações · entra no merge abaixo')
+    const buttons = [...panel().querySelectorAll('.conclude__actions button')].map((b) => b.textContent.trim())
+    expect(buttons).toEqual(['Liberar PR', 'Liberar e concluir'])
+
+    click(panel().querySelector('.conclude__confirm'))
+    await flushPromises()
+    const ref = [{ repo_slug: 'monitoria', pr_id: 412 }]
+    expect(calls.at(-1).body).toEqual({ jira_status: 'DISPONIVEL PARA TESTES', merges: ref, release: ref })
+  })
+
+  it('Liberar PR só tira do rascunho, mesmo sem aprovação para concluir', async () => {
+    const DRAFT = { repo_slug: 'monitoria', pr_id: 412, title: 'WAI-1 trial', url: MERGE.url, approvals: 0, merges: false, reason: 'sem a aprovação da regra' }
+    routes['POST /api/issues/WAI-1/conclude/draft'] = json({ issue_key: 'WAI-1', done: true, steps: [], write_id: null })
+    const { panel } = await openPlan(
+      plan({ drafts: [DRAFT], merges: [], targets: [], held_statuses: ['DISPONIVEL PARA TESTES'], blocked: 'PR #412 ainda não está aprovado pela regra.' }),
+    )
+
+    expect(panel().querySelector('.conclude__error').textContent).toContain('Para concluir junto')
+    expect(panel().querySelector('.conclude__confirm').disabled).toBe(true)
+    click(panel().querySelector('.conclude__release'))
+    await flushPromises()
+    expect(calls.at(-1)).toMatchObject({ url: '/api/issues/WAI-1/conclude/draft', body: { draft: false, prs: [{ repo_slug: 'monitoria', pr_id: 412 }] } })
+  })
+
   it('o card mostra o Concluir à direita do selo do PR só quando o repo tem receita', () => {
     const issue = {
       key: 'WAI-9',

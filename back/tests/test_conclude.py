@@ -699,3 +699,146 @@ async def test_reviewer_posto_no_bitbucket_nao_vira_500_se_o_sync_nao_dispara(
     response = await client.put("/api/pull-requests/monitoria/412/reviewers", json={"add": ["acc-carla"]})
     assert response.status_code == 200, response.text
     assert response.json()["reviewers"][0]["avatar_url"] == photo
+
+
+# --- Rascunho ----------------------------------------------------------------------------------
+
+
+async def _draft(pool, pr_id=412, draft=True):
+    await pool.execute(
+        "UPDATE bb_pull_request SET draft = $1 WHERE repo_slug = 'monitoria' AND id = $2",
+        draft,
+        pr_id,
+    )
+
+
+def _mock_pr_put(pr_id=412, *, result_draft):
+    respx.get(f"{BB}/monitoria/pullrequests/{pr_id}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": pr_id,
+                "title": "WAI-124 trial",
+                "description": "texto",
+                "reviewers": [{"uuid": "{u-rafa}", "account_id": "acc-rafa"}],
+            },
+        )
+    )
+    return respx.put(f"{BB}/monitoria/pullrequests/{pr_id}").mock(
+        return_value=httpx.Response(200, json={"id": pr_id, "draft": result_draft})
+    )
+
+
+async def test_rascunho_aprovado_mostra_o_botao_do_concluir(db_app, client, seeded):
+    await _rules(seeded, monitoria={"jira_status": "DISPONIVEL PARA TESTES", "merge": True})
+    await _draft(seeded)
+    assert (await client.get("/api/issues/WAI-124")).json()["conclude"] is True
+    # Sem aprovação o rascunho também mostra: liberar não depende dela.
+    await _set_participants(seeded, [{**APPROVED, "approved": False, "state": None}])
+    assert (await client.get("/api/issues/WAI-124")).json()["conclude"] is True
+
+
+@respx.mock
+async def test_plano_com_rascunho_e_o_do_liberar_e_concluir(db_app, client, seeded):
+    _mock_jira()
+    await _rules(seeded, monitoria={"jira_status": "DISPONIVEL PARA TESTES", "merge": True})
+    await _draft(seeded)
+
+    plan = (await client.get("/api/issues/WAI-124/conclude")).json()
+    assert plan["blocked"] is None
+    assert [(d["pr_id"], d["merges"], d["approvals"]) for d in plan["drafts"]] == [(412, True, 1)]
+    assert [(m["pr_id"], m["draft"]) for m in plan["merges"]] == [(412, True)]
+    assert "PR em rascunho" not in plan["merges"][0]["warnings"]
+    assert plan["targets"][0]["status"] == "DISPONIVEL PARA TESTES"
+
+
+@respx.mock
+async def test_rascunho_sem_aprovacao_libera_mas_nao_conclui(db_app, client, seeded):
+    _mock_jira()
+    await _rules(seeded, monitoria={"jira_status": "DISPONIVEL PARA TESTES", "merge": True})
+    await _draft(seeded)
+    await _set_participants(seeded, [{**APPROVED, "approved": False, "state": None}])
+
+    plan = (await client.get("/api/issues/WAI-124/conclude")).json()
+    assert "não está aprovado pela regra" in plan["blocked"]
+    assert plan["drafts"][0]["merges"] is False
+    assert plan["drafts"][0]["reason"] == "sem a aprovação da regra"
+
+
+@respx.mock
+async def test_liberar_e_concluir_libera_antes_do_merge(db_app, client, seeded, engine):
+    _mock_jira()
+    put = _mock_pr_put(result_draft=False)
+    merge = respx.post(f"{BB}/monitoria/pullrequests/412/merge").mock(
+        return_value=httpx.Response(200, json={"id": 412, "state": "MERGED"})
+    )
+    respx.post(f"{SITE}/rest/api/3/issue/WAI-124/transitions").mock(
+        return_value=httpx.Response(204)
+    )
+    await _rules(seeded, monitoria={"jira_status": "DISPONIVEL PARA TESTES", "merge": True})
+    await _draft(seeded)
+    ref = [{"repo_slug": "monitoria", "pr_id": 412}]
+
+    # Sem liberar o rascunho, a execução recusa: o Bitbucket não mergeia rascunho.
+    refused = await client.post(
+        "/api/issues/WAI-124/conclude", json={"jira_status": None, "merges": ref}
+    )
+    assert refused.status_code == 409
+
+    body = (
+        await client.post(
+            "/api/issues/WAI-124/conclude",
+            json={"jira_status": "DISPONIVEL PARA TESTES", "merges": ref, "release": ref},
+        )
+    ).json()
+    assert body["done"] is True
+    assert [s["kind"] for s in body["steps"]] == ["release", "merge", "transition"]
+    # O PUT leva o PR como está — reviewer que ficasse de fora sairia do PR.
+    assert json.loads(put.calls.last.request.read()) == {
+        "title": "WAI-124 trial",
+        "description": "texto",
+        "reviewers": [{"uuid": "{u-rafa}"}],
+        "draft": False,
+    }
+    assert merge.called
+    assert engine.triggers == ["concluir"]
+
+
+@respx.mock
+async def test_rascunho_poe_e_libera_so_pr_aberto_da_tarefa(db_app, client, seeded, engine):
+    put = _mock_pr_put(result_draft=True)
+
+    body = (
+        await client.post(
+            "/api/issues/WAI-124/conclude/draft",
+            json={"draft": True, "prs": [{"repo_slug": "monitoria", "pr_id": 412}]},
+        )
+    ).json()
+    assert body["done"] is True
+    assert [(s["kind"], s["ok"]) for s in body["steps"]] == [("draft", True)]
+    assert json.loads(put.calls.last.request.read())["draft"] is True
+    assert body["write_id"]
+    assert engine.triggers == ["rascunho"]
+
+    # O mergeado não é PR aberto da tarefa.
+    response = await client.post(
+        "/api/issues/WAI-124/conclude/draft",
+        json={"draft": True, "prs": [{"repo_slug": "monitoria", "pr_id": 400}]},
+    )
+    assert response.status_code == 409
+
+
+@respx.mock
+async def test_bitbucket_que_nao_muda_o_rascunho_vira_passo_com_erro(db_app, client, seeded, engine):
+    _mock_pr_put(result_draft=True)
+    await _draft(seeded)
+
+    body = (
+        await client.post(
+            "/api/issues/WAI-124/conclude/draft",
+            json={"draft": False, "prs": [{"repo_slug": "monitoria", "pr_id": 412}]},
+        )
+    ).json()
+    assert body["done"] is False
+    assert "continua em rascunho" in body["steps"][0]["message"]
+    assert engine.triggers == []

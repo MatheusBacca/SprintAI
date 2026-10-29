@@ -117,6 +117,27 @@ export const useJiraActionsStore = defineStore('jiraActions', {
       }
     },
 
+    /**
+     * Os botões da esquerda do plano: "Rascunho" (`draft` verdadeiro) e "Liberar PR". Como o
+     * Concluir, o painel fica com o resultado de cada PR.
+     */
+    async setDrafts(issueKey, draft, prs) {
+      if (this.saving) return null
+      this.saving = true
+      this.error = null
+      try {
+        const result = await api.post(path(issueKey, 'conclude/draft'), { draft, prs })
+        if (result.write_id) this.lastWrite = { id: result.write_id, key: issueKey, at: Date.now() }
+        if (this.conclude.key === issueKey) this.conclude = { ...this.conclude, result }
+        return result
+      } catch (error) {
+        this.error = error.message
+        return null
+      } finally {
+        this.saving = false
+      }
+    },
+
     transition(issueKey, transitionId) {
       return this._write(() => api.post(path(issueKey, 'transitions'), { transition_id: transitionId }))
     },

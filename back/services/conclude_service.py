@@ -11,6 +11,11 @@ Concluir), em dois tempos.
 Tarefa com mais de um PR aberto conclui por partes: entram os PRs aprovados, e os outros ficam
 em `waiting`. Enquanto sobrar um, o Jira não anda — ele se move no Concluir do último PR.
 
+PR em rascunho (`drafts`): o painel oferece liberar, ou liberar e concluir. O plano, aí, é o
+do "Liberar e concluir" — feito com os rascunhos já liberados —, e a execução libera antes de
+mergear: PR em rascunho o Bitbucket não mergeia. O botão da esquerda do plano comum faz o
+caminho de volta, pondo em rascunho os PRs que iam ser mergeados (`set_drafts`).
+
 O repo da tarefa sai dos PRs e branches dela no espelho e do `[repo]` do título. Os avisos
 não barram: quem barra é o Bitbucket, pelas merge checks do repo. O espelho do PR não é
 escrito à mão — o sync roda logo depois do merge e grava a mudança (e o evento) como sempre.
@@ -26,6 +31,8 @@ from integrations.errors import IntegrationError, PermissionDenied
 from realtime import bus
 from repositories import issue_repo
 from schemas.conclude_schemas import (
+    ConcludeDraftIn,
+    ConcludeDraftOut,
     ConcludeIn,
     ConcludeMergeOut,
     ConcludePlanOut,
@@ -52,9 +59,9 @@ STRATEGY_LABELS = {
 }
 
 
-def merge_warnings(pr) -> list[str]:
+def merge_warnings(pr, *, released: bool = False) -> list[str]:
     warnings = []
-    if pr.draft:
+    if pr.draft and not released:
         warnings.append("PR em rascunho")
     review = pr.review
     if review and review.required and review.approvals < review.required:
@@ -82,15 +89,33 @@ async def plan(pool: asyncpg.Pool, store: CredentialStore, key: str) -> Conclude
     colors = await card_colors.load_colors(pool)
     title_repos = colors.title_repos(row["summary"])
     repos = conclude_settings.concludable(rules, task_repos(summary, title_repos))
+    open_drafts = conclude_settings.open_drafts(summary)
+    # Com rascunho, o plano é o do "Liberar e concluir".
+    released = bool(open_drafts)
     blocked = blocked_reason(
         rules,
         ConcludeTask(key, row["summary"], row["status"], row["status_category"]),
         summary,
         title_repos,
         await load_stages(pool),
+        release_drafts=released,
     )
 
-    split = conclude_settings.split_open_prs(rules, repos, summary)
+    split = conclude_settings.split_open_prs(rules, repos, summary, release_drafts=released)
+    merging = {(pr.repo_slug, pr.id) for pr in split.merge_now}
+    reasons = {(w.pr.repo_slug, w.pr.id): w.reason for w in split.waiting}
+    drafts = [
+        ConcludeDraftOut(
+            repo_slug=pr.repo_slug,
+            pr_id=pr.id,
+            title=pr.title,
+            url=pr.url,
+            approvals=pr.approvals,
+            merges=(pr.repo_slug, pr.id) in merging,
+            reason=reasons.get((pr.repo_slug, pr.id)),
+        )
+        for pr in open_drafts
+    ]
     merges = [
         ConcludeMergeOut(
             repo_slug=pr.repo_slug,
@@ -101,7 +126,8 @@ async def plan(pool: asyncpg.Pool, store: CredentialStore, key: str) -> Conclude
             destination_branch=pr.destination_branch,
             strategy=rules[pr.repo_slug].strategy,
             close_source_branch=rules[pr.repo_slug].close_source_branch,
-            warnings=merge_warnings(pr),
+            warnings=merge_warnings(pr, released=released),
+            draft=pr.draft,
         )
         for pr in split.merge_now
     ]
@@ -147,6 +173,7 @@ async def plan(pool: asyncpg.Pool, store: CredentialStore, key: str) -> Conclude
         waiting=waiting,
         # Com PR aberto sobrando, o Jira nem é consultado: o passo dele fica para depois.
         held_statuses=wanted if waiting else [],
+        drafts=drafts,
     )
 
 
@@ -189,6 +216,7 @@ async def run(
     payload: ConcludeIn,
 ) -> ConcludeResultOut:
     fresh = await plan(pool, store, key)
+    release = _chosen_release(fresh, payload)
     if fresh.blocked:
         raise IssueActionConflict(fresh.blocked)
     planned = {(m.repo_slug, m.pr_id): m for m in fresh.merges}
@@ -216,14 +244,22 @@ async def run(
     steps: list[ConcludeStepOut] = []
     merged_any = False
 
-    if chosen:
+    if chosen or release:
         async with factory.bitbucket_client(store) as bb:
-            for merge in chosen:
-                step = await _merge(bb, merge)
+            for draft in release:
+                step = await _set_draft(bb, draft.repo_slug, draft.pr_id, draft.url, False)
                 steps.append(step)
                 if not step.ok:
                     break
+                # Liberar já é escrita: o selo do PR muda mesmo que o merge falhe depois.
                 merged_any = True
+            if not steps or steps[-1].ok:
+                for merge in chosen:
+                    step = await _merge(bb, merge)
+                    steps.append(step)
+                    if not step.ok:
+                        break
+                    merged_any = True
         if merged_any:
             await sync_after_write(engine, "concluir")
         if not steps[-1].ok:
@@ -282,6 +318,19 @@ async def run(
     )
 
 
+def _chosen_release(fresh: ConcludePlanOut, payload: ConcludeIn) -> list[ConcludeDraftOut]:
+    """Os rascunhos a liberar antes dos merges. Com rascunho no plano, o pedido precisa trazer
+    todos — o plano de agora já conta com eles liberados, e um que o dev não viu ficaria de
+    fora sem aviso."""
+    drafts = {(d.repo_slug, d.pr_id): d for d in fresh.drafts}
+    asked = {(r.repo_slug, r.pr_id) for r in payload.release}
+    if asked != set(drafts):
+        raise IssueActionConflict(
+            "Os PRs em rascunho da tarefa mudaram desde que o painel abriu — abra de novo."
+        )
+    return list(drafts.values())
+
+
 def _hold_step(fresh: ConcludePlanOut) -> ConcludeStepOut:
     remaining = "; ".join(f"#{w.pr_id} em {w.repo_slug} ({w.reason})" for w in fresh.waiting)
     return ConcludeStepOut(
@@ -307,6 +356,105 @@ def _chosen_target(fresh: ConcludePlanOut, wanted: str | None) -> ConcludeTarget
     if not target.available:
         raise IssueActionConflict(target.reason or f"Não dá para mover para “{wanted}”.")
     return target
+
+
+async def set_drafts(
+    pool: asyncpg.Pool,
+    store: CredentialStore,
+    engine: SyncEngine | None,
+    key: str,
+    payload: ConcludeDraftIn,
+) -> ConcludeResultOut:
+    """Os botões da esquerda do painel: "Rascunho" (põe os PRs do merge em rascunho) e
+    "Liberar PR" (tira do rascunho, sem concluir). Só PR aberto da própria tarefa, conferido
+    no espelho; o que já está no estado pedido não sai para o Bitbucket."""
+    if await issue_repo.issue(pool, key) is None:
+        raise IssueNotInMirror(key)
+    summary = (await pr_status_service.summaries(pool, [key]))[key]
+    open_prs = {
+        (pr.repo_slug, pr.id): pr
+        for repo in summary.repos
+        for pr in repo.pull_requests
+        if pr.state == "OPEN"
+    }
+    chosen = []
+    for ref in payload.prs:
+        pr = open_prs.get((ref.repo_slug, ref.pr_id))
+        if pr is None:
+            raise IssueActionConflict(
+                f"O PR #{ref.pr_id} de {ref.repo_slug} não é um PR aberto de {key}."
+            )
+        chosen.append(pr)
+
+    steps: list[ConcludeStepOut] = []
+    wrote = False
+    async with factory.bitbucket_client(store) as bb:
+        for pr in chosen:
+            if pr.draft == payload.draft:
+                steps.append(_draft_step(pr.repo_slug, pr.id, pr.url, payload.draft, already=True))
+                continue
+            step = await _set_draft(bb, pr.repo_slug, pr.id, pr.url, payload.draft)
+            steps.append(step)
+            if not step.ok:
+                break
+            wrote = True
+    if wrote:
+        await sync_after_write(engine, "rascunho" if payload.draft else "liberar")
+    return ConcludeResultOut(
+        issue_key=key,
+        done=all(step.ok for step in steps),
+        steps=steps,
+        write_id=_announce(key) if wrote else None,
+    )
+
+
+def _draft_step(
+    repo_slug: str, pr_id: int, url: str | None, draft: bool, *, already: bool = False
+) -> ConcludeStepOut:
+    where = f"PR #{pr_id} em {repo_slug}"
+    if already:
+        label = f"{where} já estava {'em rascunho' if draft else 'liberado'}"
+    else:
+        label = f"{where} {'foi para o rascunho' if draft else 'liberado para review'}"
+    return ConcludeStepOut(kind="draft" if draft else "release", label=label, ok=True, url=url)
+
+
+async def _set_draft(
+    bb, repo_slug: str, pr_id: int, url: str | None, draft: bool
+) -> ConcludeStepOut:
+    kind = "draft" if draft else "release"
+    label = f"{'Pôr em rascunho' if draft else 'Liberar'} o PR #{pr_id} em {repo_slug}"
+    try:
+        updated = await bb.set_draft(repo_slug, pr_id, draft)
+    except PermissionDenied:
+        return ConcludeStepOut(
+            kind=kind,
+            label=label,
+            ok=False,
+            url=url,
+            message="Bitbucket: sem permissão para editar o PR — o token precisa do escopo "
+            "write:pullrequest:bitbucket, ou o seu usuário não pode editar este PR.",
+        )
+    except IntegrationError as exc:
+        logger.info("Rascunho recusado em %s#%s: %s", repo_slug, pr_id, exc.status)
+        return ConcludeStepOut(
+            kind=kind,
+            label=label,
+            ok=False,
+            url=url,
+            message=f"O Bitbucket recusou a mudança (HTTP {exc.status or '?'}) — confira no PR.",
+        )
+    if bool(updated.get("draft")) != draft:
+        # O PUT passou e o PR não mudou: melhor dizer do que contar que mudou.
+        return ConcludeStepOut(
+            kind=kind,
+            label=label,
+            ok=False,
+            url=url,
+            message="O Bitbucket aceitou o pedido, mas o PR continua "
+            f"{'fora do' if draft else 'em'} rascunho — confira no PR.",
+        )
+    return _draft_step(repo_slug, pr_id, url, draft)
 
 
 async def _merge(bb, merge: ConcludeMergeOut) -> ConcludeStepOut:

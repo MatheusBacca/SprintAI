@@ -43,14 +43,16 @@ async def put_shortcuts(pool: Pool, payload: ShortcutsPreferences):
 @router.get("/pr-approval", response_model=ApprovalRuleSettings)
 async def get_pr_approval(pool: Pool):
     rule = await pr_status_service.load_rule(pool)
-    return ApprovalRuleSettings(min_percent=rule.min_percent)
+    return ApprovalRuleSettings(min_percent=rule.min_percent, min_approvals=rule.min_approvals)
 
 
 @router.put("/pr-approval", response_model=ApprovalRuleSettings)
 async def put_pr_approval(pool: Pool, payload: ApprovalRuleSettings):
     """Quanto dos revisores precisa aprovar para o PR contar como "Aprovada"."""
-    rule = await pr_status_service.save_rule(pool, ApprovalRule(min_percent=payload.min_percent))
-    return ApprovalRuleSettings(min_percent=rule.min_percent)
+    rule = await pr_status_service.save_rule(
+        pool, ApprovalRule(min_percent=payload.min_percent, min_approvals=payload.min_approvals)
+    )
+    return ApprovalRuleSettings(min_percent=rule.min_percent, min_approvals=rule.min_approvals)
 
 
 def _card_colors_out(colors: CardColors) -> CardColorsOut:

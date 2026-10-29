@@ -62,7 +62,7 @@ Docker parado não prova nada.
   Escrita nova — inclusive a do agente, no M8 — segue o mesmo: proposta → confirmação → ação.
   Escrita que não pode repetir vai com `idempotent=False` no transporte: repetir uma
   transição depois de um 5xx pode andar mais um passo no workflow.
-- **No Bitbucket, só duas escritas, e as duas confirmadas na tela.** O **merge** do PR, pelo
+- **No Bitbucket, só três escritas, e as três confirmadas na tela.** O **merge** do PR, pelo
   "Concluir" do card (`services/conclude_service.py`): a receita é por repo (Configurações ›
   Concluir), o botão só aparece em card apto (`conclude_settings.blocked_reason`: algum PR
   aprovado pela regra de aprovações para mergear, ou só o Jira faltando; tarefa antes de
@@ -70,7 +70,9 @@ Docker parado não prova nada.
   nada roda sem o "Confirmar e concluir", o merge vem primeiro e o Jira só anda se ele entrou
   e não sobrou PR aberto da tarefa (vários PRs: um Concluir por PR aprovado, o Jira no
   último — `split_open_prs`); vai com `idempotent=False`, porque repetir depois de um 5xx
-  poderia mergear de novo. E a **lista de reviewers** de um PR
+  poderia mergear de novo. O **rascunho** do PR (pôr ou liberar), pelos botões da esquerda do
+  mesmo painel (`set_drafts`) ou antes do merge no "Liberar e concluir" — o PUT do Bitbucket
+  troca o PR inteiro, então título, descrição e reviewers vão como estão. E a **lista de reviewers** de um PR
   aberto (`services/pr_reviewers.py`), com o segundo clique confirmando o tirar e o
   "Adicionar?" o pôr. O espelho do PR continua sendo do sync: depois da escrita o back chama
   o sync, em vez de gravar o PR à mão — o evento (e a história) sai dele, como sempre. Erro do

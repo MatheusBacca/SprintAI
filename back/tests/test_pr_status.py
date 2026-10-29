@@ -550,3 +550,27 @@ def test_badge_leva_a_review_do_card_e_a_de_cada_link():
         ("Aprovador", "approved"), ("Crítico", "changes_requested"), ("Revisor", "pending"),
     ]
     assert [link.review.approvals if link.review else None for link in badge.links] == [1, None]
+
+
+@pytest.mark.parametrize(
+    ("percent", "minimum", "reviewers", "required"),
+    [
+        (50, 2, 3, 2),
+        (50, 2, 2, 2),  # metade de 2 é 1, mas o piso pede 2
+        (0, 2, 1, 2),  # um revisor só não basta
+        (100, 2, 3, 3),  # vale o que pedir mais
+        (0, 0, 3, 1),
+    ],
+)
+def test_minimo_de_aprovacoes_soma_com_a_porcentagem(percent, minimum, reviewers, required):
+    rule = ApprovalRule(min_percent=percent, min_approvals=minimum)
+    assert rule.required(reviewers) == required
+
+
+@pytest.mark.parametrize(
+    ("value", "minimum"),
+    [({"min_percent": 50}, 0), ({"min_approvals": 2}, 2), ({"min_approvals": 11}, 0),
+     ({"min_approvals": "2"}, 0), ({"min_approvals": True}, 0)],
+)
+def test_minimo_de_aprovacoes_salvo_invalido_vira_zero(value, minimum):
+    assert ApprovalRule.from_setting(value).min_approvals == minimum

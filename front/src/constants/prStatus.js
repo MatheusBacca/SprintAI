@@ -49,6 +49,13 @@ export const APPROVAL_RULES = [
   { percent: 100, label: 'Todos', hint: 'Todos os revisores precisam aprovar.' },
 ]
 
+/** Piso em número, somado à porcentagem acima — vale o que pedir mais (`ApprovalRule` do back). */
+export const APPROVAL_MINIMUMS = [
+  { count: 0, label: 'Sem mínimo', hint: 'Só a porcentagem acima decide.' },
+  { count: 2, label: 'Pelo menos 2', hint: 'Nenhum PR fica "Aprovada" com menos de 2 aprovações — com 2 revisores, os dois aprovam.' },
+  { count: 3, label: 'Pelo menos 3', hint: 'Nenhum PR fica "Aprovada" com menos de 3 aprovações.' },
+]
+
 /** Por extenso, para o title — no badge fica só o "N/X". */
 export function approvalsLabel({ approvals, reviewers }) {
   return `${approvals}/${reviewers} ${reviewers === 1 ? 'aprovação' : 'aprovações'}`

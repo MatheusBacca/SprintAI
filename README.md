@@ -19,7 +19,7 @@ Segurança local:
 - **tokens do Jira e Bitbucket nunca vão para `.env`, banco, logs ou para o front** — ficam no Cofre do Windows (serviço `sprintai` no Gerenciador de Credenciais), cadastrados em Configurações › Conexões e só salvos depois de testados;
 - a API recusa (403) requests sem o header `X-SprintAI`, com `Host` fora de loopback (DNS rebinding) ou com `Origin` que não seja o front;
 - erros de validação não ecoam o valor enviado (um token malformado não volta na resposta);
-- **o SprintAI escreve só duas coisas no Jira**, e só por gesto explícito na tela: a transição de status (duplo clique) e os Story Points (Salvar). **No Bitbucket, também duas**, as duas confirmadas no painel: o merge do PR (o "Concluir" do card) e os reviewers de um PR aberto. Veja [Ações no Jira e no Bitbucket](#ações-no-jira-e-no-bitbucket).
+- **o SprintAI escreve só duas coisas no Jira**, e só por gesto explícito na tela: a transição de status (duplo clique) e os Story Points (Salvar). **No Bitbucket, três**, todas confirmadas no painel: o merge do PR (o "Concluir" do card), o rascunho do PR (pôr ou liberar, no mesmo painel) e os reviewers de um PR aberto. Veja [Ações no Jira e no Bitbucket](#ações-no-jira-e-no-bitbucket).
 
 ## Setup
 
@@ -114,7 +114,7 @@ do que subir na porta seguinte e tomar 403 da guarda no primeiro request.
 | `GET /api/jira/fields` | IDs dos campos Sprint e Story Points desta instância |
 | `GET /api/jira/boards?project_key=WAI` | boards (scrum/kanban) do projeto |
 | `GET /api/jira/boards/{id}/sprints?state=active,future` | sprints do board, com a squad pelo sufixo do nome (`Sprint 73 - Growth`) |
-| `GET /api/bitbucket/repositories?limit=50` | repositórios do workspace, mais recentes primeiro |
+| `GET /api/bitbucket/repositories?limit=| `GET/PUT /api/preferences/pr-approval` `{"min_percent": 0|50|100, "min_approvals": 0..10}` | regra de aprovação do PR (o mínimo em número soma com a porcentagem: vale o que pedir mais) |` | repositórios do workspace, mais recentes primeiro |
 
 ## Sincronização (espelho local)
 
@@ -326,7 +326,8 @@ timeline da Home — três peças deixam de ser só rótulo:
     conta) —, e ela ainda não chegou a testes nem foi concluída (etapas de Configurações ›
     Progresso). O back confere de novo na hora de rodar: um card que deixou de estar apto
     recusa, com o motivo. No card, o botão pulsa com a sombra do card em desenvolvimento,
-    em escala de botão.
+    em escala de botão. **PR em rascunho também mostra o Concluir** (passando pelo resto da
+    regra), mesmo sem aprovação: liberar é uma opção dentro dele.
   - **Vários PRs abertos, um Concluir por vez:** entram os PRs aprovados; os outros (sem
     aprovação, ou abertos num repo sem receita) ficam listados no plano, e o passo do Jira
     espera — ele anda no Concluir que deixa a tarefa sem PR aberto. PR aprovado num repo cuja
@@ -337,6 +338,12 @@ timeline da Home — três peças deixam de ser só rótulo:
     Os avisos não barram: quem barra é o Bitbucket, pelas merge checks do repo.
   - **Nada roda antes do "Confirmar e concluir".** O merge vem primeiro; o Jira só anda se
     todos os merges entraram e não sobrou PR aberto da tarefa. Repos da tarefa com status diferentes pedem a escolha no plano.
+  - **Rascunho, à esquerda do plano.** No plano comum, **Rascunho** devolve ao rascunho os PRs
+    que iam ser mergeados — sem merge e sem Jira. Com PR em rascunho, o plano já é o do
+    **Liberar e concluir** (à direita): conta os rascunhos como liberados, libera antes do
+    merge (o Bitbucket não mergeia rascunho) e segue como o Concluir. À esquerda fica
+    **Liberar PR**, que só tira do rascunho. Sem aprovação pela regra, o "Liberar e concluir"
+    fica apagado com o motivo, e o "Liberar PR" continua valendo.
   - Depois, o painel fica com o resultado de cada passo (o que falhou leva o link do PR) e o
     back chama o sync, que traz o PR mergeado ao espelho com o evento.
 - **Reviewers** (aba PRs do painel da tarefa): no PR aberto, **+ Reviewer** busca entre os
@@ -356,7 +363,7 @@ acompanha o selo ao rolar e no zoom do canvas. Recarregar a mesma sprint (sync, 
 status movido) não tira mais a câmera do canvas do lugar.
 
 Token com escopos precisa de **`write:jira-work`** para as duas escritas; sem ele, o resto
-continua lendo e o painel mostra o erro do Jira. No Bitbucket, o merge e os reviewers pedem
+continua lendo e o painel mostra o erro do Jira. No Bitbucket, o merge, o rascunho e os reviewers pedem
 **`write:pullrequest:bitbucket`**, e a lista de membros para escolher reviewer,
 **`read:workspace:bitbucket`** — sem eles, o resto continua lendo e o painel diz qual falta.
 O teste da conexão (ao salvar e no **Testar**) confere a lista inteira no `x-oauth-scopes`
@@ -369,7 +376,8 @@ conexão nem salva; sem os outros dois, salva e a tela lista o que falta e para 
 | `POST /api/issues/{key}/transitions` | move a tarefa (`{ "transition_id": "31" }`); 409 se a transição não existe mais ou pede campos |
 | `PUT /api/issues/{key}/story-points` | grava os Story Points (`{ "story_points": 5 }`, `null` apaga); 409 se o campo não está na tela de edição |
 | `GET /api/issues/{key}/conclude` | o plano do Concluir: merges com avisos e o status do Jira, conferido agora |
-| `POST /api/issues/{key}/conclude` | roda o que foi confirmado (`{ "jira_status", "merges": [{ "repo_slug", "pr_id" }] }`); cada passo volta em `steps`; 409 se o pedido não bate com o plano de agora |
+| `POST /api/issues/{key}/conclude` | roda o que foi confirmado (`{ "jira_status", "merges": [{ "repo_slug", "pr_id" }], "release": [...] }` — `release` são os rascunhos liberados antes do merge, todos os do plano); cada passo volta em `steps`; 409 se o pedido não bate com o plano de agora |
+| `POST /api/issues/{key}/conclude/draft` | põe em rascunho ou libera PRs abertos da tarefa (`{ "draft": true, "prs": [{ "repo_slug", "pr_id" }] }`); 409 para PR que não é aberto da tarefa |
 | `GET/PUT /api/preferences/conclude` | a receita do Concluir por repo (status do Jira, merge, estratégia, fechar a branch) |
 | `GET /api/bitbucket/members` | membros do workspace do Bitbucket, para escolher reviewer (guardados por meia hora; `?refresh=true` relê) |
 | `PUT /api/pull-requests/{repo}/{id}/reviewers` | põe e tira reviewers do PR aberto (`{ "add": [...], "remove": [...] }`) |
@@ -644,8 +652,8 @@ Regras em `back/services/pr_status.py` (funções puras, 100% de cobertura):
 
 - **Por PR:** Mergeada · Recusada · Substituída · Rascunho (draft) · Ajustes requisitados (algum *changes requested* ainda sem correção) · Aprovada (as aprovações que a regra pede) · PR aberta.
 - **Regra de aprovação** em **Configurações › Fluxo de trabalho › Pull requests**: *Uma aprovação* (a regra de
-  sempre, e o padrão), *Pelo menos 50%* ou *Todos* os revisores — gravada em
-  `app_setting.pr_approval` como porcentagem, com teto (50% de 3 revisores são 2 aprovações).
+  sempre, e o padrão), *Pelo menos | `GET/PUT /api/preferences/pr-approval` `{"min_percent": 0|50|100, "min_approvals": 0..10}` | regra de aprovação do PR (o mínimo em número soma com a porcentagem: vale o que pedir mais) |%* ou *Todos* os revisores — gravada em
+  `app_setting.pr_approval` como porcentagem, com teto (| `GET/PUT /api/preferences/pr-approval` `{"min_percent": 0|50|100, "min_approvals": 0..10}` | regra de aprovação do PR (o mínimo em número soma com a porcentagem: vale o que pedir mais) |% de 3 revisores são 2 aprovações).
   Revisor é quem foi designado ou se manifestou; quem só comentou não conta. Pedido de ajuste
   continua vencendo: com ele no ar — ou respondido e esperando o revisor olhar — o PR não vira
   Aprovada, nem com a regra já batida pelos outros. Trocar a regra não acende a bolinha de
@@ -708,7 +716,7 @@ Onde a Clipboard API é negada, cai para a seleção temporária e copia só o t
 | `GET /api/issues/{key}/pull-requests` | detalhe por repositório: PRs, aprovações, ajustes, build, branches sem PR |
 | `GET /api/pull-requests/{repo}/{id}/timeline` | histórico do PR: comentários da review + eventos |
 | `POST /api/pr-status` `{"keys": [...]}` | status agregado de várias tarefas (cards da árvore) |
-| `GET/PUT /api/preferences/pr-approval` `{"min_percent": 0\|50\|100}` | regra de aprovação do PR |
+| `GET/PUT /api/preferences/pr-approval` `{"min_percent": 0\|50\|100, "min_approvals": 0..10}` | regra de aprovação do PR (o mínimo em número soma com a porcentagem: vale o que pedir mais) |
 
 ## Tema e tipografia
 

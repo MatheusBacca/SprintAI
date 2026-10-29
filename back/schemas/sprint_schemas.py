@@ -78,7 +78,7 @@ class TreeNodeOut(BaseModel):
     # nenhum tem cor: o card mostra o `summary`.
     title_parts: list[TitlePartOut] = []
     # Apto ao Concluir (receita no repo, PR aprovado pela regra, antes de testes): o card
-    # mostra o botão.
+    # mostra o botão. PR em rascunho também mostra: liberar é uma opção dentro dele.
     conclude: bool = False
     # Campos que mudaram desde o último clique no card (status, pr, story_points, assignee).
     unseen_changes: list[str] = []

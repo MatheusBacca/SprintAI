@@ -1,7 +1,8 @@
 """Cliente do Bitbucket Cloud (API 2.0).
 
-Quase tudo é leitura. Escreve só duas coisas, cada uma depois da confirmação do dev na tela:
-o **merge** de um PR (o "Concluir" do card) e a **lista de reviewers** de um PR. O merge vai
+Quase tudo é leitura. Escreve só três coisas, cada uma depois da confirmação do dev na tela:
+o **merge** de um PR (o "Concluir" do card), a **lista de reviewers** de um PR e o
+**rascunho** (pôr o PR em rascunho ou liberá-lo, no painel do Concluir). O merge vai
 com `idempotent=False`: repetir depois de um 5xx poderia mergear de novo o que já entrou.
 
 Paginação segue o link `next` devolvido pela API; o transporte recusa `next` fora
@@ -207,6 +208,27 @@ class BitbucketClient:
         if title is None:
             title = (await self._http.get(path)).get("title") or ""
         return await self._http.put(path, json={"title": title, "reviewers": reviewers})
+
+    async def set_draft(self, repo_slug: str, pr_id: int, draft: bool) -> dict[str, Any]:
+        """Põe o PR em rascunho (`True`) ou o libera para review (`False`).
+
+        O PUT do Bitbucket troca o PR inteiro: reviewer que não vai no corpo sai do PR. Por isso
+        o título, a descrição e os reviewers vão como estão, lidos agora. Repetir dá o mesmo PR.
+        """
+        path = f"/repositories/{self.workspace}/{repo_slug}/pullrequests/{pr_id}"
+        pr = await self._http.get(path)
+        reviewers = [
+            {"uuid": u["uuid"]} if u.get("uuid") else {"account_id": u["account_id"]}
+            for u in pr.get("reviewers") or []
+            if u.get("uuid") or u.get("account_id")
+        ]
+        body = {
+            "title": pr.get("title") or "",
+            "description": pr.get("description") or "",
+            "reviewers": reviewers,
+            "draft": draft,
+        }
+        return await self._http.put(path, json=body)
 
     async def iter_pull_request_comments(
         self, repo_slug: str, pr_id: int, *, page_size: int = 50

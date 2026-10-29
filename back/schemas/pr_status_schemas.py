@@ -43,6 +43,8 @@ class ApprovalRuleSettings(BaseModel):
     """0 é a regra de antes (basta uma aprovação), 50 é "pelo menos metade", 100 "todos"."""
 
     min_percent: int = Field(ge=0, le=100, strict=True)
+    # Piso em número de aprovações, somado à porcentagem (vale o que pedir mais). 0: sem piso.
+    min_approvals: int = Field(default=0, ge=0, le=10, strict=True)
 
 
 class PullRequestOut(BaseModel):

@@ -213,4 +213,19 @@ describe('PrApprovalPanel', () => {
     expect(wrapper.find('.approval__feedback').text()).toContain('Regra salva')
     expect(save().attributes('disabled')).toBeDefined()
   })
+
+  it('o mínimo de aprovações soma com a porcentagem na prévia e vai junto no salvar', async () => {
+    const wrapper = mount(PrApprovalPanel)
+    await flushPromises()
+
+    const minimum = wrapper.findAll('.segmented--min input[type="radio"]')
+    await minimum[1].setValue()
+    expect(wrapper.find('.segmented--min .segmented__option--on').text()).toBe('Pelo menos 2')
+    // "2 revisores, 1 aprovou" deixa de estar aprovada; "3 revisores, 2 aprovaram" continua.
+    expect(statuses(wrapper)).toEqual(['pr_aberta', 'aprovada', 'ajustes_requisitados'])
+
+    await wrapper.findAll('.approval__footer button')[1].trigger('click')
+    await flushPromises()
+    expect(calls.at(-1)).toMatchObject({ method: 'PUT', body: { min_percent: 0, min_approvals: 2 } })
+  })
 })

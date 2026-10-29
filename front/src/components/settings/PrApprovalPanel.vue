@@ -2,34 +2,42 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { GitPullRequest } from 'lucide-vue-next'
 import PrStatusBadge from '@/components/pr/PrStatusBadge.vue'
-import { APPROVAL_RULES } from '@/constants/prStatus'
+import { APPROVAL_MINIMUMS, APPROVAL_RULES } from '@/constants/prStatus'
 import { usePrApprovalStore } from '@/stores/prApproval'
 
 /**
  * Configurações › Fluxo de trabalho › Pull requests: quanto dos revisores precisa aprovar para o PR contar
  * como "Aprovada". A regra é aplicada no back — os exemplos abaixo só mostram, com a
  * regra escolhida e ainda não salva, como o badge fica.
+ *
+ * O mínimo de aprovações é um piso em número, somado à porcentagem (vale o que pedir mais):
+ * o time pede duas aprovações para mergear, e o Concluir segue esta regra.
  */
 const store = usePrApprovalStore()
 
 const draft = ref(null)
+const minDraft = ref(0)
 
 function reset() {
   draft.value = store.minPercent
+  minDraft.value = store.minApprovals
 }
 
 onMounted(async () => {
   await store.load()
   reset()
 })
-watch(() => store.minPercent, reset)
+watch(() => [store.minPercent, store.minApprovals], reset)
 
-const dirty = computed(() => draft.value !== null && draft.value !== store.minPercent)
+const dirty = computed(
+  () => draft.value !== null && (draft.value !== store.minPercent || minDraft.value !== store.minApprovals),
+)
+const currentMin = computed(() => APPROVAL_MINIMUMS.find((rule) => rule.count === minDraft.value) ?? null)
 const current = computed(() => APPROVAL_RULES.find((rule) => rule.percent === draft.value) ?? null)
 
 // Mesma conta do `ApprovalRule.required` do back — aqui só para a prévia.
 function required(reviewers) {
-  return Math.max(1, Math.ceil((reviewers * draft.value) / 100))
+  return Math.max(1, minDraft.value, Math.ceil((reviewers * draft.value) / 100))
 }
 
 const EXAMPLES = [
@@ -67,7 +75,7 @@ const examples = computed(() =>
 )
 
 async function save() {
-  await store.save(draft.value)
+  await store.save(draft.value, minDraft.value)
 }
 </script>
 
@@ -104,6 +112,22 @@ async function save() {
           </label>
         </div>
         <span v-if="current" class="field__hint">{{ current.hint }}</span>
+      </fieldset>
+
+      <fieldset class="approval__fieldset">
+        <legend class="field__label">Número mínimo de aprovações</legend>
+        <div class="segmented segmented--min" role="radiogroup">
+          <label
+            v-for="rule in APPROVAL_MINIMUMS"
+            :key="rule.count"
+            class="segmented__option"
+            :class="{ 'segmented__option--on': minDraft === rule.count }"
+          >
+            <input v-model="minDraft" type="radio" :value="rule.count">
+            {{ rule.label }}
+          </label>
+        </div>
+        <span v-if="currentMin" class="field__hint">{{ currentMin.hint }}</span>
       </fieldset>
 
       <div class="approval__preview">

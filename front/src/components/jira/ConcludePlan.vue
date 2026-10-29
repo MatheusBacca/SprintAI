@@ -1,6 +1,17 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { AlertTriangle, Check, ExternalLink, GitMerge, Hourglass, LoaderCircle, MoveRight, X } from 'lucide-vue-next'
+import {
+  AlertTriangle,
+  Check,
+  ExternalLink,
+  GitMerge,
+  GitPullRequestArrow,
+  GitPullRequestDraft,
+  Hourglass,
+  LoaderCircle,
+  MoveRight,
+  X,
+} from 'lucide-vue-next'
 import { useJiraActionsStore } from '@/stores/jiraActions'
 import { safeUrl } from '@/utils/safeUrl'
 
@@ -13,6 +24,11 @@ import { safeUrl } from '@/utils/safeUrl'
  * aprovados, os outros ficam listados, e o Jira espera o Concluir do último. Os avisos (rascunho, aprovações, build) não barram:
  * quem barra é o Bitbucket, pelas merge checks. Depois de rodar, o painel fica com o
  * resultado de cada passo — inclusive o que falhou, com o link do PR.
+ *
+ * O rascunho mora aqui, no botão da esquerda: no plano comum, "Rascunho" devolve ao rascunho
+ * os PRs que iam ser mergeados. Com PR em rascunho, o plano que vem do back já é o do
+ * "Liberar e concluir" (contado com eles liberados), e a esquerda vira "Liberar PR" — só
+ * liberar, sem merge nem Jira.
  */
 const props = defineProps({
   issueKey: { type: String, required: true },
@@ -37,7 +53,16 @@ watch(
 
 const target = computed(() => plan.value?.targets.find((t) => t.status === chosen.value) ?? null)
 const needsChoice = computed(() => (plan.value?.targets.length ?? 0) > 1 && !chosen.value)
-const nothingToDo = computed(() => plan.value && !plan.value.merges.length && !plan.value.targets.length)
+const drafts = computed(() => plan.value?.drafts ?? [])
+const releasing = computed(() => drafts.value.length > 0)
+const nothingToDo = computed(
+  () => plan.value && !releasing.value && !plan.value.merges.length && !plan.value.targets.length,
+)
+// Resultado só de rascunho/liberação: o texto final não fala de merge nem de Jira.
+const draftOnly = computed(
+  () => Boolean(result.value?.steps.length) && result.value.steps.every((s) => s.kind === 'draft' || s.kind === 'release'),
+)
+const refs = (items) => items.map((item) => ({ repo_slug: item.repo_slug, pr_id: item.pr_id }))
 // PRs abertos que este Concluir não mergeia: o passo do Jira fica para o último.
 const waiting = computed(() => plan.value?.waiting ?? [])
 const held = computed(() => plan.value?.held_statuses ?? [])
@@ -54,8 +79,16 @@ function confirm() {
   if (blocked.value || store.saving) return
   store.runConclude(props.issueKey, {
     jira_status: chosen.value,
-    merges: plan.value.merges.map((m) => ({ repo_slug: m.repo_slug, pr_id: m.pr_id })),
+    merges: refs(plan.value.merges),
+    ...(releasing.value ? { release: refs(drafts.value) } : {}),
   })
+}
+
+// Esquerda: com rascunho, libera todos; sem, põe em rascunho os PRs do merge.
+function sideAction() {
+  if (store.saving || !plan.value) return
+  if (releasing.value) store.setDrafts(props.issueKey, false, refs(drafts.value))
+  else if (plan.value.merges.length) store.setDrafts(props.issueKey, true, refs(plan.value.merges))
 }
 </script>
 
@@ -86,6 +119,7 @@ function confirm() {
       </ol>
       <p class="conclude__muted">
         <template v-if="!result.done">Parou no passo que falhou — o que vinha depois não rodou.</template>
+        <template v-else-if="draftOnly">Feito. O selo do PR muda quando o sync, que já foi chamado, terminar.</template>
         <template v-else-if="holding">Mergeado. O Jira fica onde está até o último PR da tarefa entrar.</template>
         <template v-else>Concluída. O selo do PR muda quando o sync, que já foi chamado, terminar.</template>
       </p>
@@ -93,10 +127,24 @@ function confirm() {
     </template>
 
     <template v-else-if="plan">
-      <p v-if="plan.blocked" class="conclude__error" role="alert">{{ plan.blocked }}</p>
+      <p v-if="plan.blocked && !releasing" class="conclude__error" role="alert">{{ plan.blocked }}</p>
+      <p v-else-if="plan.blocked" class="conclude__error" role="alert">Para concluir junto: {{ plan.blocked }}</p>
       <p v-if="nothingToDo" class="conclude__muted">Nada a fazer para esta tarefa agora.</p>
 
       <ol v-else class="conclude__steps">
+        <li v-for="pr in drafts" :key="`draft:${pr.repo_slug}:${pr.pr_id}`" class="conclude__step conclude__step--draft">
+          <GitPullRequestDraft :size="14" class="conclude__icon" />
+          <span class="conclude__step-text">
+            <span>Liberar o PR #{{ pr.pr_id }} em <strong>{{ pr.repo_slug }}</strong> do rascunho</span>
+            <span class="conclude__step-note">
+              {{ pr.approvals }} {{ pr.approvals === 1 ? 'aprovação' : 'aprovações' }}
+              · {{ pr.merges ? 'entra no merge abaixo' : pr.reason }}
+            </span>
+          </span>
+          <a v-if="safeUrl(pr.url)" :href="safeUrl(pr.url)" target="_blank" rel="noopener noreferrer" class="conclude__link" title="Abrir o PR no Bitbucket">
+            <ExternalLink :size="12" />
+          </a>
+        </li>
         <li v-for="merge in plan.merges" :key="`${merge.repo_slug}:${merge.pr_id}`" class="conclude__step conclude__step--merge">
           <GitMerge :size="14" class="conclude__icon" />
           <span class="conclude__step-text">
@@ -105,6 +153,7 @@ function confirm() {
               <code>{{ merge.source_branch }}</code> → <code>{{ merge.destination_branch }}</code>
               · {{ STRATEGY[merge.strategy] }} · {{ merge.close_source_branch ? 'fecha a branch' : 'mantém a branch' }}
             </span>
+            <span v-if="merge.draft" class="conclude__step-note">depois de liberado do rascunho</span>
             <span v-for="warning in merge.warnings" :key="warning" class="conclude__warning">
               <AlertTriangle :size="11" /> {{ warning }}
             </span>
@@ -150,10 +199,34 @@ function confirm() {
       <p v-for="note in plan.notes" :key="note" class="conclude__muted">{{ note }}</p>
 
       <p v-if="store.error" class="conclude__error" role="alert">{{ store.error }}</p>
-      <button type="button" class="btn btn--primary conclude__confirm" :disabled="blocked || store.saving" @click="confirm">
-        <LoaderCircle v-if="store.saving" :size="13" class="spin" />
-        Confirmar e concluir
-      </button>
+      <div class="conclude__actions">
+        <button
+          v-if="releasing"
+          type="button"
+          class="btn btn--secondary conclude__release"
+          :disabled="store.saving"
+          title="Tira do rascunho e libera para review — sem merge e sem mexer no Jira"
+          @click="sideAction"
+        >
+          <GitPullRequestArrow :size="13" />
+          Liberar PR
+        </button>
+        <button
+          v-else-if="plan.merges.length"
+          type="button"
+          class="btn btn--secondary conclude__draft"
+          :disabled="store.saving"
+          title="Devolve ao rascunho os PRs que iam ser mergeados — sem merge e sem mexer no Jira"
+          @click="sideAction"
+        >
+          <GitPullRequestDraft :size="13" />
+          Rascunho
+        </button>
+        <button type="button" class="btn btn--primary conclude__confirm" :disabled="blocked || store.saving" @click="confirm">
+          <LoaderCircle v-if="store.saving" :size="13" class="spin" />
+          {{ releasing ? 'Liberar e concluir' : 'Confirmar e concluir' }}
+        </button>
+      </div>
     </template>
   </div>
 </template>
@@ -321,12 +394,32 @@ function confirm() {
   color: var(--color-text-muted);
 }
 
-.conclude__confirm,
 .conclude__close {
   align-self: flex-end;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Rascunho/Liberar PR à esquerda, a ação principal à direita. */
+.conclude__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.conclude__actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.conclude__confirm {
+  margin-left: auto;
+}
+
+.conclude__step--draft .conclude__icon {
+  color: var(--color-text-secondary);
 }
 
 .spin {

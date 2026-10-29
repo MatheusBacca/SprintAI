@@ -4,7 +4,12 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
 from database.pool import get_pool
-from schemas.conclude_schemas import ConcludeIn, ConcludePlanOut, ConcludeResultOut
+from schemas.conclude_schemas import (
+    ConcludeDraftIn,
+    ConcludeIn,
+    ConcludePlanOut,
+    ConcludeResultOut,
+)
 from schemas.issue_schemas import (
     ChangelogOut,
     IssueDetailOut,
@@ -117,6 +122,20 @@ async def conclude(pool: Pool, store: Store, engine: Engine, issue_key: IssueKey
     Passo que falha volta no `steps`, com o `done` falso."""
     try:
         return await conclude_service.run(pool, store, engine, issue_key, body)
+    except issue_actions.IssueNotInMirror as exc:
+        raise _not_in_mirror(issue_key) from exc
+    except issue_actions.IssueActionConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=exc.message) from exc
+
+
+@router.post("/{issue_key}/conclude/draft", response_model=ConcludeResultOut)
+async def conclude_draft(
+    pool: Pool, store: Store, engine: Engine, issue_key: IssueKey, body: ConcludeDraftIn
+):
+    """Põe em rascunho ou libera PRs abertos da tarefa (os botões da esquerda do painel do
+    Concluir). Só PR aberto da própria tarefa; o resto vem como 409."""
+    try:
+        return await conclude_service.set_drafts(pool, store, engine, issue_key, body)
     except issue_actions.IssueNotInMirror as exc:
         raise _not_in_mirror(issue_key) from exc
     except issue_actions.IssueActionConflict as exc:

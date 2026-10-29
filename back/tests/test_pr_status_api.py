@@ -228,7 +228,7 @@ async def test_regra_de_aprovacao_comeca_na_de_antes(db_app, client):
     response = await client.get("/api/preferences/pr-approval")
 
     assert response.status_code == 200
-    assert response.json() == {"min_percent": 0}
+    assert response.json() == {"min_percent": 0, "min_approvals": 0}
 
 
 async def test_regra_de_aprovacao_decide_quando_o_pr_esta_aprovado(db_app, client, db_pool):
@@ -244,8 +244,11 @@ async def test_regra_de_aprovacao_decide_quando_o_pr_esta_aprovado(db_app, clien
     assert (await badge())["status"] == "aprovada"  # uma aprovação basta, como antes
 
     saved = await client.put("/api/preferences/pr-approval", json={"min_percent": 100})
-    assert saved.json() == {"min_percent": 100}
-    assert (await client.get("/api/preferences/pr-approval")).json() == {"min_percent": 100}
+    assert saved.json() == {"min_percent": 100, "min_approvals": 0}
+    assert (await client.get("/api/preferences/pr-approval")).json() == {
+        "min_percent": 100,
+        "min_approvals": 0,
+    }
     result = await badge()
     assert result["status"] == "pr_aberta"
     review = {k: v for k, v in result["review"].items() if k != "people"}
@@ -259,9 +262,33 @@ async def test_regra_de_aprovacao_decide_quando_o_pr_esta_aprovado(db_app, clien
     assert (await badge())["status"] == "aprovada"
 
 
-@pytest.mark.parametrize("payload", [{"min_percent": 101}, {"min_percent": -1}, {"min_percent": "50"}, {}])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"min_percent": 101},
+        {"min_percent": -1},
+        {"min_percent": "50"},
+        {},
+        {"min_percent": 50, "min_approvals": 11},
+        {"min_percent": 50, "min_approvals": -1},
+    ],
+)
 async def test_regra_de_aprovacao_invalida_da_422(db_app, client, payload):
     response = await client.put("/api/preferences/pr-approval", json=payload)
 
     assert response.status_code == 422
-    assert (await client.get("/api/preferences/pr-approval")).json() == {"min_percent": 0}
+    assert (await client.get("/api/preferences/pr-approval")).json() == {
+        "min_percent": 0,
+        "min_approvals": 0,
+    }
+
+
+async def test_minimo_de_aprovacoes_fica_salvo_com_a_porcentagem(db_app, client):
+    saved = await client.put(
+        "/api/preferences/pr-approval", json={"min_percent": 50, "min_approvals": 2}
+    )
+    assert saved.json() == {"min_percent": 50, "min_approvals": 2}
+    assert (await client.get("/api/preferences/pr-approval")).json() == {
+        "min_percent": 50,
+        "min_approvals": 2,
+    }

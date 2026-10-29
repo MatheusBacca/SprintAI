@@ -48,6 +48,8 @@ class ConcludeMergeOut(BaseModel):
     # O que o dev deveria saber antes de confirmar: rascunho, aprovações, build, ajustes.
     # Só avisa — quem barra é o Bitbucket, pelas merge checks do repo.
     warnings: list[str]
+    # PR em rascunho hoje: o "Liberar e concluir" o libera antes do merge.
+    draft: bool = False
 
 
 class ConcludeTargetOut(BaseModel):
@@ -70,6 +72,20 @@ class ConcludeWaitingOut(BaseModel):
     reason: str
 
 
+class ConcludeDraftOut(BaseModel):
+    """PR aberto da tarefa em rascunho: o painel oferece liberar (ou liberar e concluir)."""
+
+    repo_slug: str
+    pr_id: int
+    title: str
+    url: str | None
+    approvals: int
+    # Liberado agora, ele entra no merge deste Concluir (aprovado pela regra, repo que mergeia).
+    merges: bool
+    # Por que não entra: "sem a aprovação da regra", "com ajustes pedidos"…
+    reason: str | None = None
+
+
 class ConcludePlanOut(BaseModel):
     issue_key: str
     # Status atual, lido agora no Jira.
@@ -85,6 +101,9 @@ class ConcludePlanOut(BaseModel):
     # vazio e o status de destino vai em `held_statuses` — o Jira anda no Concluir do último.
     waiting: list[ConcludeWaitingOut] = []
     held_statuses: list[str] = []
+    # PRs em rascunho. Com algum, `merges`, `waiting`, `targets` e `blocked` são os do "Liberar
+    # e concluir" — a conta feita com eles já liberados.
+    drafts: list[ConcludeDraftOut] = []
     # Por que o card não está apto (PR sem a aprovação da regra, tarefa já em testes...). Com
     # ele, a execução recusa.
     blocked: str | None = None
@@ -100,11 +119,22 @@ class ConcludeIn(BaseModel):
 
     jira_status: str | None = Field(default=None, max_length=80)
     merges: list[ConcludeMergeRef] = Field(default_factory=list, max_length=10)
+    # Rascunhos liberados antes dos merges ("Liberar e concluir"). Com rascunho no plano, são
+    # todos eles: PR em rascunho o Bitbucket não mergeia.
+    release: list[ConcludeMergeRef] = Field(default_factory=list, max_length=10)
+
+
+class ConcludeDraftIn(BaseModel):
+    """Pôr em rascunho (`draft` verdadeiro) ou liberar PRs abertos da tarefa."""
+
+    draft: bool
+    prs: list[ConcludeMergeRef] = Field(min_length=1, max_length=10)
 
 
 class ConcludeStepOut(BaseModel):
-    # `hold`: o Jira ficou onde estava porque ainda há PR aberto da tarefa.
-    kind: Literal["merge", "transition", "hold"]
+    # `hold`: o Jira ficou onde estava porque ainda há PR aberto da tarefa. `draft` e
+    # `release`: o PR foi para o rascunho ou saiu dele.
+    kind: Literal["merge", "transition", "hold", "draft", "release"]
     label: str
     ok: bool
     message: str | None = None
